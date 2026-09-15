@@ -37,6 +37,7 @@ obj/
 *.exe
 *.out
 *.app
+schwarz_solver
 
 # debug information files
 *.dwo
