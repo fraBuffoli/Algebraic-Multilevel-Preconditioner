@@ -44,3 +44,80 @@ To systematically verify the algebraic correctness of the implementation, develo
 
 ## Disclamer: use of AI
 This project was developed as part of an academic course. AI tools were used exclusively to support implementation strategies and code debugging.Minor exceptions include specific utility functions, such as the timer, which were generated using AI to maximize efficiency and ease of use.
+
+## Prerequisites and Execution Guide
+
+### Local Linux Environment Setup
+
+To compile and run this project on a local Linux machine (or Windows Subsystem for Linux - WSL), you need a working C++17 compiler and the METIS library installed at the system level.
+
+1. Update your package manager and install the standard build utilities:
+   ```bash
+   sudo apt update
+   sudo apt install build-essential g++ make
+   ```
+
+2. Install the official METIS development library:
+   ```bash
+   sudo apt install libmetis-dev
+   ```
+
+3. Ensure your `external/eigen3` folder contains the Eigen library header files before compiling.
+
+4. Compile the project using the provided Makefile:
+   ```bash
+   make clean
+   make
+   ```
+
+5. Run the sequential test executable:
+   ```bash
+   ./schwarz_solver
+   ```
+
+### Running on CINECA Galileo100 (G100)
+
+When moving to the CINECA Galileo100 cluster, you do not need to install libraries manually. The cluster provides pre-compiled environments managed through the environment modules system.
+
+1. Connect to the cluster via SSH and navigate to your project directory.
+
+2. Load the required compiler and METIS modules into your current session:
+   ```bash
+   module load gnu
+   module load metis
+   ```
+
+3. Compile the code directly on the login node using the same universal Makefile:
+   ```bash
+   make clean
+   make
+   ```
+
+4. Since computing nodes on G100 are completely isolated from the internet for security reasons, ensure all your target `.mtx` matrix files are already placed inside your local `matrices/` resources directory before submitting a job.
+
+5. To execute the solver in parallel across multiple cores, you must submit a batch script to the Slurm scheduler. Create a job script (e.g., `job_submit.sh`) with the following structure:
+
+   ```bash
+   #!/bin/bash
+   #SBATCH --job-name=schwarz_solver
+   #SBATCH --output=schwarz_%j.out
+   #SBATCH --error=schwarz_%j.err
+   #SBATCH --partition=g100_usr_prod
+   #SBATCH --nodes=1
+   #SBATCH --ntasks-per-node=4
+   #SBATCH --time=00:10:00
+   #SBATCH --account=<YOUR_ACCOUNT_CODE>
+
+   # Load the same modules used during compilation
+   module load gnu
+   module load metis
+   module load openmpi
+
+   # Execute the parallel solver using mpirun
+   mpirun ./schwarz_solver
+   ```
+
+6. Submit your job to the Slurm queue:
+   ```bash
+   sbatch job_submit.sh
+   ```

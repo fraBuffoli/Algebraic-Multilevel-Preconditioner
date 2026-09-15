@@ -1,45 +1,55 @@
 # ====================================================================
-# TWO-LEVEL SCHWARZ SOLVER
+# TWO-LEVEL SCHWARZ SOLVER - ROBUST LINKING VERSION
 # ====================================================================
 
-# Compiler and flags
+# Compilatore e flag (Manteniamo le macro per la coerenza dei tipi)
 CXX      := g++
-CXXFLAGS := -std=c++17 -O3 -Wall -Wextra -pedantic
+CXXFLAGS := -std=c++17 -O3 -Wall -Wextra -pedantic -DIDXTYPEWIDTH=32 -DREALTYPEWIDTH=64
 
-# foders for source, object, and include files
+# Nome dell'eseguibile finale
+TARGET   := schwarz_solver
+
+# Percorsi delle cartelle del tuo codice
 INCDIR   := include
 SRCDIR   := src
 OBJDIR   := obj
 EXTDIR   := external
 
+# Flag di inclusione per il tuo codice e per Eigen3
 INCLUDES := -I$(INCDIR) -I$(EXTDIR)/eigen3
 
-TARGET   := schwarz_solver
+# Linker flags: diciamo al sistema di agganciare la libreria METIS precompilata
+LDFLAGS  := -lmetis
 
-# finds all files .cpp in src/
-SOURCES  := $(wildcard $(SRCDIR)/*.cpp)
-OBJECTS  := $(SOURCES:%.cpp=$(OBJDIR)/%.o)
+# Elenco dei file sorgenti e dei rispettivi oggetti
+SOURCES  := $(SRCDIR)/main.cpp \
+            $(SRCDIR)/matrix_market_io.cpp \
+            $(SRCDIR)/graph_partitioner.cpp
 
-# header files (.hpp)
-DEPENDS  := $(OBJECTS:%.o=%.d)
+OBJECTS  := $(OBJDIR)/$(SRCDIR)/main.o \
+            $(OBJDIR)/$(SRCDIR)/matrix_market_io.o \
+            $(OBJDIR)/$(SRCDIR)/graph_partitioner.o
 
-# Default target
+HEADERS  := $(INCDIR)/sparse_matrix.hpp \
+            $(INCDIR)/matrix_market_io.hpp \
+            $(INCDIR)/graph_partitioner.hpp \
+            $(INCDIR)/config.hpp
+
+# Regola principale
 all: $(TARGET)
 
-# Rfinal link the executable from the object files
+# Regola di Link finale (Usa LDFLAGS per agganciare metis senza compilare .c)
 $(TARGET): $(OBJECTS)
-	@echo "Linking executable: $@"
-	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@
+	@echo "Linking executable with METIS: $@"
+	$(CXX) $(CXXFLAGS) $(OBJECTS) $(LDFLAGS) -o $@
 
--include $(DEPENDS)
-
-# compile each .cpp file into a .o file in the obj/ directory, preserving the directory structure
-$(OBJDIR)/$(SRCDIR)/%.o: $(SRCDIR)/%.cpp
+# Regola per compilare i tuoi file C++ (src/)
+$(OBJDIR)/$(SRCDIR)/%.o: $(SRCDIR)/%.cpp $(HEADERS)
 	@mkdir -p $(dir $@)
-	@echo "Compiling: $<"
-	$(CXX) $(CXXFLAGS) -MMD -MP $(INCLUDES) -c $< -o $@
+	@echo "Compiling C++ Source: $<"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-# clean target to remove compiled objects and executables
+# Regola di pulizia
 clean:
 	@echo "Cleaning compiled objects and executables..."
 	rm -rf $(OBJDIR) $(TARGET)
