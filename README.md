@@ -2,6 +2,8 @@
 
 This C++ project implements an algebraic overlapping two-level Schwarz preconditioner based on the paper by Al Daas et al. (2023): "Efficient Algebraic Two-Level Schwarz Preconditioner for Sparse Matrices". The solver is designed to handle large-scale, sparse linear systems of equations Ax = b from the MatrixMarket Collection. The primary goal is to overcome the scalability limits of classical one-level domain decomposition methods by constructing a fully algebraic Spectral Coarse Space. This second level is built efficiently via a local lumping technique in the subdomain overlap, requiring only O(n_i) operations per subdomain.
 
+NOTE on implementation: Eigen does not provide a complex generalized eigensolver. In the complex case, the inversion of matrix Atilda_ii can be difficult since it might be non singular. Thus, it is difficult and computationally inefficient to reduce the problem to a classic eigenvalue problem. The choice is to stick with the Eigen library and only work with real numbers. This is done since the application of this preconditioner to a practical case proposed is CFD, in which only real matrices are involved.
+
 ## Class Structure and Architecture
 
 The project features a modular, object-oriented design that decouples sparse data management, algebraic topology, local spectral solvers, and the parallel iterative engine.
@@ -39,3 +41,6 @@ To systematically verify the algebraic correctness of the implementation, develo
 1. Sequential Phase (1-Level): Implement basic data structures, Matrix Market IO, METIS integration, and achieve GMRES convergence using the one-level preconditioner simulated via sequential loops on a single core.
 2. Spectral Phase (2-Level): Introduce local block splitting and eigensolver classes. Algebraically verify that the addition of the coarse space drastically dampens the global GMRES iteration count compared to Phase 1.
 3. Parallel Phase (MPI and Cluster): Wrap the modules within the MPI context to distribute memory structures across physical processors. Finalize the codebase for scaling analysis on the Galileo100 cluster (CINECA).
+
+## Disclamer: use of AI
+This project was developed as part of an academic course. AI tools were used exclusively to support implementation strategies and code debugging.Minor exceptions include specific utility functions, such as the timer, which were generated using AI to maximize efficiency and ease of use.
