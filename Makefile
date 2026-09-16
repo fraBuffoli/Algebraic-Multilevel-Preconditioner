@@ -24,11 +24,13 @@ LDFLAGS  := -lmetis
 # Elenco dei file sorgenti e dei rispettivi oggetti
 SOURCES  := $(SRCDIR)/main.cpp \
             $(SRCDIR)/matrix_market_io.cpp \
-            $(SRCDIR)/graph_partitioner.cpp
+            $(SRCDIR)/graph_partitioner.cpp \
+            $(SRCDIR)/restriction_operator.cpp
 
 OBJECTS  := $(OBJDIR)/$(SRCDIR)/main.o \
             $(OBJDIR)/$(SRCDIR)/matrix_market_io.o \
-            $(OBJDIR)/$(SRCDIR)/graph_partitioner.o
+            $(OBJDIR)/$(SRCDIR)/graph_partitioner.o \
+            $(OBJDIR)/$(SRCDIR)/restriction_operator.o
 
 HEADERS  := $(INCDIR)/sparse_matrix.hpp \
             $(INCDIR)/matrix_market_io.hpp \
