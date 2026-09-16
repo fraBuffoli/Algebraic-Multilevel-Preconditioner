@@ -1,8 +1,3 @@
-/**
- * @file graph_partitioner.hpp
- * @brief Interfaces with the METIS library to compute graph partitioning.
- */
-
 #ifndef GRAPH_PARTITIONER_HPP
 #define GRAPH_PARTITIONER_HPP
 
@@ -11,6 +6,10 @@
 
 namespace schwarz2lvl {
 
+/**
+ * @class GraphPartitioner
+ * @brief Interfaces with the METIS library to compute graph partitioning.
+ */
 class GraphPartitioner {
 public:
     /**

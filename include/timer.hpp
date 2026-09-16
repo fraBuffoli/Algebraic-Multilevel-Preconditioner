@@ -29,6 +29,7 @@ struct TimedSection {
 };
 
 /**
+ * @class TimerRegistry
  * @brief Global (per-process) registry of named timed sections.
  *
  * Usage:
@@ -81,8 +82,11 @@ class TimerRegistry {
     std::map<std::string, TimedSection> sections_;
 };
 
-// RAII stopwatch: records elapsed wall-clock time into TimerRegistry
-// under `name` when it goes out of scope.
+/**
+ * @class ScopedTimer
+ * @brief RAII stopwatch: records elapsed wall-clock time into TimerRegistry
+ * @param name Name of the timed section.
+ */
 class ScopedTimer {
  public:
     explicit ScopedTimer(std::string name)

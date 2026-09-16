@@ -1,8 +1,3 @@
-/**
- * @file sparse_matrix.hpp
- * @brief Definition of sparse matrix and dense vector structures using Eigen for real numbers.
- */
-
 #ifndef SPARSE_MATRIX_HPP
 #define SPARSE_MATRIX_HPP
 

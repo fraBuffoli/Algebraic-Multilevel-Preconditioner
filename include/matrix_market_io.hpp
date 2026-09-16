@@ -1,8 +1,3 @@
-/**
- * @file matrix_market_io.hpp
- * @brief Utilities for reading Matrix Market files (.mtx) into SparseMatrixWrapper.
- */
-
 #ifndef MATRIX_MARKET_IO_HPP
 #define MATRIX_MARKET_IO_HPP
 
@@ -10,6 +5,11 @@
 #include <string>
 
 namespace schwarz2lvl {
+
+/**
+ * @class MatrixMarketIO
+ * @brief Utilities for reading Matrix Market files (.mtx) into SparseMatrixWrapper.
+ */    
 class MatrixMarketIO {
 public:
     /**

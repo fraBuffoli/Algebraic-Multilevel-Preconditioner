@@ -1,11 +1,3 @@
-/**
- * @class RestrictionOperator
- * @brief Manages the algebraic restriction (R_i) and prolongation (R_i^T) for a single subdomain.
- * 
- * This class maps global vector indices to local subdomain indices. It avoids 
- * explicit matrix-vector multiplications by using direct index-based gathering and scattering.
- */
-
 #ifndef RESTRICTION_OPERATOR_HPP
 #define RESTRICTION_OPERATOR_HPP
 
@@ -14,6 +6,13 @@
 
 namespace schwarz2lvl {
 
+/**
+ * @class RestrictionOperator
+ * @brief Manages the algebraic restriction (R_i) and prolongation (R_i^T) for a single subdomain.
+ * 
+ * This class maps global vector indices to local subdomain indices. It avoids 
+ * explicit matrix-vector multiplications by using direct index-based gathering and scattering.
+ */    
 class RestrictionOperator {
 public:
     /**
