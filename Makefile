@@ -3,7 +3,7 @@
 # ====================================================================
 
 # Compilatore e flag (Macro per le larghezze dei tipi di METIS incluse)
-CXX      := g++
+CXX      := mpicxx
 CXXFLAGS := -std=c++17 -O3 -Wall -Wextra -pedantic -DIDXTYPEWIDTH=32 -DREALTYPEWIDTH=64
 
 # Nome dell'eseguibile finale
@@ -36,7 +36,9 @@ SOURCES  := $(SRCDIR)/main.cpp \
             $(SRCDIR)/preconditioner/local_eigensolver.cpp \
             $(SRCDIR)/preconditioner/coarse_space.cpp \
             $(SRCDIR)/preconditioner/additive_two_level_preconditioner.cpp \
-            $(SRCDIR)/preconditioner/deflated_two_level_preconditioner.cpp 
+            $(SRCDIR)/preconditioner/deflated_two_level_preconditioner.cpp \
+			$(SRCDIR)/solver/krylov_gmres.cpp \
+			$(SRCDIR)/solver/krylov_bicgstab.cpp
 
 # Generazione automatica dei file oggetto speculari dentro la cartella obj/
 OBJECTS  := $(SOURCES:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
