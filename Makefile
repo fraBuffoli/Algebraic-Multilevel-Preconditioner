@@ -58,9 +58,24 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
 	@echo "Compiling C++ Source: $<"
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-# Regola di pulizia profonda degli oggetti e dell'eseguibile
+# Regola per la generazione automatica della documentazione con Doxygen
+doc:
+	@if command -v doxygen > /dev/null; then \
+		echo "Creating required documentation directories..."; \
+		mkdir -p docs/Doxygen; \
+		echo "Generating Doxygen documentation using Doxyfile..."; \
+		doxygen Doxyfile; \
+		echo "Documentation generated successfully."; \
+	else \
+		echo "Error: 'doxygen' command not found."; \
+		echo "To install it on Ubuntu/WSL, run: sudo apt install doxygen graphviz"; \
+	fi
+
+# Regola di pulizia profonda degli oggetti, dell'eseguibile e di TUTTA la documentazione
 clean:
 	@echo "Cleaning compiled objects and executables..."
 	rm -rf $(OBJDIR) $(TARGET)
+	@echo "Cleaning all generated documentation directories..."
+	rm -rf docs html latex
 
-.PHONY: all clean
+.PHONY: all clean doc
