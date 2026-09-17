@@ -1,4 +1,4 @@
-#include "../include/graph_partitioner.hpp"
+#include "graph_partitioner.hpp"
 #include <metis.h>
 #include <set>
 #include <iostream>

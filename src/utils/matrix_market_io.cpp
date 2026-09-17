@@ -1,4 +1,4 @@
-#include "../include/matrix_market_io.hpp"
+#include "matrix_market_io.hpp"
 #include <fstream>
 #include <sstream>
 #include <iostream>
