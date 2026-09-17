@@ -28,7 +28,8 @@ SOURCES  := $(SRCDIR)/main.cpp \
             $(SRCDIR)/restriction_operator.cpp \
             $(SRCDIR)/subdomain_topology.cpp \
             $(SRCDIR)/partition_of_unity.cpp \
-            $(SRCDIR)/one_level_preconditioner.cpp
+            $(SRCDIR)/one_level_preconditioner.cpp \
+            $(SRCDIR)/local_block_splitting.cpp
 
 OBJECTS  := $(OBJDIR)/$(SRCDIR)/main.o \
             $(OBJDIR)/$(SRCDIR)/matrix_market_io.o \
@@ -36,7 +37,8 @@ OBJECTS  := $(OBJDIR)/$(SRCDIR)/main.o \
             $(OBJDIR)/$(SRCDIR)/restriction_operator.o \
             $(OBJDIR)/$(SRCDIR)/subdomain_topology.o \
             $(OBJDIR)/$(SRCDIR)/partition_of_unity.o \
-            $(OBJDIR)/$(SRCDIR)/one_level_preconditioner.o
+            $(OBJDIR)/$(SRCDIR)/one_level_preconditioner.o \
+            $(OBJDIR)/$(SRCDIR)/local_block_splitting.o
 
 HEADERS  := $(INCDIR)/sparse_matrix.hpp \
             $(INCDIR)/matrix_market_io.hpp \
@@ -47,6 +49,7 @@ HEADERS  := $(INCDIR)/sparse_matrix.hpp \
             $(INCDIR)/partition_of_unity.hpp \
             $(INCDIR)/preconditioner.hpp \
             $(INCDIR)/one_level_preconditioner.hpp \
+            $(INCDIR)/local_block_splitting.hpp \
             $(INCDIR)/timer.hpp
 
 # Regola principale
