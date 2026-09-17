@@ -30,7 +30,10 @@ SOURCES  := $(SRCDIR)/main.cpp \
             $(SRCDIR)/partition_of_unity.cpp \
             $(SRCDIR)/one_level_preconditioner.cpp \
             $(SRCDIR)/local_eigensolver.cpp \
-            $(SRCDIR)/local_block_splitting.cpp
+            $(SRCDIR)/local_block_splitting.cpp \
+            $(SRCDIR)/coarse_space.cpp \
+            $(SRCDIR)/additive_two_level_preconditioner.cpp \
+            $(SRCDIR)/deflated_two_level_preconditioner.cpp
 
 OBJECTS  := $(OBJDIR)/$(SRCDIR)/main.o \
             $(OBJDIR)/$(SRCDIR)/matrix_market_io.o \
@@ -40,7 +43,10 @@ OBJECTS  := $(OBJDIR)/$(SRCDIR)/main.o \
             $(OBJDIR)/$(SRCDIR)/partition_of_unity.o \
             $(OBJDIR)/$(SRCDIR)/one_level_preconditioner.o \
             $(OBJDIR)/$(SRCDIR)/local_block_splitting.o \
-            $(OBJDIR)/$(SRCDIR)/local_eigensolver.o
+            $(OBJDIR)/$(SRCDIR)/local_eigensolver.o \
+            $(OBJDIR)/$(SRCDIR)/coarse_space.o \
+            $(OBJDIR)/$(SRCDIR)/additive_two_level_preconditioner.o \
+            $(OBJDIR)/$(SRCDIR)/deflated_two_level_preconditioner.o
 
 HEADERS  := $(INCDIR)/sparse_matrix.hpp \
             $(INCDIR)/matrix_market_io.hpp \
@@ -53,7 +59,10 @@ HEADERS  := $(INCDIR)/sparse_matrix.hpp \
             $(INCDIR)/one_level_preconditioner.hpp \
             $(INCDIR)/local_block_splitting.hpp \
             $(INCDIR)/local_eigensolver.hpp \
-            $(INCDIR)/timer.hpp
+            $(INCDIR)/timer.hpp \
+            $(INCDIR)/coarse_space.hpp \
+            $(INCDIR)/additive_two_level_preconditioner.hpp \
+            $(INCDIR)/deflated_two_level_preconditioner.hpp
 
 # Regola principale
 all: $(TARGET)
