@@ -5,6 +5,7 @@
 #include "restriction_operator.hpp"
 #include "partition_of_unity.hpp"
 #include <Eigen/Core>
+#include <Eigen/Sparse>
 #include <Eigen/LU>
 #include <vector>
 
@@ -61,9 +62,9 @@ public:
     Eigen::Index coarseSize() const { return total_coarse_dim_; }
 
 private:
-    Eigen::Index total_coarse_dim_ = 0; // Total number of selected global modes
-    Eigen::MatrixXd R_0_; // Global restriction matrix R_0 (size total_coarse_dim x n)
-    Eigen::PartialPivLU<Eigen::MatrixXd> A_00_lu_; // Dense LU solver for the small coarse system A_00
+    Eigen::Index total_coarse_dim_ = 0;
+    Eigen::SparseMatrix<double> R_0_;
+    Eigen::PartialPivLU<Eigen::MatrixXd> A_00_lu_;
 };
 
 } // namespace schwarz2lvl

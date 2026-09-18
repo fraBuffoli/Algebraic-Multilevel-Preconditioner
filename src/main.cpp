@@ -54,7 +54,7 @@ namespace {
 // Runtime configuration, parsed from argv with paper-consistent defaults.
 // ---------------------------------------------------------------------
 struct RunConfig {
-    std::string matrix_path = "matrices/cage7.mtx";
+    std::string matrix_path = "matrices/cage10.mtx";
     double      tau         = schwarz2lvl::kDefaultTau;              // 0.6
     double      tolerance   = schwarz2lvl::kDefaultGmresTolerance;   // 1e-8
     int         max_iter    = schwarz2lvl::kDefaultGmresMaxIterations;

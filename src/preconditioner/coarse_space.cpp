@@ -37,34 +37,43 @@ void CoarseSpace::setup(const SparseMatrixWrapper& global_A,
 
     // 2. Build the global restriction operator R_0 row by row
     // R_0 consists of stacked blocks of (R_i^T * D_i * Z_i)^T = Z_i^T * D_i * R_i
-    R_0_ = Eigen::MatrixXd::Zero(total_coarse_dim_, n);
-    
+    std::vector<Eigen::Triplet<double>> r0_triplets;
+    Eigen::Index nnz_estimate = 0;
+    for (size_t i = 0; i < num_subdomains; ++i) {
+        nnz_estimate += local_Z[i].rows() * local_Z[i].cols();
+    }
+    r0_triplets.reserve(static_cast<size_t>(nnz_estimate));
+
     Eigen::Index current_coarse_row = 0;
     for (size_t i = 0; i < num_subdomains; ++i) {
         const auto& Z_i = local_Z[i];
         const auto& R_i = restrictions[i];
         const auto& D_i = pous[i].getWeights();
         const auto& local_indices = R_i.getGlobalIndices();
-        
+
         Eigen::Index local_modes = Z_i.cols();
         Eigen::Index n_i = Z_i.rows();
 
-        // Map the columns of Z_i directly into the global slots of R_0 using the global topology indices
         for (Eigen::Index mode = 0; mode < local_modes; ++mode) {
             for (Eigen::Index j = 0; j < n_i; ++j) {
+                const double val = Z_i(j, mode) * D_i(j);
+                if (val == 0.0) continue;
                 int global_col = local_indices[j];
-                // Apply the combination: component of eigenvector * partition of unity weight
-                R_0_(current_coarse_row + mode, global_col) = Z_i(j, mode) * D_i(j);
+                r0_triplets.emplace_back(current_coarse_row + mode, global_col, val);
             }
         }
         current_coarse_row += local_modes;
     }
 
+    R_0_.resize(total_coarse_dim_, n);
+    R_0_.setFromTriplets(r0_triplets.begin(), r0_triplets.end());
+    R_0_.makeCompressed();
+
     // 3. Assemble the reduced global coarse grid matrix A_00 = R_0 * A * R_0^T
     std::cout << "Computing reduced system matrix A_00 = R_0 * A * R_0^T..." << std::endl;
-    const Eigen::MatrixXd R0t = R_0_.transpose();
-    const Eigen::MatrixXd A_R0t = global_A.getMatrix() * R0t;   // sparse * dense
-    const Eigen::MatrixXd A_00 = R_0_ * A_R0t;
+    const Eigen::SparseMatrix<double> R0t = R_0_.transpose();
+    const Eigen::SparseMatrix<double> A_R0t = global_A.getMatrix() * R0t;  
+    const Eigen::MatrixXd A_00 = Eigen::MatrixXd(R_0_ * A_R0t);
 
     // 4. Pre-factorize the coarse system A_00 using dense Partial-Pivoting LU
     A_00_lu_.compute(A_00);
