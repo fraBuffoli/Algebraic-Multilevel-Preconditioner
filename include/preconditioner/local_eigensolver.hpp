@@ -19,8 +19,9 @@ public:
     /**
      * @brief Constructor setting the filtering threshold.
      * @param tau The spectral cutoff threshold.
+     * @param nev The maximum number of selected eigenvectors.
      */
-    explicit LocalEigensolver(double tau) : tau_(tau) {}
+    explicit LocalEigensolver(double tau, Eigen::Index nev = 300) : tau_(tau), nev_(nev) {}
 
     /**
      * @brief Computes and filters the local eigenvectors.
@@ -48,6 +49,7 @@ public:
 private:
     double          tau_; // Cutoff threshold
     Eigen::MatrixXd Z_i_; // Filtered local eigenvectors block matrix (size n_i x chosen_modes)
+    Eigen::Index nev_; // Max number of selected eigenvectors    
 };
 
 } // namespace schwarz2lvl

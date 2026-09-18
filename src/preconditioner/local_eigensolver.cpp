@@ -1,8 +1,11 @@
 #include "local_eigensolver.hpp"
 #include <Eigen/Eigenvalues>
+#include <Eigen/QR>
 #include <iostream>
 #include <vector>
 #include <stdexcept>
+#include <complex>
+#include <algorithm>
 
 namespace schwarz2lvl {
 
@@ -40,39 +43,74 @@ void LocalEigensolver::computeEigenpairs(const MatrixType& A_ii,
     const auto& betas = ges.betas();
     const auto& eigenvectors = ges.eigenvectors();
 
-    // 4. Scan eigenvalues and filter eigenvectors based on the criteria |lambda| > 1/tau
+    // 4. Scan eigenvalues and filter eigenvectors based on the criterion |lambda| >= 1/tau.
+    //    lambda = alpha / beta with alpha complex: use the complex modulus.
     std::vector<Eigen::Index> selected_indices;
     selected_indices.reserve(n_i);
 
+    double alpha_scale = 0.0, beta_scale = 0.0;
     for (Eigen::Index i = 0; i < n_i; ++i) {
-        // alphas(i) is complex, betas(i) is a real double
-        double alpha = alphas(i).real();
-        double beta = betas(i);
-        
-        // Check if eigenvalue is finite or infinite (avoiding divisions by zero)
-        if (std::abs(beta) > 1e-14) {
-            double lambda = alpha / beta;
-            
-            // If the eigenvalue exceeds the threshold tau, we keep it
-            if (std::abs(lambda) >= 1.0 / tau_) {
+        alpha_scale = std::max(alpha_scale, std::abs(alphas(i)));
+        beta_scale  = std::max(beta_scale,  std::abs(betas(i)));
+    }
+    const double beta_tol  = kInfiniteEigenvalueRelTol * std::max(beta_scale, 1.0);
+    const double alpha_tol = kInfiniteEigenvalueRelTol * std::max(alpha_scale, 1.0);
+
+    for (Eigen::Index i = 0; i < n_i; ++i) {
+        const double abs_alpha = std::abs(alphas(i));  
+        const double abs_beta  = std::abs(betas(i));
+
+        if (abs_beta > beta_tol) {
+            if (abs_alpha / abs_beta >= 1.0 / tau_) {
                 selected_indices.push_back(i);
             }
-        } else {
-            // If beta is almost zero, lambda tends to infinity.
-            // Infinite eigenvalues are considered > 1/tau and should be included.
+        } else if (abs_alpha > alpha_tol) {
+            // beta ~ 0, alpha != 0: genuinely infinite eigenvalue, i.e. a direction
+            // in K_i = ker(A_tilde_ii) but not in L_i. Eq. (3.2) keeps these.
             selected_indices.push_back(i);
         }
+        // else: alpha ~ 0 AND beta ~ 0 -> indeterminate 0/0 direction, lying in
+        // L_i ∩ K_i. Eq. (3.2) explicitly excludes it from the coarse space.
     }
 
-    // 5. Assemble the local space base matrix Z_i by extracting the selected columns
-    Eigen::Index num_chosen = static_cast<Eigen::Index>(selected_indices.size());
-    Z_i_.resize(n_i, num_chosen);
-
-    for (Eigen::Index col = 0; col < num_chosen; ++col) {
-        Eigen::Index original_idx = selected_indices[col];
-        // Extract the real part of the eigenvector column
-        Z_i_.col(col) = eigenvectors.col(original_idx).real();
+    // Keep at most nev_ modes, those with the largest |lambda| (paper, section 4).
+    if (static_cast<Eigen::Index>(selected_indices.size()) > nev_) {
+        std::sort(selected_indices.begin(), selected_indices.end(),
+                  [&](Eigen::Index a, Eigen::Index b) {
+                      const double la = std::abs(betas(a)) > beta_tol
+                                      ? std::abs(alphas(a)) / std::abs(betas(a))
+                                      : std::numeric_limits<double>::infinity();
+                      const double lb = std::abs(betas(b)) > beta_tol
+                                      ? std::abs(alphas(b)) / std::abs(betas(b))
+                                      : std::numeric_limits<double>::infinity();
+                      return la > lb;
+                  });
+        selected_indices.resize(nev_);
     }
+
+    // 5. Assemble the local basis Z_i.
+    Eigen::MatrixXd candidates(n_i, 2 * static_cast<Eigen::Index>(selected_indices.size()));
+    Eigen::Index ncand = 0;
+
+    for (Eigen::Index col = 0; col < static_cast<Eigen::Index>(selected_indices.size()); ++col) {
+        const Eigen::Index idx = selected_indices[col];
+        const auto v = eigenvectors.col(idx);
+
+        candidates.col(ncand++) = v.real();
+        if (v.imag().norm() > 1e-14 * std::max(v.real().norm(), 1.0)) {
+            candidates.col(ncand++) = v.imag();
+        }
+    }
+    candidates.conservativeResize(n_i, ncand);
+
+    if (ncand == 0) { Z_i_.resize(n_i, 0); return; }
+
+    // Rank-revealing QR: keep only an orthonormal basis of range(candidates).
+    Eigen::ColPivHouseholderQR<Eigen::MatrixXd> qr(candidates);
+    qr.setThreshold(1e-12);
+    const Eigen::Index rank = qr.rank();
+
+    Z_i_ = qr.householderQ() * Eigen::MatrixXd::Identity(n_i, rank);
 }
 
 } // namespace schwarz2lvl

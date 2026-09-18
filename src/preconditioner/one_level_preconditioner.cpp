@@ -1,6 +1,7 @@
 #include "one_level_preconditioner.hpp"
 #include <stdexcept>
 #include <iostream>
+#include <mpi.h>
 
 namespace schwarz2lvl {
 
@@ -60,33 +61,41 @@ void OneLevelPreconditioner::setup(const SparseMatrixWrapper& A,
     solver_.factorize(A_ii_);
 
     if (solver_.info() != Eigen::Success) {
-        throw std::runtime_error("OneLevelPreconditioner Error: Direct factorization of local submatrix A_ii failed.");
+        std::cerr << "OneLevelPreconditioner Solve Error: Direct factorization of local submatrix A_ii failed." << std::endl;
+        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
     }
+
+    // 4. Size the scratch buffers once, so apply() allocates nothing per iteration.
+    r_local_.resize(n_i);
+    y_local_.resize(n_i);
+    z_this_.resize(A.rows());
+    z_sum_.resize(A.rows());
 }
 
 void OneLevelPreconditioner::apply(const VectorType& r, VectorType& z) const {
-    
-    VectorType r_local;
-    VectorType y_local;
 
-    // Step A: Restriction phase -> r_local = R_i * r
-    restriction_.apply(r, r_local);
+    // Step A: Restriction -> r_local = R_i * r
+    restriction_.apply(r, r_local_);
 
-    // Step B: Local Solve phase -> y_local = A_ii^-1 * r_local
-    // This performs a highly optimized forward/backward substitution using the pre-factorized LU arrays
-    y_local = solver_.solve(r_local);
+    // Step B: Local solve -> y_local = A_ii^-1 * r_local
+    y_local_ = solver_.solve(r_local_);
     if (solver_.info() != Eigen::Success) {
-        throw std::runtime_error("OneLevelPreconditioner Solve Error: Local substitution failed.");
+        std::cerr << "OneLevelPreconditioner Solve Error: local substitution failed." << std::endl;
+        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);   
     }
 
-    // Step C: Weighting phase -> y_local = D_i * y_local
-    // We scale the local solution using the partition of unity diagonal entries
-    const auto& weights = pou_.getWeights();
-    y_local = y_local.cwiseProduct(weights);
+    // Step C: Partition of unity scaling -> y_local = D_i * y_local
+    y_local_ = y_local_.cwiseProduct(pou_.getWeights());
 
-    // Step D: Prolongation phase -> z = z + R_i^T * y_local
-    // Accumulates the scaled local correction into the global solution vector
-    restriction_.applyTranspose(y_local, z);
+    // Step D: Prolongation of this subdomain's term -> z_this = R_i^T * D_i * y_local
+    z_this_.setZero();
+    restriction_.applyTranspose(y_local_, z_this_);
+
+    // Step E: M_RAS^-1 is the SUM over ALL subdomains (Eq. 2.3)
+    MPI_Allreduce(z_this_.data(), z_sum_.data(),
+                  static_cast<int>(z_this_.size()),
+                  MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+    z += z_sum_;
 }
-
 } // namespace schwarz2lvl

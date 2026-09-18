@@ -1,6 +1,7 @@
 #include "coarse_space.hpp"
 #include <iostream>
 #include <stdexcept>
+#include <mpi.h>
 
 namespace schwarz2lvl {
 
@@ -9,6 +10,9 @@ void CoarseSpace::setup(const SparseMatrixWrapper& global_A,
                         const std::vector<RestrictionOperator>& restrictions,
                         const std::vector<PartitionOfUnity>& pous) {
     
+    int my_rank = 0;
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+
     const Eigen::Index n = global_A.rows();
     const size_t num_subdomains = local_Z.size();
 
@@ -22,7 +26,13 @@ void CoarseSpace::setup(const SparseMatrixWrapper& global_A,
               << total_coarse_dim_ << " x " << n << std::endl;
 
     if (total_coarse_dim_ == 0) {
-        throw std::runtime_error("CoarseSpace Error: No spectral modes were selected. Coarse Space is empty.");
+        if (my_rank == 0) {
+            std::cout << "CoarseSpace: no eigenvalue exceeded the threshold 1/tau. "
+                         "The coarse correction is disabled and the preconditioner "
+                         "degrades to one-level Schwarz. This is expected for N = 1, "
+                         "where the local solve is already exact." << std::endl;
+        }
+        return;
     }
 
     // 2. Build the global restriction operator R_0 row by row
@@ -52,21 +62,24 @@ void CoarseSpace::setup(const SparseMatrixWrapper& global_A,
 
     // 3. Assemble the reduced global coarse grid matrix A_00 = R_0 * A * R_0^T
     std::cout << "Computing reduced system matrix A_00 = R_0 * A * R_0^T..." << std::endl;
-    Eigen::MatrixXd A_dense = Eigen::MatrixXd(global_A.getMatrix());
-    Eigen::MatrixXd A_00 = R_0_ * A_dense * R_0_.transpose();
+    const Eigen::MatrixXd R0t = R_0_.transpose();
+    const Eigen::MatrixXd A_R0t = global_A.getMatrix() * R0t;   // sparse * dense
+    const Eigen::MatrixXd A_00 = R_0_ * A_R0t;
 
     // 4. Pre-factorize the coarse system A_00 using dense Partial-Pivoting LU
     A_00_lu_.compute(A_00);
     
-    if (std::abs(A_00_lu_.determinant()) < 1e-12) {
-        throw std::runtime_error("CoarseSpace Error: Reduced coarse matrix A_00 is singular (determinant near zero).");
+    const Eigen::VectorXd diagU = A_00_lu_.matrixLU().diagonal().cwiseAbs();
+    if (diagU.minCoeff() < 1e-12 * diagU.maxCoeff()) {
+        throw std::runtime_error("CoarseSpace Error: A_00 is numerically singular (smallest LU pivot below relative threshold).");
     }
     std::cout << "Coarse Space operator successfully factorized." << std::endl;
 }
 
-void CoarseSpace::apply(const VectorType& r,
-                        VectorType& z) const {
-    
+void CoarseSpace::apply(const VectorType& r, VectorType& z) const {
+
+    if (total_coarse_dim_ == 0) return;
+
     // Step A: Restrict global residual to coarse space -> r_coarse = R_0 * r
     Eigen::VectorXd r_coarse = R_0_ * r;
 

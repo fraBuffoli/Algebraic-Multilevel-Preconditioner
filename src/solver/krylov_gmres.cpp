@@ -25,13 +25,15 @@ bool KrylovGmres::solve(const SparseMatrixWrapper& A,
 
     if (b_norm == 0.0) {
         x.setZero(n_local);
-        if (my_rank == 0) {
+        last_iterations_ = 0;
+        last_residual_   = 0.0;
+        if (verbose_ && my_rank == 0) {
             std::cout << "GMRES: Right-hand side is zero vector. Solution is zero." << std::endl;
         }
         return true;
     }
 
-    if (my_rank == 0) {
+    if (verbose_ && my_rank == 0) {
         std::cout << "Starting PARALLEL GMRES with Restart(" << restart_dim_ << "), Target Tolerance: " << tolerance_ << std::endl;
     }
 
@@ -52,11 +54,15 @@ bool KrylovGmres::solve(const SparseMatrixWrapper& A,
         double r_norm = std::sqrt(global_r_norm_sq);
         rel_res = r_norm / b_norm;
 
-        if (total_iters == 0 && my_rank == 0) {
+        if (verbose_ && total_iters == 0 && my_rank == 0) {
             std::cout << "  Iteration: " << total_iters << " -> Relative Residual = " << rel_res << std::endl;
         }
 
-        if (rel_res <= tolerance_) return true;
+        if (rel_res <= tolerance_) {
+            last_iterations_ = total_iters;
+            last_residual_   = rel_res;
+            return true;
+        }
 
         int m = std::min(restart_dim_, max_iter_ - total_iters);
 
@@ -138,7 +144,7 @@ bool KrylovGmres::solve(const SparseMatrixWrapper& A,
             g(k) = g_temp;
 
             rel_res = std::abs(g(k + 1)) / b_norm;
-            if (my_rank == 0) {
+            if (verbose_ && my_rank == 0) {
                 std::cout << "  Iteration: " << total_iters << " -> Relative Residual = " << rel_res << std::endl;
             }
 
@@ -170,8 +176,14 @@ bool KrylovGmres::solve(const SparseMatrixWrapper& A,
         x += w;
     }
 
+    last_iterations_ = total_iters;
+    last_residual_   = rel_res;
+
     if (rel_res <= tolerance_) {
-        if (my_rank == 0) std::cout << "GMRES Successfully Converged! Total Iterations: " << total_iters << std::endl;
+        if (verbose_ && my_rank == 0) {
+            std::cout << "GMRES Successfully Converged! Total Iterations: "
+                      << total_iters << std::endl;
+        }
         return true;
     }
     return false;

@@ -49,10 +49,16 @@ public:
                VectorType& z) const;
 
     /**
+     * @brief True if no spectral mode passed the threshold (e.g. N = 1), in
+     *        which case the two-level preconditioner degrades to the one-level one.
+     */
+    bool isEmpty() const { return total_coarse_dim_ == 0; }
+
+    /**
      * @brief Gets the total dimension of the global Coarse Space.
      * @return Number of global spectral modes.
      */
-    Eigen::Index coarseSize() const { return A_00_lu_.rows(); }
+    Eigen::Index coarseSize() const { return total_coarse_dim_; }
 
 private:
     Eigen::Index total_coarse_dim_ = 0; // Total number of selected global modes

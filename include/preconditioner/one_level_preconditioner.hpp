@@ -64,6 +64,11 @@ private:
     
     // Eigen's direct Sparse LU solver to handle the local linear system inversion efficiently
     mutable Eigen::SparseLU<MatrixType> solver_; 
+
+    mutable VectorType r_local_; // size n_i
+    mutable VectorType y_local_; // size n_i
+    mutable VectorType z_this_; // size n : this rank's own contribution
+    mutable VectorType z_sum_; // size n : sum over all subdomains
 };
 
 } // namespace schwarz2lvl

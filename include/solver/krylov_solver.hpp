@@ -61,9 +61,30 @@ public:
         return this->solve(A, b, x, prec);
     }
 
+    /**
+     * @brief Iterations performed during the last solve() call.
+     */
+    int lastIterations() const { return last_iterations_; }
+
+    /**
+     * @brief Relative residual reached during the last solve() call.
+     */
+    double lastResidual() const { return last_residual_; }
+
+    /**
+     * @brief Enables/disables per-iteration console output.
+     *        Turn it off when running several solves in a batch comparison.
+     */
+    void setVerbose(bool v) const { verbose_ = v; }
+
 protected:
-    int    max_iter_; // Maximum allowed total iterations
-    double tolerance_; // Relative convergence tolerance
+    int    max_iter_;   // Maximum allowed total iterations
+    double tolerance_;  // Relative convergence tolerance
+
+    // Mutable solver state/reporting: solve() is const by interface contract.
+    mutable bool   verbose_          = true;
+    mutable int    last_iterations_  = 0;
+    mutable double last_residual_    = 1.0;
 };
 
 } // namespace schwarz2lvl

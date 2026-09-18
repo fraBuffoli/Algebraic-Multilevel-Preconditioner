@@ -4,7 +4,7 @@
 
 # Compilatore e flag (Macro per le larghezze dei tipi di METIS incluse)
 CXX      := mpicxx
-CXXFLAGS := -std=c++17 -O3 -Wall -Wextra -pedantic -DIDXTYPEWIDTH=32 -DREALTYPEWIDTH=64
+CXXFLAGS := -std=c++17 -O3 -Wall -pedantic -DIDXTYPEWIDTH=32 -DREALTYPEWIDTH=64
 
 # Nome dell'eseguibile finale
 TARGET   := schwarz_solver

@@ -38,6 +38,15 @@ public:
      */
     const VectorType& getWeights() const { return weights_; }
 
+    /**
+     * @brief Sets externally provided weights (e.g. received via MPI_Bcast from the subdomain that actually owns them).
+     * @param w Raw weight values, ordered consistently with the subdomain's global index list.
+     */
+    void setWeights(const std::vector<double>& w) {
+        weights_ = Eigen::Map<const VectorType>(
+            w.data(), static_cast<Eigen::Index>(w.size()));
+    }
+
 private:
     VectorType weights_; // Local diagonal matrix entries (size n_i)
 };
