@@ -57,17 +57,25 @@ std::vector<int> GraphPartitioner::computePartition(const SparseMatrixWrapper& m
     idx_t nparts = static_cast<idx_t>(num_partitions);
     idx_t objval = 0;
 
+    std::vector<idx_t> vwgt(n);
+    for (int i = 0; i < n; ++i) 
+    {
+        vwgt[i] = static_cast<idx_t>(adjacency_list[i].size()) + 1;
+    }
+
+
     // Setup METIS default options
     idx_t options[METIS_NOPTIONS];
     METIS_SetDefaultOptions(options);
-    options[METIS_OPTION_NUMBERING] = 0; // C-style 0-based indexing
+    options[METIS_OPTION_NUMBERING] = 0; 
+    options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_VOL;
 
     std::cout << "Invoking METIS_PartGraphKway for " << num_partitions << " partitions..." << std::endl;
 
     // Call the static library routine compiled via your Makefile
     int status = METIS_PartGraphKway(
         &nvtxs, &ncon, xadj.data(), adjncy.data(),
-        nullptr, nullptr, nullptr, &nparts, nullptr,
+        vwgt.data(), nullptr, nullptr, &nparts, nullptr,
         nullptr, options, &objval, part.data()
     );
 
