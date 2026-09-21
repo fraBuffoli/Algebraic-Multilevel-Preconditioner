@@ -63,8 +63,24 @@ public:
 
 private:
     Eigen::Index total_coarse_dim_ = 0;
-    Eigen::SparseMatrix<double> R_0_;
+    Eigen::Index n_global_ = 0;
     Eigen::PartialPivLU<Eigen::MatrixXd> A_00_lu_;
+
+    //Distributed coarse space data for each subdomain
+    Eigen::MatrixXd my_Z_;
+    RestrictionOperator my_restriction_;
+    PartitionOfUnity my_pou_;
+    Eigen::Index my_coarse_offset_ = 0;
+    Eigen::Index my_num_modes_ = 0;
+    std::vector<int> modes_per_rank_;
+    std::vector<int> mode_offsets_;
+
+    mutable VectorType r_local_;
+    mutable VectorType r_coarse_local_;
+    mutable VectorType r_coarse_global_;
+    mutable VectorType z_local_;
+    mutable VectorType z_this_;
+    mutable VectorType z_sum_;
 };
 
 } // namespace schwarz2lvl

@@ -1,4 +1,5 @@
 #include "coarse_space.hpp"
+#include <Eigen/Sparse>
 #include <iostream>
 #include <stdexcept>
 #include <mpi.h>
@@ -9,20 +10,24 @@ void CoarseSpace::setup(const SparseMatrixWrapper& global_A,
                         const std::vector<Eigen::MatrixXd>& local_Z,
                         const std::vector<RestrictionOperator>& restrictions,
                         const std::vector<PartitionOfUnity>& pous) {
-    
+
     int my_rank = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 
     const Eigen::Index n = global_A.rows();
+    n_global_ = n;
     const size_t num_subdomains = local_Z.size();
 
-    // 1. Calculate the total dimension of the Coarse Space by summing chosen modes from all ranks
     total_coarse_dim_ = 0;
+    modes_per_rank_.assign(num_subdomains, 0);
+    mode_offsets_.assign(num_subdomains, 0);
     for (size_t i = 0; i < num_subdomains; ++i) {
+        modes_per_rank_[i] = static_cast<int>(local_Z[i].cols());
+        mode_offsets_[i]   = static_cast<int>(total_coarse_dim_);
         total_coarse_dim_ += local_Z[i].cols();
     }
 
-    std::cout << "Assembling Coarse Space projection matrix R_0. Total dimensions: " 
+    std::cout << "Assembling Coarse Space projection matrix R_0. Total dimensions: "
               << total_coarse_dim_ << " x " << n << std::endl;
 
     if (total_coarse_dim_ == 0) {
@@ -35,8 +40,13 @@ void CoarseSpace::setup(const SparseMatrixWrapper& global_A,
         return;
     }
 
-    // 2. Build the global restriction operator R_0 row by row
-    // R_0 consists of stacked blocks of (R_i^T * D_i * Z_i)^T = Z_i^T * D_i * R_i
+    my_restriction_    = restrictions[my_rank];
+    my_pou_             = pous[my_rank];
+    my_Z_               = local_Z[my_rank];
+    my_num_modes_       = my_Z_.cols();
+    my_coarse_offset_   = mode_offsets_[my_rank];
+
+
     std::vector<Eigen::Triplet<double>> r0_triplets;
     Eigen::Index nnz_estimate = 0;
     for (size_t i = 0; i < num_subdomains; ++i) {
@@ -65,38 +75,55 @@ void CoarseSpace::setup(const SparseMatrixWrapper& global_A,
         current_coarse_row += local_modes;
     }
 
-    R_0_.resize(total_coarse_dim_, n);
-    R_0_.setFromTriplets(r0_triplets.begin(), r0_triplets.end());
-    R_0_.makeCompressed();
+    Eigen::SparseMatrix<double> R_0(total_coarse_dim_, n);
+    R_0.setFromTriplets(r0_triplets.begin(), r0_triplets.end());
+    R_0.makeCompressed();
 
-    // 3. Assemble the reduced global coarse grid matrix A_00 = R_0 * A * R_0^T
     std::cout << "Computing reduced system matrix A_00 = R_0 * A * R_0^T..." << std::endl;
-    const Eigen::SparseMatrix<double> R0t = R_0_.transpose();
-    const Eigen::SparseMatrix<double> A_R0t = global_A.getMatrix() * R0t;  
-    const Eigen::MatrixXd A_00 = Eigen::MatrixXd(R_0_ * A_R0t);
+    const Eigen::SparseMatrix<double> R0t = R_0.transpose();
+    const Eigen::SparseMatrix<double> A_R0t = global_A.getMatrix() * R0t;
+    const Eigen::MatrixXd A_00 = Eigen::MatrixXd(R_0 * A_R0t);
 
-    // 4. Pre-factorize the coarse system A_00 using dense Partial-Pivoting LU
     A_00_lu_.compute(A_00);
-    
+
     const Eigen::VectorXd diagU = A_00_lu_.matrixLU().diagonal().cwiseAbs();
     if (diagU.minCoeff() < 1e-12 * diagU.maxCoeff()) {
         throw std::runtime_error("CoarseSpace Error: A_00 is numerically singular (smallest LU pivot below relative threshold).");
     }
     std::cout << "Coarse Space operator successfully factorized." << std::endl;
+
+    r_local_.resize(my_restriction_.localSize());
+    r_coarse_local_.resize(my_num_modes_);
+    r_coarse_global_.resize(total_coarse_dim_);
+    z_local_.resize(my_restriction_.localSize());
+    z_this_.resize(n_global_);
+    z_sum_.resize(n_global_);
 }
 
 void CoarseSpace::apply(const VectorType& r, VectorType& z) const {
 
     if (total_coarse_dim_ == 0) return;
 
-    // Step A: Restrict global residual to coarse space -> r_coarse = R_0 * r
-    Eigen::VectorXd r_coarse = R_0_ * r;
+    my_restriction_.apply(r, r_local_);
 
-    // Step B: Solve the reduced linear system -> y_coarse = A_00^-1 * r_coarse
-    Eigen::VectorXd y_coarse = A_00_lu_.solve(r_coarse);
+    r_coarse_local_.noalias() = my_Z_.transpose() * r_local_.cwiseProduct(my_pou_.getWeights());
 
-    // Step C: Prolong coarse correction to global size and accumulate -> z = z + R_0^T * y_coarse
-    z += R_0_.transpose() * y_coarse;
+    MPI_Allgatherv(r_coarse_local_.data(), static_cast<int>(my_num_modes_), MPI_DOUBLE,
+                   r_coarse_global_.data(), modes_per_rank_.data(), mode_offsets_.data(),
+                   MPI_DOUBLE, MPI_COMM_WORLD);
+
+    Eigen::VectorXd y_coarse = A_00_lu_.solve(r_coarse_global_);
+
+    z_local_.noalias() = my_pou_.getWeights().cwiseProduct
+    (
+        my_Z_ * y_coarse.segment(my_coarse_offset_, my_num_modes_)
+    );
+
+    z_this_.setZero();
+    my_restriction_.applyTranspose(z_local_, z_this_);
+    MPI_Allreduce(z_this_.data(), z_sum_.data(), static_cast<int>(n_global_),
+                  MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    z += z_sum_;
 }
 
 } // namespace schwarz2lvl

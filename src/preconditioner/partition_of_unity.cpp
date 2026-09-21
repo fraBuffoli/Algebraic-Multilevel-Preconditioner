@@ -18,8 +18,6 @@ void PartitionOfUnity::computeWeights(const SparseMatrixWrapper& matrix,
         global_to_local[local_indices[j]] = static_cast<int>(j);
     }
 
-    // Stessa definizione di multiplicity dell'originale, in UN solo passaggio
-    // O(nnz(A)) invece di N passaggi O(n) ciascuno.
     std::vector<std::set<int>> reached_by(n_i);
 
     for (Eigen::Index u = 0; u < n; ++u) {
@@ -27,7 +25,7 @@ void PartitionOfUnity::computeWeights(const SparseMatrixWrapper& matrix,
         for (MatrixType::InnerIterator it(eigen_mat, u); it; ++it) {
             const int v = static_cast<int>(it.col());
             const int local_j = global_to_local[v];
-            if (local_j == -1) continue;
+            if (local_j == -1) continue;       
             if (partition_map[v] == r) continue;
             reached_by[local_j].insert(r);
         }
