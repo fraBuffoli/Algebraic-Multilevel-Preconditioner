@@ -24,7 +24,7 @@
 // =====================================================================
 
 #include "matrix_market_io.hpp"
-#include "sparse_matrix.hpp"
+#include "global_matrix.hpp"
 #include "graph_partitioner.hpp"
 #include "subdomain_topology.hpp"
 #include "restriction_operator.hpp"

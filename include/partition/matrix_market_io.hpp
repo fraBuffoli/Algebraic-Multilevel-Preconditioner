@@ -1,7 +1,7 @@
 #ifndef MATRIX_MARKET_IO_HPP
 #define MATRIX_MARKET_IO_HPP
 
-#include "sparse_matrix.hpp"
+#include "global_matrix.hpp"
 #include <string>
 
 namespace schwarz2lvl {

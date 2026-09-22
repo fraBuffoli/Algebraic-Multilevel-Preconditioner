@@ -1,7 +1,7 @@
 #ifndef KRYLOV_SOLVER_HPP
 #define KRYLOV_SOLVER_HPP
 
-#include "sparse_matrix.hpp"
+#include "global_matrix.hpp"
 #include "preconditioner.hpp"
 #include "timer.hpp"
 #include <string>

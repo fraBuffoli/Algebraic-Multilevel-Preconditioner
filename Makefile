@@ -20,16 +20,19 @@ INCLUDES := -I$(INCDIR) \
             -I$(INCDIR)/solver \
             -I$(INCDIR)/preconditioner \
             -I$(INCDIR)/utils \
+            -I$(INCDIR)/core \
+            -I$(INCDIR)/linalg \
+            -I$(INCDIR)/partition \
             -I$(EXTDIR)/eigen3 \
             -I$(EXTDIR)/metis/include \
             -I$(EXTDIR)/GKlib
 
 # Elenco blindato dei file sorgenti con i percorsi corretti delle sottocartelle
 SOURCES  := $(SRCDIR)/main.cpp \
-            $(SRCDIR)/utils/matrix_market_io.cpp \
-            $(SRCDIR)/utils/graph_partitioner.cpp \
+            $(SRCDIR)/partition/matrix_market_io.cpp \
+            $(SRCDIR)/partition/graph_partitioner.cpp \
+            $(SRCDIR)/partition/subdomain_topology.cpp \
             $(SRCDIR)/preconditioner/restriction_operator.cpp \
-            $(SRCDIR)/preconditioner/subdomain_topology.cpp \
             $(SRCDIR)/preconditioner/partition_of_unity.cpp \
             $(SRCDIR)/preconditioner/one_level_preconditioner.cpp \
             $(SRCDIR)/preconditioner/local_block_splitting.cpp \

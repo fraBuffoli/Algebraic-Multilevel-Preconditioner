@@ -1,7 +1,7 @@
 #ifndef LOCAL_BLOCK_SPLITTING_HPP
 #define LOCAL_BLOCK_SPLITTING_HPP
 
-#include "sparse_matrix.hpp"
+#include "global_matrix.hpp"
 #include "subdomain_topology.hpp"
 #include <vector>
 

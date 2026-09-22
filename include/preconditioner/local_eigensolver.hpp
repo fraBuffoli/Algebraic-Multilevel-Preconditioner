@@ -1,7 +1,7 @@
 #ifndef LOCAL_EIGENSOLVER_HPP
 #define LOCAL_EIGENSOLVER_HPP
 
-#include "sparse_matrix.hpp"
+#include "global_matrix.hpp"
 #include "partition_of_unity.hpp"
 #include <Eigen/Core>
 

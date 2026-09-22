@@ -1,7 +1,7 @@
 #ifndef PARTITION_OF_UNITY_HPP
 #define PARTITION_OF_UNITY_HPP
 
-#include "sparse_matrix.hpp"
+#include "global_matrix.hpp"
 #include "subdomain_topology.hpp"
 #include <vector>
 

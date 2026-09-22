@@ -1,7 +1,7 @@
 #ifndef GRAPH_PARTITIONER_HPP
 #define GRAPH_PARTITIONER_HPP
 
-#include "sparse_matrix.hpp"
+#include "global_matrix.hpp"
 #include <vector>
 
 namespace schwarz2lvl {

@@ -1,7 +1,7 @@
 #ifndef SUBDOMAIN_TOPOLOGY_HPP
 #define SUBDOMAIN_TOPOLOGY_HPP
 
-#include "sparse_matrix.hpp"
+#include "global_matrix.hpp"
 #include <vector>
 
 namespace schwarz2lvl {

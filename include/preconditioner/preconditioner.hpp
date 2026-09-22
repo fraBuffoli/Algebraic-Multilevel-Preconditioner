@@ -1,7 +1,7 @@
 #ifndef PRECONDITIONER_HPP
 #define PRECONDITIONER_HPP
 
-#include "sparse_matrix.hpp"
+#include "global_matrix.hpp"
 
 namespace schwarz2lvl {
 

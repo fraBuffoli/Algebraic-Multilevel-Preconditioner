@@ -1,7 +1,7 @@
 #ifndef COARSE_SPACE_HPP
 #define COARSE_SPACE_HPP
 
-#include "sparse_matrix.hpp"
+#include "global_matrix.hpp"
 #include "restriction_operator.hpp"
 #include "partition_of_unity.hpp"
 #include <Eigen/Core>
