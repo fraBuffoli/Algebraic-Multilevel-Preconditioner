@@ -44,7 +44,9 @@ SOURCES  := $(SRCDIR)/main.cpp \
             $(SRCDIR)/preconditioner/deflated_two_level_preconditioner.cpp \
             $(SRCDIR)/solver/krylov_gmres.cpp \
             $(SRCDIR)/solver/krylov_bicgstab.cpp \
-            $(SRCDIR)/linalg/halo_exchange.cpp
+            $(SRCDIR)/linalg/halo_exchange.cpp \
+			$(SRCDIR)/core/local_index_map.cpp \
+			$(SRCDIR)/linalg/local_matrix.cpp
 
 # Mappatura oggetti applicazione principale
 OBJECTS  := $(SOURCES:$(SRCDIR)/%.cpp=$(OBJDIR)/src/%.o)
