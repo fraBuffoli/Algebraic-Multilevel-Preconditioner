@@ -2,11 +2,11 @@
 # TWO-LEVEL SCHWARZ SOLVER - STRUCTURAL ALGEBRAIC BUILD
 # ====================================================================
 
-# Compilatore e flag (Macro per le larghezze dei tipi di METIS incluse)
+# Compilatore e flag
 CXX      := mpicxx
 CXXFLAGS := -std=c++17 -O3 -Wall -DIDXTYPEWIDTH=32 -DREALTYPEWIDTH=64
 
-# Nome dell'eseguibile finale
+# Nome dell'eseguibile principale
 TARGET   := schwarz_solver
 
 # Percorsi base delle cartelle
@@ -14,8 +14,10 @@ INCDIR   := include
 SRCDIR   := src
 OBJDIR   := obj
 EXTDIR   := external
+TESTDIR  := test
+BINDIR   := bin
 
-# Flag di inclusione: indichiamo a g++ dove cercare gli header in automatico
+# Flag di inclusione
 INCLUDES := -I$(INCDIR) \
             -I$(INCDIR)/solver \
             -I$(INCDIR)/preconditioner \
@@ -27,7 +29,7 @@ INCLUDES := -I$(INCDIR) \
             -I$(EXTDIR)/metis/include \
             -I$(EXTDIR)/GKlib
 
-# Elenco blindato dei file sorgenti con i percorsi corretti delle sottocartelle
+# --- SORGENTI APPLICAZIONE PRINCIPALE ---
 SOURCES  := $(SRCDIR)/main.cpp \
             $(SRCDIR)/partition/matrix_market_io.cpp \
             $(SRCDIR)/partition/graph_partitioner.cpp \
@@ -40,30 +42,70 @@ SOURCES  := $(SRCDIR)/main.cpp \
             $(SRCDIR)/preconditioner/coarse_space.cpp \
             $(SRCDIR)/preconditioner/additive_two_level_preconditioner.cpp \
             $(SRCDIR)/preconditioner/deflated_two_level_preconditioner.cpp \
-			$(SRCDIR)/solver/krylov_gmres.cpp \
-			$(SRCDIR)/solver/krylov_bicgstab.cpp
+            $(SRCDIR)/solver/krylov_gmres.cpp \
+            $(SRCDIR)/solver/krylov_bicgstab.cpp \
+            $(SRCDIR)/linalg/halo_exchange.cpp
 
-# Generazione automatica dei file oggetto speculari dentro la cartella obj/
-OBJECTS  := $(SOURCES:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
+# Mappatura oggetti applicazione principale
+OBJECTS  := $(SOURCES:$(SRCDIR)/%.cpp=$(OBJDIR)/src/%.o)
 
-# Linker flags: aggancia la libreria METIS precompilata a livello di sistema
+# Oggetti condivisi con i test (TUTTI tranne il main.o principale per evitare conflitti)
+SHARED_OBJECTS := $(filter-out $(OBJDIR)/src/main.o, $(OBJECTS))
+
+# --- SORGENTI E TARGET DEI TEST (DINAMICI) ---
+# Trova in automatico tutti i file .cpp dentro la cartella test/
+TEST_SOURCES := $(wildcard $(TESTDIR)/*.cpp)
+# Genera la lista dei singoli eseguibili di test (es. bin/test_halo)
+TEST_TARGETS := $(patsubst $(TESTDIR)/%.cpp, $(BINDIR)/%, $(TEST_SOURCES))
+
+# Linker flags
 LDFLAGS  := -lmetis
 
-# Regola principale di build
+# --------------------------------------------------------------------
+# REGOLI DI BUILD
+# --------------------------------------------------------------------
+
+# Default: compila solo l'applicazione principale
 all: $(TARGET)
 
-# Regola di Link finale (Unisce gli oggetti C++ e la libreria esterna)
+# Regola per compilare l'eseguibile principale
 $(TARGET): $(OBJECTS)
-	@echo "Linking final executable with METIS: $@"
+	@echo "Linking final app executable: $@"
 	$(CXX) $(CXXFLAGS) $(OBJECTS) $(LDFLAGS) -o $@
 
-# Regola universale per compilare QUALSIASI file .cpp mantenendo l'albero delle cartelle
-$(OBJDIR)/%.o: $(SRCDIR)/%.cpp
+# COMPILA SOLO I TEST: Crea tutti gli eseguibili dentro la cartella bin/
+test: $(SHARED_OBJECTS) $(TEST_TARGETS)
+	@echo "All tests compiled successfully inside '$(BINDIR)/'!"
+
+# Regola generica per linkare un singolo test indipendente
+$(BINDIR)/%: $(OBJDIR)/test/%.o $(SHARED_OBJECTS)
+	@mkdir -p $(BINDIR)
+	@echo "Linking test executable: $@"
+	$(CXX) $(CXXFLAGS) $< $(SHARED_OBJECTS) $(LDFLAGS) -o $@
+
+# Regola per compilare i file sorgenti in src/
+$(OBJDIR)/src/%.o: $(SRCDIR)/%.cpp
 	@mkdir -p $(dir $@)
 	@echo "Compiling C++ Source: $<"
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-# Regola per la generazione automatica della documentazione con Doxygen
+# Regola per compilare i file sorgenti in test/
+$(OBJDIR)/test/%.o: $(TESTDIR)/%.cpp
+	@mkdir -p $(dir $@)
+	@echo "Compiling C++ Test Source: $<"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+# REGOLA SPERIMENTALE: Esegui al volo un test specifico scrivendo "make test_nomefile"
+# Esempio: "make test_halo" compila le dipendenze e lancia subito bin/test_halo
+test_%: $(BINDIR)/test_%
+	@echo "Running test: $<"
+	@./$<
+
+# --------------------------------------------------------------------
+# UTILITY
+# --------------------------------------------------------------------
+
+# Generazione documentazione Doxygen
 doc:
 	@if command -v doxygen > /dev/null; then \
 		echo "Creating required documentation directories..."; \
@@ -76,11 +118,11 @@ doc:
 		echo "To install it on Ubuntu/WSL, run: sudo apt install doxygen graphviz"; \
 	fi
 
-# Regola di pulizia profonda degli oggetti, dell'eseguibile e di TUTTA la documentazione
+# Pulizia profonda
 clean:
-	@echo "Cleaning compiled objects and executables..."
-	rm -rf $(OBJDIR) $(TARGET)
+	@echo "Cleaning compiled objects, bins and executables..."
+	rm -rf $(OBJDIR) $(BINDIR) $(TARGET)
 	@echo "Cleaning all generated documentation directories..."
 	rm -rf docs html latex
 
-.PHONY: all clean doc
+.PHONY: all clean doc test
