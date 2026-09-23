@@ -49,7 +49,8 @@ SOURCES  := $(SRCDIR)/main.cpp \
             $(SRCDIR)/solver/krylov_bicgstab.cpp \
             $(SRCDIR)/linalg/halo_exchange.cpp \
 			$(SRCDIR)/core/local_index_map.cpp \
-			$(SRCDIR)/linalg/local_matrix.cpp
+			$(SRCDIR)/linalg/local_matrix.cpp \
+			$(SRCDIR)/linalg/distributed_spmv.cpp 
 
 # Mappatura oggetti applicazione principale
 OBJECTS  := $(SOURCES:$(SRCDIR)/%.cpp=$(OBJDIR)/src/%.o)
