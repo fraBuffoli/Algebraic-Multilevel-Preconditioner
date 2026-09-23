@@ -42,6 +42,7 @@ SOURCES  := $(SRCDIR)/main.cpp \
             $(SRCDIR)/preconditioner/local_block_splitting.cpp \
             $(SRCDIR)/preconditioner/local_eigensolver.cpp \
             $(SRCDIR)/preconditioner/coarse_space.cpp \
+			$(SRCDIR)/preconditioner/distributed_coarse_space.cpp \
             $(SRCDIR)/preconditioner/additive_two_level_preconditioner.cpp \
             $(SRCDIR)/preconditioner/deflated_two_level_preconditioner.cpp \
 			$(SRCDIR)/preconditioner/distributed_one_level_preconditioner.cpp \
