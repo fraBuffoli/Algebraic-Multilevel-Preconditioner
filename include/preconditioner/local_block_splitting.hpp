@@ -2,6 +2,7 @@
 #define LOCAL_BLOCK_SPLITTING_HPP
 
 #include "global_matrix.hpp"
+#include "local_matrix.hpp"
 #include "subdomain_topology.hpp"
 #include <vector>
 
@@ -34,6 +35,15 @@ public:
     void applyLumping(const SparseMatrixWrapper& global_A,
                       MatrixType& local_A_ii,
                       const SubdomainTopology& topology) const;
+
+    /**
+     * @brief lumping on the local submatrix, using only local information (no global matrix needed).
+     *
+     * @param local_A The local matrix containing the subdomain's data.
+     * @param local_A_ii The local square block to be modified in-place.
+     */
+    void applyLumping(const LocalMatrix& local_A,
+                      MatrixType& local_A_ii) const;
 };
 
 } // namespace schwarz2lvl

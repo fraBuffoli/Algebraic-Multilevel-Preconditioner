@@ -1,6 +1,7 @@
 #include "local_block_splitting.hpp"
 #include <cmath>
 #include <iostream>
+#include <stdexcept>
 
 namespace schwarz2lvl {
 
@@ -44,6 +45,29 @@ void LocalBlockSplitting::applyLumping(const SparseMatrixWrapper& global_A,
                 it.valueRef() -= external_sum;
                 break; 
             }
+        }
+    }
+}
+
+void LocalBlockSplitting::applyLumping(const LocalMatrix& local_A,
+                                       MatrixType& local_A_ii) const {
+    const MatrixType& full_rows = local_A.raw();
+    const LocalIndexMap& index_map = local_A.indexMap();
+    const Eigen::Index n_i = index_map.size();
+
+    if (local_A_ii.rows() != n_i || local_A_ii.cols() != n_i) {
+        throw std::invalid_argument("LocalBlockSplitting::applyLumping: local_A_ii is not n_i x n_i ");
+    }
+
+    for (Eigen::Index local_row = index_map.numInterior(); local_row < n_i; ++local_row) {
+        double external_sum = 0.0;
+        for (MatrixType::InnerIterator it(full_rows, local_row); it; ++it) {
+            if (index_map.globalToLocal(static_cast<int>(it.col())) == -1) {
+                external_sum += std::abs(it.value());
+            }
+        }
+        for (MatrixType::InnerIterator it(local_A_ii, local_row); it; ++it) {
+            if (it.col() == local_row) { it.valueRef() -= external_sum; break; }
         }
     }
 }

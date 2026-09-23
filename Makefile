@@ -46,6 +46,8 @@ SOURCES  := $(SRCDIR)/main.cpp \
             $(SRCDIR)/preconditioner/additive_two_level_preconditioner.cpp \
             $(SRCDIR)/preconditioner/deflated_two_level_preconditioner.cpp \
 			$(SRCDIR)/preconditioner/distributed_one_level_preconditioner.cpp \
+			$(SRCDIR)/preconditioner/distributed_deflated_two_level_preconditioner.cpp \
+			$(SRCDIR)/preconditioner/distributed_additive_two_level_preconditioner.cpp \
             $(SRCDIR)/solver/krylov_gmres.cpp \
             $(SRCDIR)/solver/krylov_bicgstab.cpp \
             $(SRCDIR)/linalg/halo_exchange.cpp \

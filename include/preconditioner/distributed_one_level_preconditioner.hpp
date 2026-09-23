@@ -4,6 +4,7 @@
 #include "config.hpp"
 #include "local_matrix.hpp"
 #include "halo_exchange.hpp"
+#include "distributed_preconditioner.hpp"
 #include <Eigen/SparseLU>
 
 namespace schwarz2lvl {
@@ -11,7 +12,7 @@ namespace schwarz2lvl {
  * @class DistributedOneLevelPreconditioner
  * @brief Implements a distributed version of the classical restricted/additive Schwarz one-level preconditioner (ASM/RAS) for parallel computations.
  */
-class DistributedOneLevelPreconditioner {
+class DistributedOneLevelPreconditioner : public DistributedPreconditioner {
 public:
     /**
      * @brief Default constructor creating an uninitialized distributed preconditioner.
@@ -31,7 +32,7 @@ public:
      * @param r_owned The local portion of the global residual vector.
      * @param z_owned The local portion of the global correction vector (accumulated).
      */
-    void apply(const VectorType& r_owned, VectorType& z_owned) const;
+    void apply(const VectorType& r_owned, VectorType& z_owned) const override;
 
 private:
     mutable Eigen::SparseLU<MatrixType> solver_;
