@@ -53,4 +53,13 @@ void SubdomainTopology::computeTopology(const SparseMatrixWrapper& matrix,
     global_indices_.insert(global_indices_.end(), boundary_indices_.begin(), boundary_indices_.end());
 }
 
+void SubdomainTopology::setIndices(std::vector<int> interior_indices, std::vector<int> boundary_indices) {
+    interior_indices_ = std::move(interior_indices);
+    boundary_indices_ = std::move(boundary_indices);
+    global_indices_.clear();
+    global_indices_.reserve(interior_indices_.size() + boundary_indices_.size());
+    global_indices_.insert(global_indices_.end(), interior_indices_.begin(), interior_indices_.end());
+    global_indices_.insert(global_indices_.end(), boundary_indices_.begin(), boundary_indices_.end());
+}
+
 } // namespace schwarz2lvl

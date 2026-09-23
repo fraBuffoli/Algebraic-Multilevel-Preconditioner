@@ -33,6 +33,14 @@ public:
 
     
     /**
+     * @brief Ricostruisce interior/boundary/global da dati già calcolati
+     * altrove (da DomainDecomposer su rank 0) e ricevuti via MPI — usata
+     * da MatrixDistributor al posto di computeTopology, che richiederebbe
+     * la matrice intera.
+     */
+    void setIndices(std::vector<int> interior_indices, std::vector<int> boundary_indices);
+
+    /**
      * @brief Gets the complete set of global indices (Interior + Overlap Boundary).
      * @return Const reference to the full local index vector.
      */
