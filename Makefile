@@ -35,6 +35,7 @@ SOURCES  := $(SRCDIR)/main.cpp \
             $(SRCDIR)/partition/graph_partitioner.cpp \
             $(SRCDIR)/partition/subdomain_topology.cpp \
             $(SRCDIR)/partition/domain_decomposer.cpp \
+			$(SRCDIR)/partition/matrix_distributor.cpp \
             $(SRCDIR)/preconditioner/restriction_operator.cpp \
             $(SRCDIR)/preconditioner/partition_of_unity.cpp \
             $(SRCDIR)/preconditioner/one_level_preconditioner.cpp \
