@@ -42,14 +42,16 @@ SOURCES  := $(SRCDIR)/main.cpp \
             $(SRCDIR)/preconditioner/local_block_splitting.cpp \
             $(SRCDIR)/preconditioner/local_eigensolver.cpp \
             $(SRCDIR)/preconditioner/coarse_space.cpp \
-			$(SRCDIR)/preconditioner/distributed_coarse_space.cpp \
             $(SRCDIR)/preconditioner/additive_two_level_preconditioner.cpp \
             $(SRCDIR)/preconditioner/deflated_two_level_preconditioner.cpp \
 			$(SRCDIR)/preconditioner/distributed_one_level_preconditioner.cpp \
 			$(SRCDIR)/preconditioner/distributed_deflated_two_level_preconditioner.cpp \
 			$(SRCDIR)/preconditioner/distributed_additive_two_level_preconditioner.cpp \
+			$(SRCDIR)/preconditioner/distributed_coarse_space.cpp \
             $(SRCDIR)/solver/krylov_gmres.cpp \
             $(SRCDIR)/solver/krylov_bicgstab.cpp \
+			$(SRCDIR)/solver/distributed_gmres.cpp \
+			$(SRCDIR)/solver/distributed_bicgstab.cpp \
             $(SRCDIR)/linalg/halo_exchange.cpp \
 			$(SRCDIR)/core/local_index_map.cpp \
 			$(SRCDIR)/linalg/local_matrix.cpp \

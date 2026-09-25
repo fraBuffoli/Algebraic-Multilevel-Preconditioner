@@ -48,3 +48,6 @@ schwarz_solver
 
 #Doxygen
 docs/Doxygen/html
+
+#Test results
+results/
