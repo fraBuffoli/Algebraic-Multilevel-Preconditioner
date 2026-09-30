@@ -19,8 +19,6 @@
 
 namespace schwarz2lvl::part {
 
-namespace {
-
 /// @brief Reads a whole file into a string.
 std::string slurp(const std::string& path)
 {
@@ -78,8 +76,6 @@ Banner parseBanner(const std::string& buf, std::size_t& pos)
     return b;
 }
 
-} // namespace
-
 CsrMatrix MatrixMarketIO::readMatrix(const std::string& path)
 {
     const std::string buf = slurp(path);
@@ -118,6 +114,7 @@ CsrMatrix MatrixMarketIO::readMatrix(const std::string& path)
             v = std::strtod(p, &end);
             p = end;
         }
+        if (v == 0.0) continue; // explicit zeros (e.g. SuiteSparse files) carry no information
         rows.push_back(i - 1);
         cols.push_back(j - 1);
         vals.push_back(v);
@@ -191,4 +188,4 @@ void MatrixMarketIO::writeVector(const std::string& path, const std::vector<core
     std::fclose(f);
 }
 
-} // namespace schwarz2lvl::part
+} // namespace schwarz2lvl

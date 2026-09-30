@@ -32,7 +32,7 @@ void LocalSolver::solveTranspose(const core::Vec&, core::Vec&) const
     throw std::logic_error("solveTranspose not supported by backend " + name());
 }
 
-
+// --------------------------------------------------------------------- SparseLU
 /**
  * @brief Eigen::SparseLU backend (supernodal LU with partial pivoting, COLAMD ordering).
  */
@@ -63,13 +63,25 @@ private:
 };
 
 #ifdef USE_UMFPACK
+// ---------------------------------------------------------------------- UMFPACK
 /**
  * @brief SuiteSparse UMFPACK backend (unsymmetric multifrontal LU), called directly
  *        on the compressed column arrays of the Eigen matrix (no conversion).
  */
 class UmfpackSolver final : public LocalSolver {
 public:
-    UmfpackSolver() { umfpack_di_defaults(control_); }
+    UmfpackSolver()
+    {
+        umfpack_di_defaults(control_);
+        // No iterative refinement: inside a preconditioner / eigensolver the LU backward
+        // error is sufficient, and refinement (1 SpMV + 1 solve per step, default 2 steps)
+        // made each solve ~2.8x slower in the convdiff3d tests.
+        control_[UMFPACK_IRSTEP] = 0;
+        // Nested-dissection (METIS) fill-reducing ordering instead of the default AMD/COLAMD:
+        // for 3D problems it gives much less fill (convdiff3d 36^3: nnz(L+U) -31%,
+        // numeric factorization 2.1x faster, solves ~25% faster).
+        control_[UMFPACK_ORDERING] = UMFPACK_ORDERING_METIS;
+    }
     ~UmfpackSolver() override { release(); }
     UmfpackSolver(const UmfpackSolver&) = delete;
     UmfpackSolver& operator=(const UmfpackSolver&) = delete;
@@ -101,11 +113,11 @@ public:
     std::string name() const override { return "umfpack"; }
 
 private:
-    core::SpMat A_;                         ///< Copy of the factorized matrix.
-    void* symbolic_ = nullptr;              ///< UMFPACK symbolic object.
-    void* numeric_ = nullptr;               ///< UMFPACK numeric object.
-    double control_[UMFPACK_CONTROL];       ///< UMFPACK control parameters.
-    mutable double info_[UMFPACK_INFO];     ///< UMFPACK statistics.
+    core::SpMat A_;                          ///< Copy of the factorized matrix (required by the UMFPACK API).
+    void* symbolic_ = nullptr;         ///< UMFPACK symbolic object.
+    void* numeric_ = nullptr;          ///< UMFPACK numeric object.
+    double control_[UMFPACK_CONTROL];  ///< UMFPACK control parameters.
+    mutable double info_[UMFPACK_INFO];///< UMFPACK statistics.
 
     void run(int sys, const core::Vec& b, core::Vec& x) const
     {
@@ -125,6 +137,7 @@ private:
 #endif
 
 #ifdef USE_PARDISO
+// ---------------------------------------------------------------------- PARDISO
 /**
  * @brief Intel MKL PARDISO backend through Eigen::PardisoLU (one thread per MPI rank:
  *        set MKL_NUM_THREADS=1). Transposed solves use iparm(12) = 2.
@@ -182,4 +195,4 @@ std::unique_ptr<LocalSolver> makeLocalSolver(const std::string& name)
     throw std::invalid_argument("local solver '" + n + "' is unknown or not compiled in");
 }
 
-} // namespace schwarz2lvl::linalg
+} // namespace schwarz2lvl
