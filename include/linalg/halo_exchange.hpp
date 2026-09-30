@@ -137,10 +137,10 @@ void HaloExchange::exchange(const std::vector<std::vector<T>>& send, std::vector
     for (int k = 0; k < nn; ++k) {
         auto& r = recv[static_cast<std::size_t>(k)];
         r.resize(static_cast<std::size_t>(rsize[static_cast<std::size_t>(k)]));
-        MPI_Irecv(r.data(), static_cast<int>(r.size()), mpiType<T>(), neighbors_[static_cast<std::size_t>(k)],
+        MPI_Irecv(r.data(), static_cast<int>(r.size()), core::mpiType<T>(), neighbors_[static_cast<std::size_t>(k)],
                   tag_data, comm_, &req[static_cast<std::size_t>(k)]);
         const auto& s = send[static_cast<std::size_t>(k)];
-        MPI_Isend(s.data(), static_cast<int>(s.size()), mpiType<T>(), neighbors_[static_cast<std::size_t>(k)],
+        MPI_Isend(s.data(), static_cast<int>(s.size()), core::mpiType<T>(), neighbors_[static_cast<std::size_t>(k)],
                   tag_data, comm_, &req[static_cast<std::size_t>(nn + k)]);
     }
     MPI_Waitall(2 * nn, req.data(), MPI_STATUSES_IGNORE);
