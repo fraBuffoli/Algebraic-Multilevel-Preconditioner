@@ -1,123 +1,203 @@
-# Algebraic Two-Level Schwarz Preconditioner
+# schwarz2lvl — Algebraic Two-Level Schwarz Preconditioner
 
-This C++ project implements an algebraic overlapping two-level Schwarz preconditioner based on the paper by Al Daas et al. (2023): "Efficient Algebraic Two-Level Schwarz Preconditioner for Sparse Matrices". The solver is designed to handle large-scale, sparse linear systems of equations Ax = b from the MatrixMarket Collection. The primary goal is to overcome the scalability limits of classical one-level domain decomposition methods by constructing a fully algebraic Spectral Coarse Space. This second level is built efficiently via a local lumping technique in the subdomain overlap, requiring only O(n_i) operations per subdomain.
+C++17 / MPI implementation of the fully algebraic overlapping two-level Schwarz preconditioner of
 
-NOTE on implementation: Eigen does not provide a complex generalized eigensolver. In the complex case, the inversion of matrix Atilda_ii can be difficult since it might be non singular. Thus, it is difficult and computationally inefficient to reduce the problem to a classic eigenvalue problem. The choice is to stick with the Eigen library and only work with real numbers. This is done since the application of this preconditioner to a practical case proposed is CFD, in which only real matrices are involved.
+> H. Al Daas, P. Jolivet, T. Rees, *Efficient Algebraic Two-Level Schwarz Preconditioner for Sparse Matrices*,
+> SIAM J. Sci. Comput. 45(3), A1199–A1213, 2023. doi:10.1137/22M1469833
 
-## Class Structure and Architecture
+The second level is a spectral coarse space built from the matrix alone: every subdomain solves a local
+generalized eigenproblem involving the lumped matrix Ã_ii (Definition 3.1), which is assembled in O(n_i)
+operations from the distance-one overlap. One MPI process owns one subdomain; the preconditioner is used
+inside a right-preconditioned restarted GMRES. Real arithmetic only.
 
-The project features a modular, object-oriented design that decouples sparse data management, algebraic topology, local spectral solvers, and the parallel iterative engine.
+## Prerequisites
 
-### Data Management and IO
-* sparse_matrix.hpp: A lightweight wrapper around Eigen::SparseMatrix<double, Eigen::RowMajor>. It provides an optimized interface for accessing sparse rows and coefficients in Compressed Sparse Row (CSR) format.
-* matrix_market_io.hpp: Handles parsing and loading of .mtx input files, supporting both symmetric and non-symmetric matrix storage patterns.
+| Dependency | Status | Notes |
+|---|---|---|
+| C++17 compiler + MPI (`mpicxx`) | required | tested with GCC 13 + Open MPI 4.1 |
+| METIS 5 | required | `-lmetis` |
+| Eigen 3.4.0 | required, bundled | `external/eigen3` |
+| Spectra 1.0.1 | required, bundled | `external/spectra` (header-only) |
+| MUMPS (+ ScaLAPACK, BLAS/LAPACK) | optional, `USE_MUMPS=1` (default) | distributed coarse solver |
+| SuiteSparse UMFPACK | optional, `USE_UMFPACK=1` (default) | local LU backend |
+| Intel MKL PARDISO | optional, `USE_PARDISO=0` (default) | local LU backend |
+| Doxygen | optional | `make doc` |
 
-### Domain Decomposition and Topology
-* graph_partitioner.hpp: Interfaces with the METIS library. It builds the undirected adjacency graph G(A + A^T) and partitions the n global nodes into N initial, non-overlapping, and balanced subdomains.
-* subdomain_topology.hpp: Analyzes the original matrix sparsity pattern via G(A) to extend the initial non-overlapping partitions by a distance of one. It strictly isolates the index sets for each subdomain: interior (Omega_Ii), boundary/overlap (Omega_Gamma_i), and external complement (Omega_ci).
-* restriction_operator.hpp: Manages the index mapping between the global system and local subdomains. It implements the apply (restriction) and applyTranspose (prolongation/injection) operations using raw index vectors instead of instantiating large, zero-padded matrices.
+Ubuntu 24.04 (everything, including the optional MUMPS/UMFPACK backends):
 
-### Partition of Unity and Algebraic Splitting
-* partition_of_unity.hpp: Computes and stores the local diagonal partition of unity matrix (D_i). It scales overlapping contributions to ensure they sum up to the identity matrix globally.
-* local_block_splitting.hpp: Extracts the local subdomain matrix A_ii and implements the lumping algorithm (Definition 3.1). It sums the absolute values of the coefficients connecting the boundary to the external complement (A_Gamma_ci) and subtracts them from the main diagonal of A_ii to assemble the modified matrix tilde{A}_ii.
+```bash
+sudo apt install build-essential libopenmpi-dev openmpi-bin libmetis-dev \
+                 libsuitesparse-dev libmumps-dev libscalapack-openmpi-dev
+```
 
-### Second Level (Spectral Coarse Space)
-* local_eigensolver.hpp: Solves the local generalized eigenvalue problem (Equations 3.1 and 3.2) concurrently for each subdomain while handling potential singular null spaces. It filters the spectrum, keeping only the "critical" eigenvectors whose eigenvalues satisfy |lambda| >= 1/tau, where tau is a user-defined threshold. It outputs the local basis matrix Z_i.
-* coarse_space.hpp: Gathers and orchestrates the local Z_i bases to assemble the global projection operator R_0^H. It constructs and factorizes (via a direct sparse or dense solver) the small global coarse matrix A_00 = R_0 A R_0^H.
+## Build
 
-### Iterative Solvers and Parallelism
-* one_level_preconditioner.hpp: Implements the classical restricted additive Schwarz (RAS) or additive Schwarz (ASM) one-level preconditioner (Restriction -> Local LU Solve -> Scaling -> Prolongation).
-* two_level_preconditioner.hpp: Combines the first-level subdomain corrections with the second-level coarse grid correction. It supports both additive combinations and the more robust deflated combination (M_deflated^{-1}).
-* krylov_gmres.hpp: Implements the Generalized Minimal Residual (GMRES) iterative acceleration method with restart capabilities. It drives the global residual minimization and calls the two-level preconditioner at every iteration.
-* mpi_context.hpp: Manages the parallel MPI environment, maps hardware processes to mathematical subdomains, and coordinates boundary data exchanges (halo exchange).
+```bash
+make -j EIGEN_INC=external/eigen3                              # bin/schwarz2lvl, bin/matgen
+make -j EIGEN_INC=external/eigen3 USE_MUMPS=0 USE_UMFPACK=0    # minimal build: MPI + METIS only
+make tests EIGEN_INC=external/eigen3                           # bin/test_subdomain, bin/test_preconditioner
+make doc                                                       # Doxygen HTML in docs/Doxygen/html
+make clean
+```
 
-### Diagnostics and Profiling
-* timers.hpp: High-resolution timing utilities utilizing std::chrono to profile and separate execution costs into Setup Time (partitioning, lumping, local eigensolves, coarse grid assembly) and Solve Time (Krylov iterations).
+- The Makefile defaults to a system Eigen (`/usr/include/eigen3`); `EIGEN_INC=external/eigen3` uses the bundled copy.
+- Any variable (`CXX`, `CXXFLAGS`, `EIGEN_INC`, `METIS_INC/LIB`, `MUMPS_INC/LIB`, `SUITESPARSE_INC/LIB`, `MKL_INC/LIB`,
+  `USE_*`) can be overridden on the command line or stored in a `make.inc` file next to the Makefile.
+- Compile flags are not tracked as dependencies: run `make clean` after changing a `USE_*` switch.
 
-## Development Roadmap
+### CINECA Galileo100
 
-To systematically verify the algebraic correctness of the implementation, development is divided into three incremental phases:
+Load compiler, MPI, METIS (and optionally MUMPS / MKL) modules, then point the Makefile to them with a `make.inc`
+(module names and install prefixes: `module avail`, `module show <name>`):
 
-1. Sequential Phase (1-Level): Implement basic data structures, Matrix Market IO, METIS integration, and achieve GMRES convergence using the one-level preconditioner simulated via sequential loops on a single core.
-2. Spectral Phase (2-Level): Introduce local block splitting and eigensolver classes. Algebraically verify that the addition of the coarse space drastically dampens the global GMRES iteration count compared to Phase 1.
-3. Parallel Phase (MPI and Cluster): Wrap the modules within the MPI context to distribute memory structures across physical processors. Finalize the codebase for scaling analysis on the Galileo100 cluster (CINECA).
+```make
+EIGEN_INC   = external/eigen3
+METIS_INC   = $(METIS_HOME)/include
+METIS_LIB   = -L$(METIS_HOME)/lib -lmetis
+MUMPS_INC   = $(MUMPS_HOME)/include
+MUMPS_LIB   = -L$(MUMPS_HOME)/lib -ldmumps -lmumps_common -lpord <scalapack + blas/lapack>
+USE_UMFPACK = 0
+USE_PARDISO = 1          # MKLROOT is set by the MKL module
+```
 
-## Disclamer: use of AI
-This project was developed as part of an academic course. AI tools were used exclusively to support implementation strategies and code debugging.Minor exceptions include specific utility functions, such as the timer, which were generated using AI to maximize efficiency and ease of use.
+Compute nodes have no internet access: copy the `.mtx` files beforehand. Minimal job script:
 
-## Prerequisites and Execution Guide
+```bash
+#!/bin/bash
+#SBATCH --partition=g100_usr_prod
+#SBATCH --account=<ACCOUNT>
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=48
+#SBATCH --time=00:30:00
+module load <same modules used to compile>
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1   # one sequential local solver per rank
+mpirun ./bin/schwarz2lvl --matrix matrices/garon1.mtx --csv results.csv
+```
 
-### Local Linux Environment Setup
+## Usage
 
-To compile and run this project on a local Linux machine (or Windows Subsystem for Linux - WSL), you need a working C++17 compiler and the METIS library installed at the system level.
+```bash
+mpirun -np 4  ./bin/schwarz2lvl --matrix matrices/sherman4.mtx
+mpirun -np 16 ./bin/schwarz2lvl --generate convdiff3d --nx 40 --nu 1e-2 --tau 0.3 --nev 60
+mpirun -np 16 ./bin/schwarz2lvl --generate coupled2d --nx 200 --ncomp 4 --coarse none   # one-level RAS only
+./bin/schwarz2lvl --help                                                                 # full option list
+```
 
-1. Update your package manager and install the standard build utilities:
-   ```bash
-   sudo apt update
-   sudo apt install build-essential g++ make
-   ```
+Options are given as `--key value` or `--key=value`. Defaults reproduce the setup of Section 4 of the paper
+(zero initial guess, random right-hand side, τ = 0.6, nev = 300, GMRES(30), rtol = 1e-8).
 
-2. Install the official METIS development library:
-   ```bash
-   sudo apt install libmetis-dev
-   ```
+| Group | Options |
+|---|---|
+| Input | `--matrix FILE` (Matrix Market coordinate, real/integer/pattern, general/symmetric/skew) **or** `--generate laplace2d\|laplace3d\|convdiff2d\|convdiff3d\|coupled2d\|coupled3d` with `--nx --ny --nz --nu --ncomp`; `--rhs random\|ones\|generated\|FILE`; `--block-size N` (unknowns per cell) |
+| Partition | `--metis-objective cut\|vol`, `--metis-vertex-weights 0\|1` |
+| Preconditioner | `--one-level ras\|asm`, `--coarse deflated\|additive\|none`, `--pou boolean\|multiplicity`, `--tau`, `--nev` |
+| Local eigensolver | `--eig-tol --eig-maxit --eig-ncv`, `--shift-rel`, `--kernel-tol`, `--kernel-probe`, `--dense-threshold`, `--orth-tol` |
+| Direct solvers | `--local-solver auto\|sparselu\|umfpack\|pardiso`, `--coarse-solver auto\|mumps\|root`, `--coarse-procs N` |
+| GMRES | `--restart`, `--rtol`, `--maxit` |
+| Output | `--verbose 0\|1\|2`, `--csv FILE`, `--history FILE`, `--write-solution FILE` |
 
-3. Ensure your `external/eigen3` folder contains the Eigen library header files before compiling.
+`auto` picks the best backend compiled in (local: pardiso > umfpack > sparselu; coarse: mumps > root).
 
-4. Compile the project using the provided Makefile:
-   ```bash
-   make clean
-   make
-   ```
+**Output.** Rank 0 prints the configuration, min/avg/max subdomain sizes (n_I, n_Γ, neighbours, nnz(A_ii)), coarse
+space statistics (n0, m_i, kernel dimensions, Arnoldi convergence), GMRES iterations with the GMRES and true relative
+residuals, and a min/avg/max timing breakdown of every phase. `--csv` appends one line per run (problem, n, nnz, np,
+options, n0, iterations, residual, setup / eigensolver / coarse assembly / coarse factorization / solve times),
+which is the format intended for strong/weak scaling studies. `--history` writes the residual at every iteration,
+`--write-solution` the solution in the original ordering. Exit code: 0 converged, 2 not converged, 1 invalid input.
 
-5. Run the sequential test executable:
-   ```bash
-   ./schwarz_solver
-   ```
+**matgen** writes the built-in problems in Matrix Market format (e.g. to compare with PETSc/PCHPDDM):
 
-### Running on CINECA Galileo100 (G100)
+```bash
+./bin/matgen convdiff3d 40 nu=0.01 out=cd3d_40      # -> cd3d_40.mtx, cd3d_40_rhs.mtx
+```
 
-When moving to the CINECA Galileo100 cluster, you do not need to install libraries manually. The cluster provides pre-compiled environments managed through the environment modules system.
+**Tests** compare the distributed implementation with sequential references built from the global matrix;
+run them with several process counts:
 
-1. Connect to the cluster via SSH and navigate to your project directory.
+```bash
+mpirun -np 4 ./bin/test_subdomain        # overlap, halo, A_ii, lumping sums, partition of unity, SpMV
+mpirun -np 4 ./bin/test_preconditioner   # sparse vs dense eigensolver, RAS/ASM x deflated/additive, GMRES
+```
 
-2. Load the required compiler and METIS modules into your current session:
-   ```bash
-   module load gnu
-   module load metis
-   ```
+`matrices/` contains small SuiteSparse test matrices (sherman4, nos5, e05r0400, fidapm05/10, garon1, graham1,
+lns_3937, cage7/10, windtunnel_evap2d).
 
-3. Compile the code directly on the login node using the same universal Makefile:
-   ```bash
-   make clean
-   make
-   ```
+## Code structure
 
-4. Since computing nodes on G100 are completely isolated from the internet for security reasons, ensure all your target `.mtx` matrix files are already placed inside your local `matrices/` resources directory before submitting a job.
+```
+include/<module>/*.hpp, src/<module>/*.cpp      one class per header/source pair, namespace schwarz2lvl::<ns>
+├── core/            (core)    Scalar, LocalIndex (32-bit), GlobalIndex (64-bit); SolverConfig (CLI); LocalSystem; MPI helpers
+├── partition/       (part)    CsrMatrix, MatrixMarketIO, GraphPartitioner (METIS), DomainDecomposer, Subdomain
+├── linalg/          (linalg)  HaloExchange, DistributedMatrix (SpMV), LocalSolver (SparseLU/UMFPACK/PARDISO), global dot/norm
+├── preconditioner/  (prec)    Preconditioner, OneLevelSchwarz, local block splitting, LocalEigensolver,
+│                              CoarseSpace, CoarseSolver (MUMPS/root), TwoLevelSchwarz
+├── solver/          (solv)    Gmres
+└── utils/           (utils)   MatrixGenerator, TimerRegistry/ScopedTimer, Log
+src/main.cpp, src/matgen.cpp   drivers;   test/   MPI test programs;   external/   Eigen, Spectra
+```
 
-5. To execute the solver in parallel across multiple cores, you must submit a batch script to the Slurm scheduler. Create a job script (e.g., `job_submit.sh`) with the following structure:
+Flow of `main.cpp`:
 
-   ```bash
-   #!/bin/bash
-   #SBATCH --job-name=schwarz_solver
-   #SBATCH --output=schwarz_%j.out
-   #SBATCH --error=schwarz_%j.err
-   #SBATCH --partition=g100_usr_prod
-   #SBATCH --nodes=1
-   #SBATCH --ntasks-per-node=4
-   #SBATCH --time=00:10:00
-   #SBATCH --account=<YOUR_ACCOUNT_CODE>
+1. **Decomposition** — `DomainDecomposer::decompose`: rank 0 reads or generates the system, partitions G(A + Aᵀ)
+   with METIS, renumbers the unknowns and sends each rank its owned rows → `LocalSystem`.
+2. **Subdomain** — overlap Ω_i = [Ω_I | Ω_Γ], halo pattern, A_ii, A(Ω_I, Ω_i), lumping sums, partition of unity D_i.
+3. **One level** — `OneLevelSchwarz`: exact LU of A_ii; RAS (2.3) or ASM (2.1).
+4. **Two level** — `TwoLevelSchwarz`: Ã_ii (Def. 3.1) → `LocalEigensolver` gives Z_i (3.1)–(3.2) → `CoarseSpace`
+   builds V_i = orth(D_i Z_i) and A_00 = R_0 A R_0ᵀ → `CoarseSolver` factorizes A_00.
+   Deflated (2.4): z = x_0 + M₁⁻¹(r − A x_0), x_0 = R_0ᵀ A_00⁻¹ R_0 r; additive (2.2): z = R_0ᵀ A_00⁻¹ R_0 r + M₁⁻¹ r.
+5. **Solve** — `Gmres` with the preconditioner applied on the right.
 
-   # Load the same modules used during compilation
-   module load gnu
-   module load metis
-   module load openmpi
+## Implementation choices
 
-   # Execute the parallel solver using mpirun
-   mpirun ./schwarz_solver
-   ```
+**Parallel layout**
+- The decomposition emulates OpenFOAM `decomposePar`: rank 0 does all global work once, then no process holds
+  global data. `LocalSystem` (owned rows in CSR with global columns, contiguous ownership ranges) is the only
+  interface to the preconditioner, so it can be filled directly from a processor-local `lduMatrix` + `globalIndex`.
+- METIS k-way on the undirected graph G(A + Aᵀ) with a fixed seed (reproducible runs). With `block_size > 1` the graph
+  is compressed by cells, so all unknowns of a cell stay in the same subdomain (coupled solvers).
+- The overlap (distance one in G(A + Aᵀ)) is discovered in parallel with one `MPI_Alltoall` + `MPI_Alltoallv`;
+  owners then send the full ghost rows A(Ω_Γ, :), the only extra matrix data the method needs.
+- Local numbering: owned unknowns first, then ghosts sorted by global index. With contiguous ownership the ghosts of
+  each neighbour form a contiguous block, received directly into the vector without unpacking.
+- `HaloExchange::forward` realizes R_i, `reverseAdd` realizes Σ_j R_jᵀ (non-blocking point-to-point, buffers reused).
+- Boolean partition of unity by default (D_i = 1 on Ω_I, 0 on Ω_Γ): RAS and the coarse restriction/prolongation
+  become communication-free. The multiplicity PoU (1 / number of subdomains sharing an unknown) is also available.
+- Errors detected on one rank are reduced/broadcast so that every rank throws instead of hanging in a collective.
 
-6. Submit your job to the Slurm queue:
-   ```bash
-   sbatch job_submit.sh
-   ```
+**Coarse space**
+- Lumping sums s_i(j) = Σ_{k∈Ω^c_i} |A(j,k)| are accumulated while the ghost rows are received; Ã_ii only changes
+  the diagonal of the overlap block (missing diagonal entries are inserted).
+- Ã_ii is singular for floating subdomains (zero row sums after lumping), so it is never inverted. It is factorized
+  with a tiny shift σ = shift_rel·‖Ã_ii‖; the right kernel K_i (and the left kernel for nonsymmetric A) is detected
+  explicitly by block inverse iteration + SVD.
+- The infinite eigenvalues of (3.1), "≈ 1/ε" in the paper, are handled exactly: (L_i ∩ K_i)^⊥ in K_i is computed from
+  an SVD of B_i Q and always included in Z_i.
+- The finite eigenvalues come from the implicitly restarted Arnoldi method of Spectra (`GenEigsSolver`, largest
+  magnitude) applied matrix-free to T = Π_K (Ã_ii + σI)⁻¹ Π_R B_i Π_K, B_i = D_i A_ii D_i: one sparse solve + one
+  SpMV per iteration. Subdomains with n_i ≤ `dense_threshold` use a dense SVD/eigendecomposition path, which is
+  also the reference in the tests. Selection: the nev largest, kept if |λ| ≥ 1/τ (Section 4).
+- Real arithmetic: Eigen has no complex generalized eigensolver and the target application (CFD) only produces
+  real matrices. A complex-conjugate pair contributes Re(u) and Im(u), which span the same real invariant subspace.
+- V_i = orth(D_i Z_i) via column-pivoted QR with a rank threshold: same span as D_i Z_i, but orthonormal columns
+  give a better conditioned A_00 and drop dependent vectors. Each rank owns the m_i coarse unknowns it generates.
+- A_00 is assembled without gathering anything: each rank computes W(Ω_I,:)ᵀ A(Ω_I,Ω_i) W(Ω_i,:) with local products
+  and passes the triplets to the coarse solver, which sums duplicates.
+
+**Solvers**
+- Coarse: MUMPS with distributed assembled input (ICNTL(18)=3), LDLᵀ if A is symmetric, automatic retry with more
+  workspace; `--coarse-procs` restricts MUMPS to group leaders to cut communication at large process counts.
+  `root` (gather on rank 0 + sequential LU) is the non-scalable fallback/reference.
+- Local: backends selected at run time behind one `LocalSolver` interface. UMFPACK runs with METIS ordering and no
+  iterative refinement (faster factorizations and solves on 3D problems); PARDISO is meant to run with one thread
+  per rank (`MKL_NUM_THREADS=1`).
+  Transposed solves are needed for the left kernel of Ã_ii.
+- GMRES: right preconditioning, so the stopping test is on the unpreconditioned residual as in the paper;
+  classical Gram–Schmidt applied twice (CGS2), one `MPI_Allreduce` per pass instead of j+1; the true residual is
+  recomputed at every restart.
+- Test generators: cell-centred finite volumes for Eq. (4.1) with upwind convection, the velocity fields of
+  Section 4.2 integrated exactly on the faces (zero row sums, hence singular Ã_ii that exercise the kernel handling),
+  heterogeneous diffusivity, and coupled variants with unknowns interleaved per cell as in OpenFOAM coupled solvers.
+- The random right-hand side is generated in the original ordering, so it does not depend on the number of processes.
+
+**Limitations.** Real matrices only; one subdomain per MPI process; the global matrix lives on rank 0 during the
+decomposition; local indices are 32-bit and the MUMPS interface requires n0 < 2³¹.

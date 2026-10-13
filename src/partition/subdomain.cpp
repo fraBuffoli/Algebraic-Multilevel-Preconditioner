@@ -78,6 +78,7 @@ void Subdomain::buildOverlap()
     std::sort(notify.begin(), notify.end());
     notify.erase(std::unique(notify.begin(), notify.end()), notify.end());
 
+    // A_ji : i is a column owned by row j of another subdomain! 
     std::vector<int> scount(static_cast<std::size_t>(nranks), 0), rcount(static_cast<std::size_t>(nranks), 0);
     for (const auto& pr : notify) ++scount[static_cast<std::size_t>(pr.first)]; //scount[q] = number of notifications sent to q
     MPI_Alltoall(scount.data(), 1, MPI_INT, rcount.data(), 1, MPI_INT, comm); //rcount[q] = number of notifications FROM q
@@ -86,14 +87,15 @@ void Subdomain::buildOverlap()
     for (std::size_t k = 0; k < notify.size(); ++k) sbuf[k] = notify[k].second;
     std::vector<core::GlobalIndex> rbuf(static_cast<std::size_t>(rdisp.back() + rcount.back()));
     MPI_Alltoallv(sbuf.data(), scount.data(), sdisp.data(), core::mpiType<core::GlobalIndex>(), rbuf.data(), rcount.data(),
-                  rdisp.data(), core::mpiType<core::GlobalIndex>(), comm);
+                  rdisp.data(), core::mpiType<core::GlobalIndex>(), comm); //recieve ghosst rows from other subdomains
     cand.insert(cand.end(), rbuf.begin(), rbuf.end());
 
     std::sort(cand.begin(), cand.end());
     cand.erase(std::unique(cand.begin(), cand.end()), cand.end());
     ghosts_ = std::move(cand); //sorted, non duplicated ghosts
 
-    // A_ji : i is a column owned by row j of another subdomain! 
+    //neighbor discovery: for every ghost, find the owner and the local index of the ghost in the owner subdomain
+    //neighbor is alreasy sorted at the end of the loop
     std::vector<int> neighbors;
     std::vector<core::LocalIndex> rstart, rcnt;
     for (std::size_t k = 0; k < ghosts_.size(); ++k) {
@@ -106,7 +108,7 @@ void Subdomain::buildOverlap()
         ++rcnt.back();
     }
     const core::LocalIndex n_local = n_owned_ + static_cast<core::LocalIndex>(ghosts_.size());
-    const std::size_t nn = neighbors.size();
+    const std::size_t nn = neighbors.size(); 
 
     // Temporary pattern (no send lists yet) used to exchange the request lists.
     halo_.setup(comm, neighbors, std::vector<std::vector<core::LocalIndex>>(nn), rstart, rcnt, n_local);
