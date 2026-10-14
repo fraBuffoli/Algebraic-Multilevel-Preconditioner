@@ -95,7 +95,7 @@ Options are given as `--key value` or `--key=value`. Defaults reproduce the setu
 |---|---|
 | Input | `--matrix FILE` (Matrix Market coordinate, real/integer/pattern, general/symmetric/skew) **or** `--generate laplace2d\|laplace3d\|convdiff2d\|convdiff3d\|coupled2d\|coupled3d` with `--nx --ny --nz --nu --ncomp`; `--rhs random\|ones\|generated\|FILE`; `--block-size N` (unknowns per cell) |
 | Partition | `--metis-objective cut\|vol`, `--metis-vertex-weights 0\|1` |
-| Preconditioner | `--one-level ras\|asm`, `--coarse deflated\|additive\|none`, `--pou boolean\|multiplicity`, `--tau`, `--nev` |
+| Preconditioner | `--one-level ras\|asm`, `--coarse deflated\|additive\|none`, `--pou boolean\|multiplicity`, `--tau`, `--nev`, `--nev-start` |
 | Local eigensolver | `--eig-tol --eig-maxit --eig-ncv`, `--shift-rel`, `--kernel-tol`, `--kernel-probe`, `--dense-threshold`, `--orth-tol` |
 | Direct solvers | `--local-solver auto\|sparselu\|umfpack\|pardiso`, `--coarse-solver auto\|mumps\|cpardiso\|root`, `--coarse-procs N` |
 | GMRES | `--restart`, `--rtol`, `--maxit` |
@@ -108,7 +108,9 @@ space statistics (n0, m_i, kernel dimensions, Arnoldi convergence), GMRES iterat
 residuals, and a min/avg/max timing breakdown of every phase. `--csv` appends one line per run (problem, n, nnz, np,
 options, n0, iterations, residual, setup / eigensolver / coarse assembly / coarse factorization / solve times),
 which is the format intended for strong/weak scaling studies. `--history` writes the residual at every iteration,
-`--write-solution` the solution in the original ordering. Exit code: 0 converged, 2 not converged, 1 invalid input.
+`--write-solution` the solution in the original ordering. `--verbose 2` also prints, on stderr, one line per rank
+as soon as its local eigensolver ends (time, n_i, n_Γ, kernel, selected vectors, operator applications), to find
+the subdomains that slow down or block the setup. Exit code: 0 converged, 2 not converged, 1 invalid input.
 
 **matgen** writes the built-in problems in Matrix Market format (e.g. to compare with PETSc/PCHPDDM):
 
@@ -180,7 +182,15 @@ Flow of `main.cpp`:
 - The finite eigenvalues come from the implicitly restarted Arnoldi method of Spectra (`GenEigsSolver`, largest
   magnitude) applied matrix-free to T = Π_K (Ã_ii + σI)⁻¹ Π_R B_i Π_K, B_i = D_i A_ii D_i: one sparse solve + one
   SpMV per iteration. Subdomains with n_i ≤ `dense_threshold` use a dense SVD/eigendecomposition path, which is
-  also the reference in the tests. Selection: the nev largest, kept if |λ| ≥ 1/τ (Section 4).
+  also the reference in the tests. Selection: the nev largest, kept if |λ| ≥ 1/τ (Section 4). Since only the
+  eigenvalues above 1/τ are kept, when nev ≥ 4·`--nev-start` Arnoldi computes k = `--nev-start` (32) of them
+  first and increases k (at least doubling it, or up to where a power law fitted on the computed moduli reaches
+  1/τ) until the smallest computed |λ| is below 1/τ, with nev as the cap: the selected vectors are the same as
+  computing nev at once, but the dense Krylov work (~ n_i k² per restart, ~ k³ for the projected matrix) follows
+  the number of selected vectors instead of nev (`--nev-start 0` computes nev directly, as in the paper). If the
+  QR iteration on the projected Hessenberg matrix fails (strongly non-normal T, e.g. convection-dominated
+  problems), Arnoldi is restarted up to twice with another starting vector and a larger ncv ("Arnoldi retried"
+  in the log).
 - Real arithmetic: Eigen has no complex generalized eigensolver and the target application (CFD) only produces
   real matrices. A complex-conjugate pair contributes Re(u) and Im(u), which span the same real invariant subspace.
 - V_i = orth(D_i Z_i) via column-pivoted QR with a rank threshold: same span as D_i Z_i, but orthonormal columns

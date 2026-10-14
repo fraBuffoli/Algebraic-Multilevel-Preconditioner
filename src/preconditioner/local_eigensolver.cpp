@@ -381,7 +381,10 @@ LocalEigensolverResult LocalEigensolver::computeSparse(const core::SpMat& Atilde
             if (4 * kn >= 3 * nev_reg) kn = nev_reg;
             return std::min(kn, nev_reg);
         };
-        int k = (opt_.nev_start > 0) ? std::min(nev_reg, opt_.nev_start) : nev_reg;
+        // Only when nev is large compared with nev_start: if (almost) all nev are selected, the first
+        // level is a cost added to the full one, and with nev ~ 2 nev_start (fig4: nev = 60, every
+        // subdomain at the cap, Arnoldi dominated by the sparse solves) it is +50%.
+        int k = (opt_.nev_start > 0 && nev_reg >= 4 * opt_.nev_start) ? opt_.nev_start : nev_reg;
         for (;;) {
             arnoldi(k);
             const bool below = res.converged && lam.size() > 0 && std::abs(lam[lam.size() - 1]) < thr;

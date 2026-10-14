@@ -155,7 +155,8 @@ std::string SolverConfig::help()
   --coarse deflated|additive|none  Eq. (2.4) / Eq. (2.2) / one-level only            [deflated]
   --tau T                  select |lambda| >= 1/T in (3.2)                            [0.6]
   --nev N                  max eigenpairs per subdomain                               [300]
-  --nev-start N            first k computed, doubled until |lambda_k| < 1/tau; 0 = nev  [32]
+  --nev-start N            first k computed, increased until |lambda_k| < 1/tau (only if
+                           nev >= 4 N); 0 = nev                                       [32]
   --eig-tol T --eig-maxit N --eig-ncv N                                               [1e-8, 1000, auto]
   --shift-rel S            relative shift used to factorize A~_ii                     [1e-13]
   --kernel-tol T           relative threshold of the numerical kernel of A~_ii        [1e-8]

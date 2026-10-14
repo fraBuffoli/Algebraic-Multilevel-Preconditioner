@@ -17,7 +17,7 @@ namespace schwarz2lvl::prec {
 struct LocalEigensolverOptions {
     double tau = 0.6;                   ///< Select |lambda| >= 1/tau.
     int nev = 300;                      ///< Max eigenpairs selected per subdomain (incl. the kernel part).
-    int nev_start = 32;                 ///< First number of eigenpairs computed, doubled until enough (0 = nev).
+    int nev_start = 32;                 ///< First number of eigenpairs computed if nev >= 4 nev_start (0 = nev).
     double tol = 1e-8;                  ///< Relative tolerance of the Arnoldi method.
     int maxit = 1000;                   ///< Maximum number of restarts.
     int ncv = 0;                        ///< Krylov subspace size (0 = automatic).
