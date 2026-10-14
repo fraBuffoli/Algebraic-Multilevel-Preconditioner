@@ -52,13 +52,18 @@ public:
 
 /**
  * @brief Creates a coarse solver.
- * @param name         "auto" (mumps if compiled in, else root), "mumps" or "root".
+ * @param name         "auto" (the first of availableCoarseSolvers()), "mumps" (distributed MUMPS),
+ *                     "cpardiso" (distributed MKL PARDISO, cluster_sparse_solver) or "root"
+ *                     (A_00 gathered and factorized on rank 0).
  * @param coarse_procs Number of processes taking part in the distributed
- *                     factorization (0 = all; only for mumps).
+ *                     factorization (0 = all; mumps and cpardiso only).
  * @param local_solver Sequential backend of the "root" solver.
  */
 std::unique_ptr<CoarseSolver> makeCoarseSolver(const std::string& name, int coarse_procs,
                                                const std::string& local_solver);
+
+/// @brief Coarse solvers compiled into this build, in order of preference (mumps, cpardiso, root).
+std::vector<std::string> availableCoarseSolvers();
 
 } // namespace schwarz2lvl::prec
 

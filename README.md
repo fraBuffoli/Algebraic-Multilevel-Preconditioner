@@ -21,6 +21,7 @@ inside a right-preconditioned restarted GMRES. Real arithmetic only.
 | MUMPS (+ ScaLAPACK, BLAS/LAPACK) | optional, `USE_MUMPS=1` (default) | distributed coarse solver |
 | SuiteSparse UMFPACK | optional, `USE_UMFPACK=1` (default) | local LU backend |
 | Intel MKL PARDISO | optional, `USE_PARDISO=0` (default) | local LU backend |
+| Intel MKL cluster_sparse_solver | optional, `USE_CPARDISO=0` (default) | distributed coarse solver (needs the MKL BLACS of your MPI, `MKL_BLACS_LIB`) |
 | Doxygen | optional | `make doc` |
 
 Ubuntu 24.04 (everything, including the optional MUMPS/UMFPACK backends):
@@ -42,7 +43,7 @@ make clean
 
 - The Makefile defaults to a system Eigen (`/usr/include/eigen3`); `EIGEN_INC=external/eigen3` uses the bundled copy.
 - Any variable (`CXX`, `CXXFLAGS`, `EIGEN_INC`, `METIS_INC/LIB`, `MUMPS_INC/LIB`, `SUITESPARSE_INC/LIB`, `MKL_INC/LIB`,
-  `USE_*`) can be overridden on the command line or stored in a `make.inc` file next to the Makefile.
+  `MKL_BLACS_LIB`, `BUILD`, `BIN`, `USE_*`) can be overridden on the command line or stored in a `make.inc` file next to the Makefile.
 - Compile flags are not tracked as dependencies: run `make clean` after changing a `USE_*` switch.
 
 ### CINECA Galileo100
@@ -58,7 +59,11 @@ MUMPS_INC   = $(MUMPS_HOME)/include
 MUMPS_LIB   = -L$(MUMPS_HOME)/lib -ldmumps -lmumps_common -lpord <scalapack + blas/lapack>
 USE_UMFPACK = 0
 USE_PARDISO = 1          # MKLROOT is set by the MKL module
+USE_CPARDISO = 1         # distributed coarse solver without MUMPS (MKL_BLACS_LIB = -lmkl_blacs_intelmpi_lp64)
 ```
+
+G100 has no MUMPS module compatible with the OpenFOAM 10 toolchain: there the distributed coarse solver is
+`cpardiso` (see `test/paper/Allrun_coarse.sh` for a complete build line).
 
 Compute nodes have no internet access: copy the `.mtx` files beforehand. Minimal job script:
 
@@ -92,11 +97,11 @@ Options are given as `--key value` or `--key=value`. Defaults reproduce the setu
 | Partition | `--metis-objective cut\|vol`, `--metis-vertex-weights 0\|1` |
 | Preconditioner | `--one-level ras\|asm`, `--coarse deflated\|additive\|none`, `--pou boolean\|multiplicity`, `--tau`, `--nev` |
 | Local eigensolver | `--eig-tol --eig-maxit --eig-ncv`, `--shift-rel`, `--kernel-tol`, `--kernel-probe`, `--dense-threshold`, `--orth-tol` |
-| Direct solvers | `--local-solver auto\|sparselu\|umfpack\|pardiso`, `--coarse-solver auto\|mumps\|root`, `--coarse-procs N` |
+| Direct solvers | `--local-solver auto\|sparselu\|umfpack\|pardiso`, `--coarse-solver auto\|mumps\|cpardiso\|root`, `--coarse-procs N` |
 | GMRES | `--restart`, `--rtol`, `--maxit` |
 | Output | `--verbose 0\|1\|2`, `--csv FILE`, `--history FILE`, `--write-solution FILE` |
 
-`auto` picks the best backend compiled in (local: pardiso > umfpack > sparselu; coarse: mumps > root).
+`auto` picks the best backend compiled in (local: pardiso > umfpack > sparselu; coarse: mumps > cpardiso > root).
 
 **Output.** Rank 0 prints the configuration, min/avg/max subdomain sizes (n_I, n_Γ, neighbours, nnz(A_ii)), coarse
 space statistics (n0, m_i, kernel dimensions, Arnoldi convergence), GMRES iterations with the GMRES and true relative
@@ -130,7 +135,7 @@ include/<module>/*.hpp, src/<module>/*.cpp      one class per header/source pair
 ├── partition/       (part)    CsrMatrix, MatrixMarketIO, GraphPartitioner (METIS), DomainDecomposer, Subdomain
 ├── linalg/          (linalg)  HaloExchange, DistributedMatrix (SpMV), LocalSolver (SparseLU/UMFPACK/PARDISO), global dot/norm
 ├── preconditioner/  (prec)    Preconditioner, OneLevelSchwarz, local block splitting, LocalEigensolver,
-│                              CoarseSpace, CoarseSolver (MUMPS/root), TwoLevelSchwarz
+│                              CoarseSpace, CoarseSolver (MUMPS/cpardiso/root), TwoLevelSchwarz
 ├── solver/          (solv)    Gmres
 └── utils/           (utils)   MatrixGenerator, TimerRegistry/ScopedTimer, Log
 src/main.cpp, src/matgen.cpp   drivers;   test/   MPI test programs;   external/   Eigen, Spectra
@@ -186,6 +191,13 @@ Flow of `main.cpp`:
 **Solvers**
 - Coarse: MUMPS with distributed assembled input (ICNTL(18)=3), LDLᵀ if A is symmetric, automatic retry with more
   workspace; `--coarse-procs` restricts MUMPS to group leaders to cut communication at large process counts.
+  `cpardiso`: MKL cluster_sparse_solver on K = `--coarse-procs` leaders (the first rank of every group of N/K
+  consecutive ranks). Each coefficient is sent to the leader owning its row, so every leader passes a contiguous
+  block of rows (distributed CSR,
+  iparm[39] = 2, right-hand side and solution distributed the same way: only a Gatherv/Scatterv inside each group per
+  solve). LDLᵀ (mtype −2) if A is symmetric, LU with scaling and matching otherwise, METIS ordering on the first
+  process (the MPI ordering of PARDISO, iparm[1] = 10, hung in tests). With Open MPI the symmetric types crash inside
+  MKL on communicators other than MPI_COMM_WORLD, so there symmetric A_00 are factorized as general matrices.
   `root` (gather on rank 0 + sequential LU) is the non-scalable fallback/reference.
 - Local: backends selected at run time behind one `LocalSolver` interface. UMFPACK runs with METIS ordering and no
   iterative refinement (faster factorizations and solves on 3D problems); PARDISO is meant to run with one thread
@@ -200,4 +212,4 @@ Flow of `main.cpp`:
 - The random right-hand side is generated in the original ordering, so it does not depend on the number of processes.
 
 **Limitations.** Real matrices only; one subdomain per MPI process; the global matrix lives on rank 0 during the
-decomposition; local indices are 32-bit and the MUMPS interface requires n0 < 2³¹.
+decomposition; local indices are 32-bit and the MUMPS / MKL interfaces require n0 < 2^31.

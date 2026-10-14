@@ -159,7 +159,7 @@ std::string SolverConfig::help()
   --dense-threshold N      n_i <= N uses dense eigensolvers                           [400]
   --orth-tol T             rank threshold of the local coarse basis                   [1e-13]
   --local-solver auto|sparselu|umfpack|pardiso                                       [auto]
-  --coarse-solver auto|mumps|root                                                    [auto]
+  --coarse-solver auto|mumps|cpardiso|root  distributed MUMPS / MKL PARDISO, or rank 0 [auto]
   --coarse-procs N         processes of the distributed coarse factorization         [all]
  Krylov:
   --restart N --rtol T --maxit N                                                     [30, 1e-8, 1000]

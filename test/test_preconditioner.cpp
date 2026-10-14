@@ -22,6 +22,7 @@
 #include "local_eigensolver.hpp"
 #include "subdomain.hpp"
 #include "test_utils.hpp"
+#include "coarse_solver.hpp"
 #include "two_level_schwarz.hpp"
 
 #include <Eigen/Dense>
@@ -216,6 +217,19 @@ void runCase(const std::string& gen, int nx, int ncomp, double nu)
                 cfg.coarse = co;
                 checkPreconditioner(sd, A, cfg, info.A_perm, pou + "/" + ol + "/" + co);
             }
+        // Every coarse solver of the build, on all the processes and on groups of 2 ranks.
+        cfg.one_level = "ras";
+        cfg.coarse = "deflated";
+        for (const std::string& cs : prec::availableCoarseSolvers())
+            for (const int procs : {0, 2}) {
+                if (cs == "root" && procs != 0) continue;
+                cfg.coarse_solver = cs;
+                cfg.coarse_procs = procs;
+                checkPreconditioner(sd, A, cfg, info.A_perm,
+                                    pou + "/ras/deflated/" + cs + (procs ? ":" + std::to_string(procs) : ""));
+            }
+        cfg.coarse_solver = "auto";
+        cfg.coarse_procs = 0;
     }
 }
 

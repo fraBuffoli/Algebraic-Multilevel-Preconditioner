@@ -7,7 +7,9 @@
 #  make doc             Doxygen documentation in doc/html
 #  make clean
 #
-#  Optional features (1 = on):   USE_MUMPS=1 USE_UMFPACK=1 USE_PARDISO=0
+#  Optional features (1 = on):   USE_MUMPS=1 USE_UMFPACK=1 USE_PARDISO=0 USE_CPARDISO=0
+#  (USE_CPARDISO: distributed coarse solver with MKL cluster_sparse_solver; it needs the
+#   MKL BLACS library of the MPI in use, MKL_BLACS_LIB, e.g. -lmkl_blacs_openmpi_lp64)
 #  Library locations can be overridden on the command line or in a file
 #  make.inc (see scripts/make.inc.g100 for CINECA Galileo100).
 # =============================================================================
@@ -21,6 +23,7 @@ WARNINGS    ?= -Wall -Wextra -Wpedantic
 USE_MUMPS   ?= 1
 USE_UMFPACK ?= 1
 USE_PARDISO ?= 0
+USE_CPARDISO ?= 0
 
 EIGEN_INC   ?= /usr/include/eigen3
 METIS_INC   ?=
@@ -31,6 +34,7 @@ SUITESPARSE_INC ?= /usr/include/suitesparse
 SUITESPARSE_LIB ?= -lumfpack -lamd -lsuitesparseconfig
 MKL_INC     ?= $(MKLROOT)/include
 MKL_LIB     ?= -L$(MKLROOT)/lib/intel64 -Wl,--no-as-needed -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl
+MKL_BLACS_LIB ?= -lmkl_blacs_intelmpi_lp64
 
 # ----------------------------------------------------------------------------
 MODULES  := core linalg partition preconditioner solver utils
@@ -56,6 +60,14 @@ ifeq ($(USE_PARDISO),1)
 DEFINES  += -DUSE_PARDISO
 INCLUDES += -I$(MKL_INC)
 LIBS     += $(MKL_LIB)
+endif
+ifeq ($(USE_CPARDISO),1)
+DEFINES  += -DUSE_CPARDISO
+ifneq ($(USE_PARDISO),1)
+INCLUDES += -I$(MKL_INC)
+LIBS     += $(MKL_LIB)
+endif
+LIBS     += $(MKL_BLACS_LIB)
 endif
 
 BUILD := build

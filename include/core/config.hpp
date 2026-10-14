@@ -48,7 +48,7 @@ struct SolverConfig{
     int dense_threshold = 400;              ///< Subdomains with n_i <= threshold use dense eigensolvers.
     double orth_tol = 1e-10;                ///< Rank threshold of the local coarse basis orthonormalization.
     std::string local_solver = "auto";      ///< Local LU backend: "auto", "sparselu".
-    std::string coarse_solver = "auto";     ///< Coarse solver: "auto", "mumps" (distributed) or "root".
+    std::string coarse_solver = "auto";     ///< Coarse solver: "auto", "mumps", "cpardiso" (distributed) or "root".
     int coarse_procs = 0;                   ///< Processes used for the distributed coarse factorization (0 = all).
 
     // KRYLOV SOLVER PARAMETERS
