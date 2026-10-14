@@ -1,2 +1,0 @@
-problem,n,nnz,np,pou,one_level,coarse,tau,nev,local_solver,coarse_solver,n0,m_min,m_max,iterations,converged,true_rel_res,t_setup,t_eig,t_coarse_asm,t_coarse_fact,t_solve
-"convdiff3d 200x200x200 nu=0.01 (n=8000000, nnz=55760000)",8000000,55760000,60,boolean,ras,deflated,0.3,60,auto,auto,3616,60,61,14,1,7.58891e-09,182.426,160.226,5.05328,2.41665,9.37014

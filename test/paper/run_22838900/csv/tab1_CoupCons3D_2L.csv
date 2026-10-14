@@ -1,2 +1,0 @@
-problem,n,nnz,np,pou,one_level,coarse,tau,nev,local_solver,coarse_solver,n0,m_min,m_max,iterations,converged,true_rel_res,t_setup,t_eig,t_coarse_asm,t_coarse_fact,t_solve
-"/g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/matrices/CoupCons3D.mtx (n=416800, nnz=17277420)",416800,17277420,240,boolean,ras,deflated,0.6,300,auto,auto,6968,0,127,23,1,6.46105e-09,52.6319,51.9739,0.113778,0.541013,0.679514

@@ -41,13 +41,15 @@ double subspaceDistance(const core::Mat& X, const core::Mat& Y)
 }
 
 /// @brief Test 1: sparse vs dense local eigensolver on the calling rank's subdomain.
-void checkEigensolver(const part::Subdomain& sd, double tau, int nev)
+void checkEigensolver(const part::Subdomain& sd, double tau, int nev, int nev_start = 0)
 {
     const core::SpMat At = prec::buildLocalBlockSplitting(sd);
     prec::LocalEigensolverOptions o;
     o.tau = tau;
     o.nev = nev;
+    o.nev_start = nev_start;
     o.tol = 1e-12;
+    const std::string sfx = nev_start ? " [nev-start " + std::to_string(nev_start) + "]" : "";
     o.dense_threshold = 0;
     o.symmetric = sd.system().symmetric;
     const prec::LocalEigensolver solver(o);
@@ -55,11 +57,11 @@ void checkEigensolver(const part::Subdomain& sd, double tau, int nev)
     const prec::LocalEigensolverResult de = solver.compute(sd.Aii(), At, sd.pou(), true);
 
     test::check(sp.kernel_dim == de.kernel_dim && sp.kernel_part == de.kernel_part,
-                "kernel dimensions (sparse inverse iteration vs dense SVD)", sd.comm());
+                "kernel dimensions (sparse inverse iteration vs dense SVD)" + sfx, sd.comm());
     // Kernel part of Z: in ker(A~).
     const double nA = core::Mat(At).norm();
     const double kres = (sp.kernel_part > 0) ? (At * sp.Z.leftCols(sp.kernel_part)).norm() / nA : 0.0;
-    test::check(kres < 1e-10, "(L∩K)^⊥_K ⊂ ker(A~_ii)", sd.comm());
+    test::check(kres < 1e-10, "(L∩K)^⊥_K ⊂ ker(A~_ii)" + sfx, sd.comm());
 
     // Every eigenvalue computed by Spectra is an eigenvalue of the dense problem
     // (nearest match: conjugate pairs / equal moduli may be ordered differently).
@@ -70,7 +72,7 @@ void checkEigensolver(const part::Subdomain& sd, double tau, int nev)
         ediff = std::max(ediff, best);
     }
     ediff = core::allreduceMax(ediff, sd.comm());
-    test::check(ediff < 1e-6, "eigenvalues of (3.1): Spectra vs dense (max rel. diff " + test::sci(ediff) + ")",
+    test::check(ediff < 1e-6, "eigenvalues of (3.1): Spectra vs dense (max rel. diff " + test::sci(ediff) + ")" + sfx,
                 sd.comm());
 
     // Eigen-residual of (3.1) for the selected real eigenvectors: ||Pi_R B u - lambda A~ u||.
@@ -91,11 +93,11 @@ void checkEigensolver(const part::Subdomain& sd, double tau, int nev)
         lhs -= P * (P.transpose() * lhs);
         eres = std::max(eres, (lhs - l.real() * (Ad * u)).norm() / (std::abs(l) * nA));
     }
-    test::check(eres < 1e-6, "eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1)", sd.comm());
+    test::check(eres < 1e-6, "eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1)" + sfx, sd.comm());
 
     // Same selected subspace.
     const double dist = subspaceDistance(sp.Z, de.Z);
-    test::check(sp.Z.cols() == de.Z.cols() && dist < 1e-5, "selected subspace Z_i: Spectra vs dense", sd.comm());
+    test::check(sp.Z.cols() == de.Z.cols() && dist < 1e-5, "selected subspace Z_i: Spectra vs dense" + sfx, sd.comm());
 }
 
 /// @brief Test 2: distributed preconditioner vs reference on rank 0.
@@ -211,6 +213,7 @@ void runCase(const std::string& gen, int nx, int ncomp, double nu)
         part::Subdomain sd(sys, pou);
         linalg::DistributedMatrix A(sd);
         checkEigensolver(sd, cfg.tau, cfg.nev);
+        checkEigensolver(sd, cfg.tau, cfg.nev, 2); // adaptive k = 2, 4, 8, 12
         for (const std::string ol : {"ras", "asm"})
             for (const std::string co : {"deflated", "additive"}) {
                 cfg.one_level = ol;

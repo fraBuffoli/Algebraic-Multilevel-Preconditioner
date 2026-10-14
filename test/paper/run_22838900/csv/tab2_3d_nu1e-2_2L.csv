@@ -1,2 +1,0 @@
-problem,n,nnz,np,pou,one_level,coarse,tau,nev,local_solver,coarse_solver,n0,m_min,m_max,iterations,converged,true_rel_res,t_setup,t_eig,t_coarse_asm,t_coarse_fact,t_solve
-"convdiff3d 78x78x78 nu=0.01 (n=474552, nnz=3285360)",474552,3285360,240,boolean,ras,deflated,0.3,60,auto,auto,2341,5,16,14,1,2.8814e-09,0.712139,0.540914,0.0111495,0.0855864,0.164638

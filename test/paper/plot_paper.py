@@ -3,10 +3,12 @@
 plot_paper.py - tables and plots of the runs of Allrun.sh, compared with the paper
 (Al Daas, Jolivet, Rees, SISC 2023, Section 4).
 
-    python3 plot_paper.py run_<jobid>
+    python3 plot_paper.py run_<jobid> [--ref run_<previous jobid>]
 
 Writes into the run directory:
-    report.md      tables: Table 1, Fig. 2, Fig. 4, Table 2 (ours vs paper) + time of every phase
+    report.md      tables: Table 1, Fig. 2, Fig. 4, Table 2 (ours vs paper) + time of every phase;
+                   with --ref, also the runs with the same name in the previous run directory
+                   (iterations, n0, Arnoldi, A_00 factorization, setup, solve: before -> after)
     summary.csv    one row per run
     phases.csv     every timer of every run (min / avg / max over the ranks)
     plots/*.png    only if matplotlib is available (pip install --user matplotlib)
@@ -123,7 +125,7 @@ def parse_log(path):
         m = re.search(rx, text)
         if m:
             r[key] = tuple(float(v) for v in m.groups())
-    cs = re.findall(r"^\s+coarse solver\s{2,}(\S+)\s*$", text, re.M)
+    cs = re.findall(r"^\s+coarse solver\s{2,}(.+?)\s*$", text, re.M)
     if cs:
         r["coarse_solver"] = cs[-1]
     if "Timings [s]" in text:
@@ -137,24 +139,29 @@ def parse_log(path):
     return r
 
 
-def load():
+def load(run=None):
+    run = run or RUN
     status = {}
-    if os.path.isfile(os.path.join(RUN, "status.txt")):
-        with open(os.path.join(RUN, "status.txt")) as f:
+    if os.path.isfile(os.path.join(run, "status.txt")):
+        with open(os.path.join(run, "status.txt")) as f:
             for line in f:
                 p = line.split()
-                if len(p) == 4:
+                if len(p) >= 4:
                     status[p[0]] = (int(p[1]), p[2], int(p[3]))
     runs = OrderedDict()
-    for path in sorted(glob.glob(os.path.join(RUN, "log.*"))):
+    for path in sorted(glob.glob(os.path.join(run, "log.*"))):
         name = os.path.basename(path)[4:]
         if name in ("build", "modules", "git") or name.startswith("test_"):
             continue
         r = parse_log(path)
         r["name"] = name
         np_, st, wall = status.get(name, (None, "killed", None))   # no status: job ended during the run
+        # The outcome printed by the program wins over the exit code of mpirun, which some MPI
+        # versions do not propagate (a not-converged run would otherwise look like an error).
+        if "converged" in r and st != "killed":
+            st = "ok" if r["converged"] else "not_converged"
         r["np"], r["status"], r["wall"] = np_, st, wall
-        c = os.path.join(RUN, "csv", name + ".csv")
+        c = os.path.join(run, "csv", name + ".csv")
         if os.path.isfile(c):
             with open(c, encoding="utf-8", errors="replace") as f:
                 rows = list(csv.DictReader(f))
@@ -163,7 +170,7 @@ def load():
                     r[k] = num(rows[-1].get(k))
                 r["np"] = r["np"] or num(rows[-1].get("np"))
         r["hist"] = []
-        h = os.path.join(RUN, "hist", name + ".txt")
+        h = os.path.join(run, "hist", name + ".txt")
         if os.path.isfile(h):
             with open(h) as f:
                 r["hist"] = [float(l.split()[1]) for l in f if len(l.split()) == 2]
@@ -301,39 +308,59 @@ def sec_status(runs):
     return "".join(out)
 
 
+def tab1_taus(runs):
+    """{tau: run name pattern}: tab1_<m>_2L is tau = 0.6 (paper setting), tab1_<m>_2L_t<tau> the others."""
+    taus = {0.6: "tab1_%s_2L"}
+    for name in runs:
+        m = re.match(r"tab1_.+_2L_t([0-9.]+)$", name)
+        if m:
+            taus[float(m.group(1))] = "tab1_%s_2L_t" + m.group(1)
+    return OrderedDict(sorted(taus.items()))
+
+
 def sec_tab1(runs):
+    taus = tab1_taus(runs)
     rows = []
     for m, p in PAPER_T1.items():
-        r1, r2 = runs.get("tab1_%s_RAS" % m), runs.get("tab1_%s_2L" % m)
-        if not r1 and not r2:
+        r1 = runs.get("tab1_%s_RAS" % m)
+        r2 = OrderedDict((t, runs.get(pat % m)) for t, pat in taus.items())
+        if not r1 and not any(r2.values()):
             continue
-        r = r2 or r1
+        r = next((x for x in r2.values() if x), None) or r1
         N = r["np"] or 0
-        n0 = r2.get("n0") if r2 else None
         n = r.get("n")
         nlab = "" if n is None else (str(n) if n == p[0] else "%s (paper %s)" % (n, p[0]))
-        rows.append((m, nlab, N, its(r1), its(r2), n0 if n0 is not None else "", "%.0f" % (n0 / N) if n0 and N else "",
-                     p[5], p[6], "%.0f" % (p[6] / PAPER_N_T1), "%s/%s/%s" % (p[2] or ">100", p[3] or ">100", p[4] or ">100"),
-                     ft(r2.get("t_setup")) if r2 else "", ft(r2.get("t_solve")) if r2 else ""))
+        row = [m, nlab, N, its(r1)]
+        for t, x in r2.items():
+            n0 = x.get("n0") if x else None
+            row += [its(x), "%.0f" % (n0 / N) if n0 is not None and N else ""]
+        row += [p[5], "%.0f" % (p[6] / PAPER_N_T1), "%s/%s/%s" % (p[2] or ">100", p[3] or ">100", p[4] or ">100")]
+        row += [ft(x.get("t_setup")) if x else "" for x in r2.values()]
+        rows.append(row)
     if not rows:
         return ""
-    out = ["## Table 1 - SuiteSparse matrices (tau = 0.6, nev = 300)\n\n",
-           "Ours: N = %s subdomains, RAS = one-level, 2L = RAS + deflated coarse correction (2.4). Paper: N = 256; "
-           "AMG columns = AGMG / BoomerAMG / GAMG (F = failure, C = complex). Compare n0/N, since N differs. "
-           "Note: in the paper the G3_circuit row (8 it., n0 = 71,385) matches tau = 0.9 of Fig. 2, not tau = 0.6 "
-           "(11 it., n0 = 34,402).\n\n" % rows[0][2]]
-    out.append(table(["matrix", "n", "N", "RAS its", "2L its", "n0", "n0/N", "paper its", "paper n0", "paper n0/N",
-                      "paper AMG its", "2L setup [s]", "2L solve [s]"], rows))
-    two = [runs["tab1_%s_2L" % m] for m in PAPER_T1 if "tab1_%s_2L" % m in runs
-           and runs["tab1_%s_2L" % m]["timers"]]
-    out.append(stacked(two, [r["name"][5:-3] for r in two], "tab1_phases.png", "Table 1, two-level: time per phase"))
+    out = ["## Table 1 - SuiteSparse matrices (nev = 300)\n\n",
+           "Ours: N = %s subdomains, RAS = one-level, 2L = RAS + deflated coarse correction (2.4) at tau = %s. Paper: "
+           "N = 256, tau = 0.6; AMG columns = AGMG / BoomerAMG / GAMG (F = failure, C = complex). Compare n0/N, since N "
+           "differs. In the paper the G3_circuit row (8 it., n0 = 71,385) is the tau = 0.9 point of its Fig. 2, not "
+           "tau = 0.6 (11 it., n0 = 34,402).\n\n" % (rows[0][2], ", ".join("%g" % t for t in taus))]
+    head = ["matrix", "n", "N", "RAS its"]
+    for t in taus:
+        head += ["2L its tau=%g" % t, "n0/N tau=%g" % t]
+    head += ["paper its", "paper n0/N", "paper AMG its"] + ["2L setup tau=%g [s]" % t for t in taus]
+    out.append(table(head, rows))
+    for t, pat in taus.items():
+        two = [runs[pat % m] for m in PAPER_T1 if pat % m in runs and runs[pat % m]["timers"]]
+        out.append(stacked(two, [r["name"][5:].split("_2L")[0] for r in two], "tab1_phases%s.png" %
+                           ("" if t == 0.6 else "_t%g" % t), "Table 1, two-level, tau = %g: time per phase" % t))
     return "".join(out)
 
 
 def sec_fig2(runs):
     pts = []
     for tau in PAPER_F2:
-        r = runs.get("fig2_tau%s" % tau) or (runs.get("tab1_G3_circuit_2L") if tau == 0.6 else None)
+        r = runs.get("fig2_tau%s" % tau) or (runs.get(tab1_taus(runs)[tau] % "G3_circuit")
+                                               if tau in tab1_taus(runs) else None)
         if r:
             pts.append((tau, r))
     asm = runs.get("fig2_ASM")
@@ -448,6 +475,47 @@ def sec_tab2(runs):
     return "".join(out)
 
 
+def sec_ref(runs, ref, refname):
+    """Runs with the same name in the reference directory: before -> after."""
+    common = [n for n in runs if n in ref and not n.endswith(("_RAS", "_ASM")) and (runs[n]["timers"] or ref[n]["timers"])]
+    if not common:
+        return ""
+
+    def pair(a, b, f=ft):
+        fa, fb = (f(a) if a is not None else "-"), (f(b) if b is not None else "-")
+        return fa if fa == fb else "%s -> %s" % (fa, fb)
+    rows = []
+    for n in common:
+        a, b = ref[n], runs[n]
+        same = a.get("n0") == b.get("n0") and a.get("its") == b.get("its")
+        rows.append([n, pair(its(a), its(b), str), pair(a.get("n0"), b.get("n0"), str), "" if same else "**!**",
+                     pair(T(a, ["setup.eigensolver.arnoldi"]), T(b, ["setup.eigensolver.arnoldi"])),
+                     pair(T(a, ["setup.coarse_factorization"]), T(b, ["setup.coarse_factorization"])),
+                     pair(a.get("t_setup"), b.get("t_setup")), pair(a.get("t_solve"), b.get("t_solve")),
+                     pair(a.get("total"), b.get("total"))])
+    out = ["## Changes with respect to `%s`\n\n" % refname,
+           "Same run names, before -> after (max over ranks, seconds). With the adaptive eigensolver and an exact "
+           "coarse solver n0 and iterations must not change: **!** flags a difference.\n\n"]
+    out.append(table(["run", "its", "n0", "", "Arnoldi", "A_00 factorization", "setup", "solve", "total"], rows))
+    if HAVE_MPL:
+        pts = [(n, ref[n]["total"], runs[n]["total"]) for n in common
+               if ref[n].get("total") and runs[n].get("total") and n.startswith(("tab1", "fig2", "fig4"))]
+        if pts:
+            f, (ax,) = fig(1, w=max(6.4, 0.45 * len(pts) + 2.5), h=4.0)
+            x = list(range(len(pts)))
+            ax.bar([i - 0.2 for i in x], [p[1] for p in pts], width=0.4, color=COLORS[1], label=refname,
+                   edgecolor=SURF, linewidth=0.8)
+            ax.bar([i + 0.2 for i in x], [p[2] for p in pts], width=0.4, color=COLORS[0], label="this run",
+                   edgecolor=SURF, linewidth=0.8)
+            ax.set_yscale("log")
+            ax.set_xticks(x)
+            ax.set_xticklabels([p[0] for p in pts], rotation=45, ha="right", fontsize=7)
+            ax.xaxis.grid(False)
+            finish(ax, "Time to solution (setup + solve): before and after", "", "seconds")
+            out.append(save(f, "ref_total.png"))
+    return "".join(out)
+
+
 def sec_phases(runs):
     out = ["## Time per phase (max over ranks, seconds)\n\n",
            "Same timers as the local runs; `phases.csv` has min / avg / max of every timer, the logs the full table. "
@@ -483,16 +551,24 @@ def write_csvs(runs):
 
 def main():
     global RUN
-    if len(sys.argv) != 2 or not os.path.isdir(sys.argv[1]):
+    args = sys.argv[1:]
+    ref_dir = None
+    if "--ref" in args:
+        i = args.index("--ref")
+        ref_dir = args[i + 1] if i + 1 < len(args) else None
+        args = args[:i] + args[i + 2:]
+    if len(args) != 1 or not os.path.isdir(args[0]) or (ref_dir is not None and not os.path.isdir(ref_dir)):
         print(__doc__)
         sys.exit(1)
-    RUN = os.path.abspath(sys.argv[1])
+    RUN = os.path.abspath(args[0])
     runs = load()
+    ref = load(os.path.abspath(ref_dir)) if ref_dir else {}
     write_csvs(runs)
     parts = ["# schwarz2lvl vs Al Daas, Jolivet, Rees (SISC 2023)\n\n",
              "Run directory `%s`.%s\n\n" % (os.path.basename(RUN), "" if HAVE_MPL else
              " matplotlib not available: tables only (`python3 -m pip install --user matplotlib`)."),
-             sec_status(runs), sec_tab1(runs), sec_fig2(runs), sec_fig4(runs), sec_tab2(runs), sec_phases(runs)]
+             sec_status(runs), sec_ref(runs, ref, os.path.basename(os.path.abspath(ref_dir))) if ref else "",
+             sec_tab1(runs), sec_fig2(runs), sec_fig4(runs), sec_tab2(runs), sec_phases(runs)]
     with open(os.path.join(RUN, "report.md"), "w", encoding="utf-8") as f:
         f.write("".join(parts))
     print("written %s/report.md (%d runs, plots: %s)" % (RUN, len(runs), "yes" if HAVE_MPL else "no"))
