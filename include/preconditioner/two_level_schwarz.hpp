@@ -27,6 +27,9 @@ struct CoarseStats {
     core::GlobalIndex kernel_part_total = 0; ///< Sum of dim (L∩K)^⊥_K.
     int dense_subdomains = 0;    ///< Subdomains solved with the dense path.
     int not_converged = 0;       ///< Subdomains where Arnoldi did not fully converge.
+    int retried = 0;             ///< Subdomains where Arnoldi was restarted after a Schur failure.
+    int nev_used_max = 0;        ///< Max eigenpairs computed by the last Arnoldi run.
+    double nev_used_avg = 0.0;   ///< Average eigenpairs computed by the last Arnoldi run.
     long matvecs_max = 0;        ///< Max applications of the projected operator.
 };
 

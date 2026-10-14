@@ -7,6 +7,8 @@
 #include "local_solver.hpp"
 #include "timer.hpp"
 
+#include <mpi.h>
+
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 #include <Eigen/SVD>
@@ -172,6 +174,7 @@ public:
     /// @brief y = T x.
     void perform_op(const double* x_in, double* y_out) const
     {
+        const double t0 = MPI_Wtime();
         Eigen::Map<const core::Vec> x(x_in, n_);
         Eigen::Map<core::Vec> y(y_out, n_);
         v_ = x;
@@ -182,8 +185,10 @@ public:
         y = z_;
         if (Q_.cols() > 0) y.noalias() -= Q_ * (Q_.transpose() * z_);    // Pi_K
         ++count_;
+        seconds_ += MPI_Wtime() - t0;
     }
-    long count() const { return count_; } ///< Number of applications.
+    long count() const { return count_; }       ///< Number of applications.
+    double seconds() const { return seconds_; } ///< Time spent in the applications.
 
 private:
     const core::SpMat& B_;
@@ -193,6 +198,7 @@ private:
     Eigen::Index n_;
     mutable core::Vec v_, w_, z_;
     mutable long count_ = 0;
+    mutable double seconds_ = 0.0;
 };
 
 LocalEigensolverResult LocalEigensolver::compute(const core::SpMat& Aii, const core::SpMat& Atilde, const core::Vec& D,
@@ -317,21 +323,78 @@ LocalEigensolverResult LocalEigensolver::computeSparse(const core::SpMat& Atilde
     nev_reg = std::min<int>(nev_reg, static_cast<int>(n) - 2);
     if (nev_reg > 0) {
         utils::ScopedTimer t("setup.eigensolver.arnoldi");
-        int ncv = (opt_.ncv > 0) ? opt_.ncv : std::max(2 * nev_reg + 1, nev_reg + 20);
-        ncv = std::min<int>(std::max(ncv, nev_reg + 2), static_cast<int>(n));
         ProjectedOperator op(B, *F, Q, P);
-        Spectra::GenEigsSolver<ProjectedOperator> eigs(op, nev_reg, ncv);
-        // Deterministic starting vector in K^⊥.
-        core::Vec v0 = core::Vec::Ones(n) + 0.1 * core::Vec::LinSpaced(n, -1.0, 1.0).array().sin().matrix();
-        if (Q.cols() > 0) v0 -= Q * (Q.transpose() * v0);
-        eigs.init(v0.data());
-        eigs.compute(Spectra::SortRule::LargestMagn, opt_.maxit, opt_.tol, Spectra::SortRule::LargestMagn);
-        res.converged = (eigs.info() == Spectra::CompInfo::Successful);
-        const CVec lam = eigs.eigenvalues();   // converged eigenvalues, decreasing modulus
-        const CMat U = eigs.eigenvectors();
+        const double thr = 1.0 / opt_.tau;
+        CVec lam;
+        CMat U;
+        // Arnoldi for the k largest eigenvalues in modulus. The QR iteration on the projected
+        // Hessenberg matrix can fail for strongly non-normal operators (Spectra: "UpperHessenbergSchur:
+        // Schur decomposition failed"); a different Krylov space almost always avoids it: retry with
+        // another starting vector and a larger ncv.
+        auto arnoldi = [&](int k) {
+            int ncv = (opt_.ncv > 0) ? opt_.ncv : std::max(2 * k + 1, k + 20);
+            ncv = std::min<int>(std::max(ncv, k + 2), static_cast<int>(n));
+            for (int attempt = 0;; ++attempt) {
+                try {
+                    Spectra::GenEigsSolver<ProjectedOperator> eigs(op, k, ncv);
+                    // Deterministic starting vector in K^⊥ (a different one at every attempt).
+                    core::Vec v0 = core::Vec::Ones(n) + (0.1 + attempt) *
+                                   core::Vec::LinSpaced(n, -1.0 - attempt, 1.0 + 3.0 * attempt).array().sin().matrix();
+                    if (Q.cols() > 0) v0 -= Q * (Q.transpose() * v0);
+                    eigs.init(v0.data());
+                    eigs.compute(Spectra::SortRule::LargestMagn, opt_.maxit, opt_.tol, Spectra::SortRule::LargestMagn);
+                    res.converged = (eigs.info() == Spectra::CompInfo::Successful);
+                    lam = eigs.eigenvalues(); // converged eigenvalues, decreasing modulus
+                    U = eigs.eigenvectors();
+                    res.attempts = std::max(res.attempts, attempt + 1);
+                    return;
+                } catch (const std::exception&) {
+                    if (attempt >= 2) throw;
+                    ncv = std::min<int>(ncv + k / 2 + 1, static_cast<int>(n));
+                }
+            }
+        };
+        // Only the eigenvalues with |lambda| >= 1/tau are kept (at most nev): instead of computing nev
+        // of them and discarding the rest, k grows from nev_start until the smallest of the k computed
+        // is below the threshold. The selected set is the same, but the cost of Arnoldi (~ n_i k^2 for
+        // the Krylov basis, ~ k^3 for the projected problem, ~ k operator applications per restart)
+        // follows the number of selected vectors instead of nev.
+        // Next k: at least 2k, or the index where a power law fitted on the upper half of the computed
+        // moduli reaches 1/tau (+25%), so that few levels are needed when almost nev are selected;
+        // beyond 3/4 nev the last level is nev itself.
+        auto nextK = [&](int k) {
+            const int j0 = std::max(1, k / 2), j1 = static_cast<int>(lam.size());
+            double sx = 0, sy = 0, sxx = 0, sxy = 0;
+            int c = 0;
+            for (int j = j0; j <= j1; ++j) {
+                if (!(std::abs(lam[j - 1]) > 0.0)) continue;
+                const double x = std::log(static_cast<double>(j)), y = std::log(std::abs(lam[j - 1]));
+                sx += x, sy += y, sxx += x * x, sxy += x * y, ++c;
+            }
+            int est = nev_reg;
+            const double den = c * sxx - sx * sx;
+            if (c >= 3 && den > 0) {
+                const double b = (c * sxy - sx * sy) / den, a = (sy - b * sx) / c;
+                if (b < -1e-3) est = static_cast<int>(std::min<double>(nev_reg, std::ceil(1.25 * std::exp((std::log(thr) - a) / b))));
+            }
+            int kn = std::max(2 * k, est);
+            if (4 * kn >= 3 * nev_reg) kn = nev_reg;
+            return std::min(kn, nev_reg);
+        };
+        int k = (opt_.nev_start > 0) ? std::min(nev_reg, opt_.nev_start) : nev_reg;
+        for (;;) {
+            arnoldi(k);
+            const bool below = res.converged && lam.size() > 0 && std::abs(lam[lam.size() - 1]) < thr;
+            if (k >= nev_reg || below) break;
+            k = nextK(k);
+        }
+        res.nev_used = k;
         res.n_computed = static_cast<int>(lam.size());
+        res.n_selected = selectEigenvectors(lam, U, k, opt_.tau, ev, res.eigenvalues);
         res.matvecs = op.count();
-        res.n_selected = selectEigenvectors(lam, U, nev_reg, opt_.tau, ev, res.eigenvalues);
+        // Arnoldi = operator applications (sparse solves) + dense Krylov work (orthogonalization,
+        // restarts, Schur form of the projected matrix): the split tells which one to attack.
+        utils::TimerRegistry::instance().add("setup.eigensolver.arnoldi.operator", op.seconds());
     }
     res.Z = assembleZ(Kpart, ev);
     return res;

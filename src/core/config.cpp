@@ -44,6 +44,7 @@ SolverConfig SolverConfig::fromCommandLine(int argc, char** argv){
         {"coarse", [&](const std::string& v) { c.coarse = v; }},
         {"tau", [&](const std::string& v) { c.tau = std::stod(v); }},
         {"nev", [&](const std::string& v) { c.nev = std::stoi(v); }},
+        {"nev-start", [&](const std::string& v) { c.nev_start = std::stoi(v); }},
         {"eig-tol", [&](const std::string& v) { c.eig_tol = std::stod(v); }},
         {"eig-maxit", [&](const std::string& v) { c.eig_maxit = std::stoi(v); }},
         {"eig-ncv", [&](const std::string& v) { c.eig_ncv = std::stoi(v); }},
@@ -102,6 +103,7 @@ void SolverConfig::validate() const
         throw std::invalid_argument("--coarse must be deflated|additive|none");
     if (tau <= 0.0) throw std::invalid_argument("--tau must be > 0");
     if (nev < 0) throw std::invalid_argument("--nev must be >= 0");
+    if (nev_start < 0) throw std::invalid_argument("--nev-start must be >= 0");
     if (restart < 1) throw std::invalid_argument("--restart must be >= 1");
     if (metis_objective != "cut" && metis_objective != "vol")
         throw std::invalid_argument("--metis-objective must be cut|vol");
@@ -124,6 +126,7 @@ void SolverConfig::print(std::ostream& os) const
     line("coarse correction", coarse);
     line("tau", tau);
     line("nev", nev);
+    line("nev start", nev_start == 0 ? std::string("nev (fixed)") : std::to_string(nev_start));
     line("local solver", local_solver);
     line("coarse solver", coarse_solver);
     line("coarse procs", coarse_procs == 0 ? std::string("all") : std::to_string(coarse_procs));
@@ -152,6 +155,7 @@ std::string SolverConfig::help()
   --coarse deflated|additive|none  Eq. (2.4) / Eq. (2.2) / one-level only            [deflated]
   --tau T                  select |lambda| >= 1/T in (3.2)                            [0.6]
   --nev N                  max eigenpairs per subdomain                               [300]
+  --nev-start N            first k computed, doubled until |lambda_k| < 1/tau; 0 = nev  [32]
   --eig-tol T --eig-maxit N --eig-ncv N                                               [1e-8, 1000, auto]
   --shift-rel S            relative shift used to factorize A~_ii                     [1e-13]
   --kernel-tol T           relative threshold of the numerical kernel of A~_ii        [1e-8]

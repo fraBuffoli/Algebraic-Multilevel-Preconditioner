@@ -5,11 +5,14 @@
 #include "two_level_schwarz.hpp"
 
 #include "local_block_splitting.hpp"
+#include "logger.hpp"
 #include "mpi_utils.hpp"
 #include "timer.hpp"
 
 #include <iomanip>
+#include <iostream>
 #include <ostream>
+#include <sstream>
 #include <stdexcept>
 
 namespace schwarz2lvl::prec {
@@ -24,6 +27,7 @@ TwoLevelSchwarz::TwoLevelSchwarz(const part::Subdomain& sd, const linalg::Distri
 
     // Local block splitting and local eigenproblem (no communication).
     std::string error;
+    const double t_eig0 = MPI_Wtime();
     try {
         core::SpMat At;
         {
@@ -36,6 +40,7 @@ TwoLevelSchwarz::TwoLevelSchwarz(const part::Subdomain& sd, const linalg::Distri
         eo.tol = cfg.eig_tol;
         eo.maxit = cfg.eig_maxit;
         eo.ncv = cfg.eig_ncv;
+        eo.nev_start = cfg.nev_start;
         eo.shift_rel = cfg.shift_rel;
         eo.kernel_tol = cfg.kernel_tol;
         eo.kernel_probe = cfg.kernel_probe;
@@ -45,6 +50,16 @@ TwoLevelSchwarz::TwoLevelSchwarz(const part::Subdomain& sd, const linalg::Distri
         eig_ = LocalEigensolver(eo).compute(sd_.Aii(), At, sd_.pou());
     } catch (const std::exception& e) {
         error = e.what();
+    }
+    if (utils::Log::verbosity() >= 2) { // one line per rank as soon as it is done: shows who is slow or stuck
+        std::ostringstream s;
+        s << "[rank " << core::mpiRank(comm) << "] eigensolver " << (error.empty() ? "done" : "FAILED") << " in "
+          << std::fixed << std::setprecision(2) << MPI_Wtime() - t_eig0 << " s: n_i " << sd_.nLocal() << ", n_Gamma "
+          << sd_.nGhost() << ", ker " << eig_.kernel_dim << ", selected " << eig_.Z.cols() << " of " << eig_.nev_used
+          << " computed, operator applications "
+          << eig_.matvecs << ", attempts " << eig_.attempts << (eig_.converged ? "" : ", NOT converged")
+          << (error.empty() ? "" : ", " + error) << "\n";
+        std::cerr << s.str() << std::flush;
     }
     if (core::allreduceMin(error.empty() ? 1 : 0, comm) == 0)
         throw std::runtime_error("local eigensolver failed on at least one rank" +
@@ -66,6 +81,9 @@ TwoLevelSchwarz::TwoLevelSchwarz(const part::Subdomain& sd, const linalg::Distri
     stats_.kernel_part_total = core::allreduceSum(static_cast<core::GlobalIndex>(eig_.kernel_part), comm);
     stats_.dense_subdomains = core::allreduceSum(eig_.dense ? 1 : 0, comm);
     stats_.not_converged = core::allreduceSum(eig_.converged ? 0 : 1, comm);
+    stats_.retried = core::allreduceSum(eig_.attempts > 1 ? 1 : 0, comm);
+    stats_.nev_used_max = core::allreduceMax(eig_.nev_used, comm);
+    stats_.nev_used_avg = static_cast<double>(core::allreduceSum(eig_.nev_used, comm)) / core::mpiSize(comm);
     stats_.matvecs_max = static_cast<long>(core::allreduceMax(static_cast<core::GlobalIndex>(eig_.matvecs), comm));
 }
 
@@ -107,6 +125,9 @@ void TwoLevelSchwarz::printStats(std::ostream& os) const
        << "  sum dim (L∩K)^⊥_K          " << stats_.kernel_part_total << "\n"
        << "  dense eigensolves          " << stats_.dense_subdomains << "\n"
        << "  Arnoldi not converged      " << stats_.not_converged << "\n"
+       << "  Arnoldi retried            " << stats_.retried << "\n"
+       << "  Arnoldi nev avg/max        " << std::fixed << std::setprecision(1) << stats_.nev_used_avg << " / "
+       << stats_.nev_used_max << std::defaultfloat << "\n"
        << "  max operator applications  " << stats_.matvecs_max << "\n";
     if (coarse_->dimension() > 0) os << "  coarse solver              " << coarse_->solver().name() << "\n";
 }

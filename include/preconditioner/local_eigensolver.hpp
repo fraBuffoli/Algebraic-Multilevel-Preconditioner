@@ -16,7 +16,8 @@ namespace schwarz2lvl::prec {
 /// @brief Parameters of the local eigensolver (see SolverConfig for the meaning).
 struct LocalEigensolverOptions {
     double tau = 0.6;                   ///< Select |lambda| >= 1/tau.
-    int nev = 300;                      ///< Number of largest-magnitude eigenpairs computed (incl. the kernel part).
+    int nev = 300;                      ///< Max eigenpairs selected per subdomain (incl. the kernel part).
+    int nev_start = 32;                 ///< First number of eigenpairs computed, doubled until enough (0 = nev).
     double tol = 1e-8;                  ///< Relative tolerance of the Arnoldi method.
     int maxit = 1000;                   ///< Maximum number of restarts.
     int ncv = 0;                        ///< Krylov subspace size (0 = automatic).
@@ -40,6 +41,8 @@ struct LocalEigensolverResult {
     bool converged = true;                          ///< All requested eigenpairs converged.
     double shift = 0.0;                             ///< Shift sigma actually used (sparse path).
     long matvecs = 0;                               ///< Applications of the projected operator (sparse path).
+    int attempts = 1;                               ///< Arnoldi runs (> 1: retried after a Schur failure).
+    int nev_used = 0;                               ///< Eigenpairs computed by the last Arnoldi run (sparse path).
     std::string backend;                            ///< Factorization backend (sparse path).
 };
 

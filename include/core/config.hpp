@@ -39,6 +39,7 @@ struct SolverConfig{
     std::string coarse = "deflated";        ///< Coarse correction: "deflated", "additive" or none.
     double tau = 0.6;                       ///< Threshold: select |lambda| >= 1/tau.
     int nev = 300;                          ///< Maximum number of eigenvectors per subdomain for the coarse space.
+    int nev_start = 32;                     ///< First number of eigenpairs computed, doubled until |lambda| < 1/tau (0 = nev).
     double eig_tol = 1e-8;                  ///< Relative tolerance of the Krylov eigensolver.
     int eig_maxit = 1000;                   ///< Maximum number of restarts of the eigensolver.
     int eig_ncv = 0;                        ///< Krylov subspace size (0 = automatic).
