@@ -1,0 +1,2 @@
+problem,n,nnz,np,pou,one_level,coarse,tau,nev,local_solver,coarse_solver,n0,m_min,m_max,iterations,converged,true_rel_res,t_setup,t_eig,t_coarse_asm,t_coarse_fact,t_solve
+"/g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/matrices/nxp1.mtx (n=414604, nnz=2655880)",414604,2655880,240,boolean,ras,deflated,0.6,300,auto,cpardiso,14060,6,161,42,1,6.9602e-09,24.8858,21.0573,0.431698,2.46664,2.79032

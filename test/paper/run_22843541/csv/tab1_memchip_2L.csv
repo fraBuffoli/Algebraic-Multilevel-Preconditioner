@@ -1,0 +1,2 @@
+problem,n,nnz,np,pou,one_level,coarse,tau,nev,local_solver,coarse_solver,n0,m_min,m_max,iterations,converged,true_rel_res,t_setup,t_eig,t_coarse_asm,t_coarse_fact,t_solve
+"/g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/matrices/memchip.mtx (n=2707524, nnz=13343948)",2707524,13343948,240,boolean,ras,deflated,0.6,300,auto,cpardiso,39472,30,245,13,1,4.84423e-09,38.4136,28.5138,2.1083,8.57888,2.70087

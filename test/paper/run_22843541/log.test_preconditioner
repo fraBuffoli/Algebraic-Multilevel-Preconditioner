@@ -1,0 +1,213 @@
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+case convdiff2d 24x24 nu=0.01 (n=576, nnz=2784), np=16
+  [ OK ] kernel dimensions (sparse inverse iteration vs dense SVD)
+  [ OK ] (L∩K)^⊥_K ⊂ ker(A~_ii)
+  [ OK ] eigenvalues of (3.1): Spectra vs dense (max rel. diff 6.21e-11)
+  [ OK ] eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1)
+  [ OK ] selected subspace Z_i: Spectra vs dense
+  [ OK ] kernel dimensions (sparse inverse iteration vs dense SVD) [nev-start 2]
+  [ OK ] (L∩K)^⊥_K ⊂ ker(A~_ii) [nev-start 2]
+  [ OK ] eigenvalues of (3.1): Spectra vs dense (max rel. diff 6.21e-11) [nev-start 2]
+  [ OK ] eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1) [nev-start 2]
+  [ OK ] selected subspace Z_i: Spectra vs dense [nev-start 2]
+  [ OK ] boolean/ras/deflated: apply vs sequential reference (rel. err 4.95e-16)
+  [ OK ] boolean/ras/deflated: GMRES converged in 14 it.
+  [ OK ] boolean/ras/additive: apply vs sequential reference (rel. err 4.08e-16)
+  [ OK ] boolean/ras/additive: GMRES converged in 24 it.
+  [ OK ] boolean/asm/deflated: apply vs sequential reference (rel. err 4.84e-16)
+  [ OK ] boolean/asm/deflated: GMRES converged in 21 it.
+  [ OK ] boolean/asm/additive: apply vs sequential reference (rel. err 3.74e-16)
+  [ OK ] boolean/asm/additive: GMRES converged in 27 it.
+  [ OK ] boolean/ras/deflated/cpardiso: apply vs sequential reference (rel. err 4.95e-16)
+  [ OK ] boolean/ras/deflated/cpardiso: GMRES converged in 14 it.
+  [ OK ] boolean/ras/deflated/cpardiso:2: apply vs sequential reference (rel. err 2.99e-16)
+  [ OK ] boolean/ras/deflated/cpardiso:2: GMRES converged in 14 it.
+  [ OK ] boolean/ras/deflated/root: apply vs sequential reference (rel. err 3.84e-16)
+  [ OK ] boolean/ras/deflated/root: GMRES converged in 14 it.
+  [ OK ] kernel dimensions (sparse inverse iteration vs dense SVD)
+  [ OK ] (L∩K)^⊥_K ⊂ ker(A~_ii)
+  [ OK ] eigenvalues of (3.1): Spectra vs dense (max rel. diff 6.26e-11)
+  [ OK ] eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1)
+  [ OK ] selected subspace Z_i: Spectra vs dense
+  [ OK ] kernel dimensions (sparse inverse iteration vs dense SVD) [nev-start 2]
+  [ OK ] (L∩K)^⊥_K ⊂ ker(A~_ii) [nev-start 2]
+  [ OK ] eigenvalues of (3.1): Spectra vs dense (max rel. diff 6.26e-11) [nev-start 2]
+  [ OK ] eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1) [nev-start 2]
+  [ OK ] selected subspace Z_i: Spectra vs dense [nev-start 2]
+  [ OK ] multiplicity/ras/deflated: apply vs sequential reference (rel. err 4.87e-16)
+  [ OK ] multiplicity/ras/deflated: GMRES converged in 15 it.
+  [ OK ] multiplicity/ras/additive: apply vs sequential reference (rel. err 3.18e-16)
+  [ OK ] multiplicity/ras/additive: GMRES converged in 25 it.
+  [ OK ] multiplicity/asm/deflated: apply vs sequential reference (rel. err 4.89e-16)
+  [ OK ] multiplicity/asm/deflated: GMRES converged in 22 it.
+  [ OK ] multiplicity/asm/additive: apply vs sequential reference (rel. err 2.89e-16)
+  [ OK ] multiplicity/asm/additive: GMRES converged in 26 it.
+  [ OK ] multiplicity/ras/deflated/cpardiso: apply vs sequential reference (rel. err 4.87e-16)
+  [ OK ] multiplicity/ras/deflated/cpardiso: GMRES converged in 15 it.
+  [ OK ] multiplicity/ras/deflated/cpardiso:2: apply vs sequential reference (rel. err 3.69e-16)
+  [ OK ] multiplicity/ras/deflated/cpardiso:2: GMRES converged in 15 it.
+  [ OK ] multiplicity/ras/deflated/root: apply vs sequential reference (rel. err 2.47e-16)
+  [ OK ] multiplicity/ras/deflated/root: GMRES converged in 15 it.
+case laplace2d 20x20 (n=400, nnz=1920), np=16
+  [ OK ] kernel dimensions (sparse inverse iteration vs dense SVD)
+  [ OK ] (L∩K)^⊥_K ⊂ ker(A~_ii)
+  [ OK ] eigenvalues of (3.1): Spectra vs dense (max rel. diff 1.05e-11)
+  [ OK ] eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1)
+  [ OK ] selected subspace Z_i: Spectra vs dense
+  [ OK ] kernel dimensions (sparse inverse iteration vs dense SVD) [nev-start 2]
+  [ OK ] (L∩K)^⊥_K ⊂ ker(A~_ii) [nev-start 2]
+  [ OK ] eigenvalues of (3.1): Spectra vs dense (max rel. diff 1.05e-11) [nev-start 2]
+  [ OK ] eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1) [nev-start 2]
+  [ OK ] selected subspace Z_i: Spectra vs dense [nev-start 2]
+  [ OK ] boolean/ras/deflated: apply vs sequential reference (rel. err 6.53e-16)
+  [ OK ] boolean/ras/deflated: GMRES converged in 14 it.
+  [ OK ] boolean/ras/additive: apply vs sequential reference (rel. err 5.33e-16)
+  [ OK ] boolean/ras/additive: GMRES converged in 21 it.
+  [ OK ] boolean/asm/deflated: apply vs sequential reference (rel. err 6.21e-16)
+  [ OK ] boolean/asm/deflated: GMRES converged in 21 it.
+  [ OK ] boolean/asm/additive: apply vs sequential reference (rel. err 4.76e-16)
+  [ OK ] boolean/asm/additive: GMRES converged in 25 it.
+  [ OK ] boolean/ras/deflated/cpardiso: apply vs sequential reference (rel. err 6.53e-16)
+  [ OK ] boolean/ras/deflated/cpardiso: GMRES converged in 14 it.
+  [ OK ] boolean/ras/deflated/cpardiso:2: apply vs sequential reference (rel. err 3.53e-16)
+  [ OK ] boolean/ras/deflated/cpardiso:2: GMRES converged in 14 it.
+  [ OK ] boolean/ras/deflated/root: apply vs sequential reference (rel. err 2.54e-16)
+  [ OK ] boolean/ras/deflated/root: GMRES converged in 14 it.
+  [ OK ] kernel dimensions (sparse inverse iteration vs dense SVD)
+  [ OK ] (L∩K)^⊥_K ⊂ ker(A~_ii)
+  [ OK ] eigenvalues of (3.1): Spectra vs dense (max rel. diff 1.02e-11)
+  [ OK ] eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1)
+  [ OK ] selected subspace Z_i: Spectra vs dense
+  [ OK ] kernel dimensions (sparse inverse iteration vs dense SVD) [nev-start 2]
+  [ OK ] (L∩K)^⊥_K ⊂ ker(A~_ii) [nev-start 2]
+  [ OK ] eigenvalues of (3.1): Spectra vs dense (max rel. diff 1.02e-11) [nev-start 2]
+  [ OK ] eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1) [nev-start 2]
+  [ OK ] selected subspace Z_i: Spectra vs dense [nev-start 2]
+  [ OK ] multiplicity/ras/deflated: apply vs sequential reference (rel. err 2.26e-16)
+  [ OK ] multiplicity/ras/deflated: GMRES converged in 18 it.
+  [ OK ] multiplicity/ras/additive: apply vs sequential reference (rel. err 2.58e-16)
+  [ OK ] multiplicity/ras/additive: GMRES converged in 25 it.
+  [ OK ] multiplicity/asm/deflated: apply vs sequential reference (rel. err 2.20e-16)
+  [ OK ] multiplicity/asm/deflated: GMRES converged in 25 it.
+  [ OK ] multiplicity/asm/additive: apply vs sequential reference (rel. err 2.34e-16)
+  [ OK ] multiplicity/asm/additive: GMRES converged in 29 it.
+  [ OK ] multiplicity/ras/deflated/cpardiso: apply vs sequential reference (rel. err 2.26e-16)
+  [ OK ] multiplicity/ras/deflated/cpardiso: GMRES converged in 18 it.
+  [ OK ] multiplicity/ras/deflated/cpardiso:2: apply vs sequential reference (rel. err 2.26e-16)
+  [ OK ] multiplicity/ras/deflated/cpardiso:2: GMRES converged in 18 it.
+  [ OK ] multiplicity/ras/deflated/root: apply vs sequential reference (rel. err 2.83e-16)
+  [ OK ] multiplicity/ras/deflated/root: GMRES converged in 18 it.
+case coupled2d 12x12 nu=0.1 ncomp=2 (n=288, nnz=1632), np=16
+  [ OK ] kernel dimensions (sparse inverse iteration vs dense SVD)
+  [ OK ] (L∩K)^⊥_K ⊂ ker(A~_ii)
+  [ OK ] eigenvalues of (3.1): Spectra vs dense (max rel. diff 1.25e-11)
+  [ OK ] eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1)
+  [ OK ] selected subspace Z_i: Spectra vs dense
+  [ OK ] kernel dimensions (sparse inverse iteration vs dense SVD) [nev-start 2]
+  [ OK ] (L∩K)^⊥_K ⊂ ker(A~_ii) [nev-start 2]
+  [ OK ] eigenvalues of (3.1): Spectra vs dense (max rel. diff 1.25e-11) [nev-start 2]
+  [ OK ] eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1) [nev-start 2]
+  [ OK ] selected subspace Z_i: Spectra vs dense [nev-start 2]
+  [ OK ] boolean/ras/deflated: apply vs sequential reference (rel. err 1.09e-15)
+  [ OK ] boolean/ras/deflated: GMRES converged in 12 it.
+  [ OK ] boolean/ras/additive: apply vs sequential reference (rel. err 9.81e-16)
+  [ OK ] boolean/ras/additive: GMRES converged in 19 it.
+  [ OK ] boolean/asm/deflated: apply vs sequential reference (rel. err 9.32e-16)
+  [ OK ] boolean/asm/deflated: GMRES converged in 18 it.
+  [ OK ] boolean/asm/additive: apply vs sequential reference (rel. err 8.21e-16)
+  [ OK ] boolean/asm/additive: GMRES converged in 23 it.
+  [ OK ] boolean/ras/deflated/cpardiso: apply vs sequential reference (rel. err 1.09e-15)
+  [ OK ] boolean/ras/deflated/cpardiso: GMRES converged in 12 it.
+  [ OK ] boolean/ras/deflated/cpardiso:2: apply vs sequential reference (rel. err 8.20e-16)
+  [ OK ] boolean/ras/deflated/cpardiso:2: GMRES converged in 12 it.
+  [ OK ] boolean/ras/deflated/root: apply vs sequential reference (rel. err 1.18e-15)
+  [ OK ] boolean/ras/deflated/root: GMRES converged in 12 it.
+  [ OK ] kernel dimensions (sparse inverse iteration vs dense SVD)
+  [ OK ] (L∩K)^⊥_K ⊂ ker(A~_ii)
+  [ OK ] eigenvalues of (3.1): Spectra vs dense (max rel. diff 1.32e-11)
+  [ OK ] eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1)
+  [ OK ] selected subspace Z_i: Spectra vs dense
+  [ OK ] kernel dimensions (sparse inverse iteration vs dense SVD) [nev-start 2]
+  [ OK ] (L∩K)^⊥_K ⊂ ker(A~_ii) [nev-start 2]
+  [ OK ] eigenvalues of (3.1): Spectra vs dense (max rel. diff 1.32e-11) [nev-start 2]
+  [ OK ] eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1) [nev-start 2]
+  [ OK ] selected subspace Z_i: Spectra vs dense [nev-start 2]
+  [ OK ] multiplicity/ras/deflated: apply vs sequential reference (rel. err 2.31e-16)
+  [ OK ] multiplicity/ras/deflated: GMRES converged in 15 it.
+  [ OK ] multiplicity/ras/additive: apply vs sequential reference (rel. err 2.10e-16)
+  [ OK ] multiplicity/ras/additive: GMRES converged in 21 it.
+  [ OK ] multiplicity/asm/deflated: apply vs sequential reference (rel. err 2.52e-16)
+  [ OK ] multiplicity/asm/deflated: GMRES converged in 21 it.
+  [ OK ] multiplicity/asm/additive: apply vs sequential reference (rel. err 1.97e-16)
+  [ OK ] multiplicity/asm/additive: GMRES converged in 24 it.
+  [ OK ] multiplicity/ras/deflated/cpardiso: apply vs sequential reference (rel. err 2.31e-16)
+  [ OK ] multiplicity/ras/deflated/cpardiso: GMRES converged in 15 it.
+  [ OK ] multiplicity/ras/deflated/cpardiso:2: apply vs sequential reference (rel. err 2.31e-16)
+  [ OK ] multiplicity/ras/deflated/cpardiso:2: GMRES converged in 15 it.
+  [ OK ] multiplicity/ras/deflated/root: apply vs sequential reference (rel. err 2.70e-16)
+  [ OK ] multiplicity/ras/deflated/root: GMRES converged in 15 it.
+case convdiff3d 8x8x8 nu=0.1 (n=512, nnz=3200), np=16
+  [ OK ] kernel dimensions (sparse inverse iteration vs dense SVD)
+  [ OK ] (L∩K)^⊥_K ⊂ ker(A~_ii)
+  [ OK ] eigenvalues of (3.1): Spectra vs dense (max rel. diff 1.72e-11)
+  [ OK ] eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1)
+  [ OK ] selected subspace Z_i: Spectra vs dense
+  [ OK ] kernel dimensions (sparse inverse iteration vs dense SVD) [nev-start 2]
+  [ OK ] (L∩K)^⊥_K ⊂ ker(A~_ii) [nev-start 2]
+  [ OK ] eigenvalues of (3.1): Spectra vs dense (max rel. diff 1.72e-11) [nev-start 2]
+  [ OK ] eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1) [nev-start 2]
+  [ OK ] selected subspace Z_i: Spectra vs dense [nev-start 2]
+  [ OK ] boolean/ras/deflated: apply vs sequential reference (rel. err 3.29e-16)
+  [ OK ] boolean/ras/deflated: GMRES converged in 12 it.
+  [ OK ] boolean/ras/additive: apply vs sequential reference (rel. err 4.49e-16)
+  [ OK ] boolean/ras/additive: GMRES converged in 18 it.
+  [ OK ] boolean/asm/deflated: apply vs sequential reference (rel. err 3.94e-16)
+  [ OK ] boolean/asm/deflated: GMRES converged in 20 it.
+  [ OK ] boolean/asm/additive: apply vs sequential reference (rel. err 3.20e-16)
+  [ OK ] boolean/asm/additive: GMRES converged in 22 it.
+  [ OK ] boolean/ras/deflated/cpardiso: apply vs sequential reference (rel. err 3.29e-16)
+  [ OK ] boolean/ras/deflated/cpardiso: GMRES converged in 12 it.
+  [ OK ] boolean/ras/deflated/cpardiso:2: apply vs sequential reference (rel. err 3.37e-16)
+  [ OK ] boolean/ras/deflated/cpardiso:2: GMRES converged in 12 it.
+  [ OK ] boolean/ras/deflated/root: apply vs sequential reference (rel. err 3.20e-16)
+  [ OK ] boolean/ras/deflated/root: GMRES converged in 12 it.
+  [ OK ] kernel dimensions (sparse inverse iteration vs dense SVD)
+  [ OK ] (L∩K)^⊥_K ⊂ ker(A~_ii)
+  [ OK ] eigenvalues of (3.1): Spectra vs dense (max rel. diff 1.60e-11)
+  [ OK ] eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1)
+  [ OK ] selected subspace Z_i: Spectra vs dense
+  [ OK ] kernel dimensions (sparse inverse iteration vs dense SVD) [nev-start 2]
+  [ OK ] (L∩K)^⊥_K ⊂ ker(A~_ii) [nev-start 2]
+  [ OK ] eigenvalues of (3.1): Spectra vs dense (max rel. diff 1.60e-11) [nev-start 2]
+  [ OK ] eigen-residual ||Pi_R B u - lambda A~ u|| of (3.1) [nev-start 2]
+  [ OK ] selected subspace Z_i: Spectra vs dense [nev-start 2]
+  [ OK ] multiplicity/ras/deflated: apply vs sequential reference (rel. err 2.36e-16)
+  [ OK ] multiplicity/ras/deflated: GMRES converged in 19 it.
+  [ OK ] multiplicity/ras/additive: apply vs sequential reference (rel. err 2.36e-16)
+  [ OK ] multiplicity/ras/additive: GMRES converged in 19 it.
+  [ OK ] multiplicity/asm/deflated: apply vs sequential reference (rel. err 2.20e-16)
+  [ OK ] multiplicity/asm/deflated: GMRES converged in 26 it.
+  [ OK ] multiplicity/asm/additive: apply vs sequential reference (rel. err 2.20e-16)
+  [ OK ] multiplicity/asm/additive: GMRES converged in 26 it.
+  [ OK ] multiplicity/ras/deflated/cpardiso: apply vs sequential reference (rel. err 2.36e-16)
+  [ OK ] multiplicity/ras/deflated/cpardiso: GMRES converged in 19 it.
+  [ OK ] multiplicity/ras/deflated/cpardiso:2: apply vs sequential reference (rel. err 2.36e-16)
+  [ OK ] multiplicity/ras/deflated/cpardiso:2: GMRES converged in 19 it.
+  [ OK ] multiplicity/ras/deflated/root: apply vs sequential reference (rel. err 2.36e-16)
+  [ OK ] multiplicity/ras/deflated/root: GMRES converged in 19 it.
+ALL PASSED

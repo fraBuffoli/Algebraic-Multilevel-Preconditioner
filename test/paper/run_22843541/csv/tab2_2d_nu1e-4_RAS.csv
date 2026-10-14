@@ -1,0 +1,2 @@
+problem,n,nnz,np,pou,one_level,coarse,tau,nev,local_solver,coarse_solver,n0,m_min,m_max,iterations,converged,true_rel_res,t_setup,t_eig,t_coarse_asm,t_coarse_fact,t_solve
+"convdiff2d 1200x1200 nu=0.0001 (n=1440000, nnz=7195200)",1440000,7195200,240,boolean,ras,none,0.6,300,auto,auto,0,0,0,1000,0,0.000299831,0.0738127,0,0,0,3.23739

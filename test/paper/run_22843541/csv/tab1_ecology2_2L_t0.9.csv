@@ -1,0 +1,2 @@
+problem,n,nnz,np,pou,one_level,coarse,tau,nev,local_solver,coarse_solver,n0,m_min,m_max,iterations,converged,true_rel_res,t_setup,t_eig,t_coarse_asm,t_coarse_fact,t_solve
+"/g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/matrices/ecology2.mtx (n=999999, nnz=4995991)",999999,4995991,240,boolean,ras,deflated,0.9,300,auto,cpardiso,31176,67,184,5,1,1.48448e-09,12.2663,6.10154,0.473954,5.8085,0.265711

@@ -1,0 +1,95 @@
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+schwarz2lvl: two-level algebraic Schwarz (Al Daas, Jolivet, Rees, SISC 2023), 30 MPI processes
+Configuration
+  generator             convdiff3d (nx=200, ny=200, nz=200, nu=0.01, ncomp=4)
+  rhs                   generated
+  block size            auto
+  partition of unity    boolean
+  one-level             ras
+  coarse correction     deflated
+  tau                   0.3
+  nev                   60
+  nev start             32
+  local solver          auto
+  coarse solver         cpardiso
+  coarse procs          48
+  GMRES restart         30
+  rtol                  1e-08
+Problem
+  convdiff3d 200x200x200 nu=0.01 (n=8000000, nnz=55760000)
+  block size 1, nonsymmetric
+Subdomains (min / avg / max)
+  owned unknowns n_I         258887 / 266666.7 / 270042
+  overlap unknowns n_Gamma   12260 / 17825.3 / 24704
+  neighbours                 4 / 7.9 / 14
+  nnz(A_ii)                  1874239 / 1960171.0 / 2027978
+Coarse space
+  n0                         1805
+  m_i min/avg/max            60 / 60.2 / 61
+  subdomains with ker(A~)    4 (max dim 1)
+  sum dim (L∩K)^⊥_K          4
+  dense eigensolves          0
+  Arnoldi not converged      0
+  Arnoldi retried            0
+  Arnoldi nev avg/max        59.9 / 60
+  max operator applications  207
+  coarse solver              cpardiso(30 procs, mtype 11, nnz(LU) 1631651, perturbed pivots 0)
+Preconditioner RAS,deflated, setup 3e+02 s
+GMRES(30)
+  converged in 16 iterations
+  relative residual (GMRES)  7.731e-09
+  relative residual (true)   7.731e-09
+  solve time 16.1 s, total (setup+solve) 332 s
+Timings [s] over 30 ranks
+  phase                                          min         avg         max
+  decomposition.generate                      0.0000      0.1262      3.7875
+  decomposition.metis                         0.0000      0.2215      6.6447
+  decomposition.scatter                       0.0392      0.4614      0.8649
+  decomposition                              10.6276     11.0459     11.4511
+  setup.subdomain                             0.1409      0.1510      0.1563
+  setup.local_factorization                  37.1659     37.1662     37.1666
+  setup.block_splitting                       0.0241      0.0265      0.0283
+  setup.eigensolver.factorization            21.0122     30.1694     40.8737
+  setup.eigensolver.kernel                   15.8243     22.8992     49.3573
+  setup.eigensolver.arnoldi.operator        131.5367    145.5915    154.6523
+  setup.eigensolver.arnoldi                 170.0348    185.9575    195.3621
+  setup.eigensolver                         211.6122    239.1466    268.2568
+  setup.coarse_basis                          2.8255      2.8276      2.8283
+  setup.coarse_assembly                       6.7183      7.0961      7.4179
+  setup.coarse_factorization.exchange         0.0066      0.0069      0.0074
+  setup.coarse_factorization.analysis         0.1437      0.1442      0.1445
+  setup.coarse_factorization.numeric          0.0510      0.0510      0.0510
+  setup.coarse_factorization                  0.2213      0.5429      0.9208
+  setup                                     315.9234    315.9235    315.9236
+  solve.preconditioner                       13.6134     14.9133     15.8197
+  solve.spmv                                  0.0574      0.7763      2.1370
+  solve                                      16.0884     16.0885     16.0887

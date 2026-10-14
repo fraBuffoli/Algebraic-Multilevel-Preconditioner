@@ -1,0 +1,2 @@
+problem,n,nnz,np,pou,one_level,coarse,tau,nev,local_solver,coarse_solver,n0,m_min,m_max,iterations,converged,true_rel_res,t_setup,t_eig,t_coarse_asm,t_coarse_fact,t_solve
+"/g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/matrices/Transport.mtx (n=1602111, nnz=23487281)",1602111,23487281,240,boolean,ras,deflated,0.9,300,auto,cpardiso,72000,300,300,8,1,6.19942e-09,80.1869,35.7341,3.00036,39.7405,6.7211
