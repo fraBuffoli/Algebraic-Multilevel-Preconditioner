@@ -59,6 +59,16 @@ public:
      */
     virtual void solveTranspose(const core::Vec& b, core::Vec& x) const;
 
+    /**
+     * @brief Solves A^T X = B for several right-hand sides (default: column by column).
+     * @throws std::logic_error if the backend does not support transposed solves.
+     */
+    virtual void solveTranspose(const core::Mat& B, core::Mat& X) const;
+
+    /// @brief Pivots perturbed by the last factorization (-1 = not reported by the backend).
+    ///        PARDISO refines every solve of such a factorization (2 steps).
+    virtual long perturbedPivots() const { return -1; }
+
     /// @brief Backend name.
     virtual std::string name() const = 0;
 

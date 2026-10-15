@@ -32,6 +32,16 @@ void LocalSolver::solveTranspose(const core::Vec&, core::Vec&) const
     throw std::logic_error("solveTranspose not supported by backend " + name());
 }
 
+void LocalSolver::solveTranspose(const core::Mat& B, core::Mat& X) const
+{
+    X.resize(B.rows(), B.cols());
+    core::Vec x;
+    for (Eigen::Index j = 0; j < B.cols(); ++j) {
+        solveTranspose(core::Vec(B.col(j)), x);
+        X.col(j) = x;
+    }
+}
+
 // --------------------------------------------------------------------- SparseLU
 /**
  * @brief Eigen::SparseLU backend (supernodal LU with partial pivoting, COLAMD ordering).
@@ -141,9 +151,16 @@ private:
 /**
  * @brief Intel MKL PARDISO backend through Eigen::PardisoLU (one thread per MPI rank:
  *        set MKL_NUM_THREADS=1). Transposed solves use iparm(12) = 2.
+ *
+ * No iterative refinement (iparm(8) = 0; Eigen sets 2): inside a preconditioner and an
+ * eigensolver the backward error of the LU is sufficient, and the two refinement steps
+ * (1 SpMV + 1 solve each, always performed) made every solve 3-3.7x slower. PARDISO still
+ * refines automatically (2 steps) the solves of a factorization with perturbed pivots.
  */
 class PardisoSolver final : public LocalSolver {
 public:
+    PardisoSolver() { lu_.pardisoParameterArray()[7] = 0; } // kept by compute(): set once
+
     bool factorize(const core::SpMat& A) override
     {
         lu_.compute(A);
@@ -162,6 +179,13 @@ public:
         x = lu_.solve(b);
         lu_.pardisoParameterArray()[11] = 0;
     }
+    void solveTranspose(const core::Mat& B, core::Mat& X) const override // one call, nrhs = B.cols()
+    {
+        lu_.pardisoParameterArray()[11] = 2;
+        X = lu_.solve(B);
+        lu_.pardisoParameterArray()[11] = 0;
+    }
+    long perturbedPivots() const override { return static_cast<long>(lu_.pardisoParameterArray()[13]); }
     std::string name() const override { return "pardiso"; }
 
 private:

@@ -44,6 +44,7 @@ struct LocalEigensolverResult {
     int attempts = 1;                               ///< Arnoldi runs (> 1: retried after a Schur failure).
     int nev_used = 0;                               ///< Eigenpairs computed by the last Arnoldi run (sparse path).
     std::string backend;                            ///< Factorization backend (sparse path).
+    long perturbed_pivots = -1;                     ///< Perturbed pivots of A~ + sigma I (-1 = not reported / dense path).
 };
 
 /**
@@ -62,7 +63,7 @@ struct LocalEigensolverResult {
  *  1. Factorize \f$ \tilde A_{ii} + \sigma I \f$, sigma = shift_rel * ||Atilda_ii||
  *     (a regularization at the level of the rounding errors).
  *  2. **Kernel K_i** (right): block inverse iteration with (A~+sigma I)^{-1}
- *     (3 steps, block size kernel_probe, doubled while every probe vector is
+ *     (3 steps, each one multi-RHS solve; block size kernel_probe, doubled while every probe vector is
  *     in the kernel), then an SVD of A~ Y; singular values below
  *     kernel_tol * ||A~|| define K_i = range(Q). If A is nonsymmetric the
  *     **left** kernel P (ker A~^T) is computed in the same way with

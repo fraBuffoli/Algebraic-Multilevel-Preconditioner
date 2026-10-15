@@ -49,13 +49,16 @@ public:
 
     /**
      * @brief Assembles and factorizes A_00 = R_0 A R_0^T (collective).
-     * @param coarse_solver "auto", "mumps" or "root".
+     * @param coarse_solver "auto", "mumps", "cpardiso" or "root".
      * @param coarse_procs  Processes of the distributed factorization (0 = all).
      * @param local_solver  Sequential backend of the root solver.
      * @param symmetric     A is symmetric (then A_00 is symmetric).
+     * @param root_below    If n0 < root_below, "root" is used instead of @p coarse_solver
+     *                      (0 = never): the solve phase of a distributed solver has a fixed
+     *                      cost (collectives) that dominates for small n0.
      */
     void assemble(const std::string& coarse_solver, int coarse_procs, const std::string& local_solver,
-                  bool symmetric);
+                  bool symmetric, core::GlobalIndex root_below = 0);
 
     /// @brief c = V_i^T R_i r (collective only if the PoU is not Boolean).
     void restrict(const core::Vec& r, core::Vec& c) const;
@@ -76,6 +79,8 @@ public:
     const core::Mat& basis() const { return V_; }
     /// @brief Coarse solver (after assemble()).
     const CoarseSolver& solver() const { return *solver_; }
+    /// @brief Coarse solver actually used ("root", "mumps" or "cpardiso"; empty before assemble()).
+    const std::string& solverKind() const { return solver_kind_; }
     /// @brief Number of nonzeros of A_00 contributed by this process.
     std::size_t localEntries() const { return local_entries_; }
 
@@ -84,6 +89,7 @@ private:
     core::Mat V_;                                  ///< Local basis V_i = orth(D_i Z_i).
     std::vector<core::GlobalIndex> offsets_;       ///< Coarse offsets.
     std::unique_ptr<CoarseSolver> solver_;   ///< Factorization of A_00.
+    std::string solver_kind_;                ///< Coarse solver actually used.
     std::size_t local_entries_ = 0;          ///< Local A_00 contributions.
     mutable core::Vec loc_, c_, y_;                ///< Work vectors.
 };

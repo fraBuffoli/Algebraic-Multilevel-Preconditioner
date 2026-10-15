@@ -56,6 +56,7 @@ SolverConfig SolverConfig::fromCommandLine(int argc, char** argv){
         {"local-solver", [&](const std::string& v) { c.local_solver = v; }},
         {"coarse-solver", [&](const std::string& v) { c.coarse_solver = v; }},
         {"coarse-procs", [&](const std::string& v) { c.coarse_procs = std::stoi(v); }},
+        {"coarse-root-below", [&](const std::string& v) { c.coarse_root_below = std::stoll(v); }},
         {"restart", [&](const std::string& v) { c.restart = std::stoi(v); }},
         {"rtol", [&](const std::string& v) { c.rtol = std::stod(v); }},
         {"maxit", [&](const std::string& v) { c.maxit = std::stoi(v); }},
@@ -105,6 +106,7 @@ void SolverConfig::validate() const
     if (nev < 0) throw std::invalid_argument("--nev must be >= 0");
     if (nev_start < 0) throw std::invalid_argument("--nev-start must be >= 0");
     if (restart < 1) throw std::invalid_argument("--restart must be >= 1");
+    if (coarse_root_below < 0) throw std::invalid_argument("--coarse-root-below must be >= 0");
     if (metis_objective != "cut" && metis_objective != "vol")
         throw std::invalid_argument("--metis-objective must be cut|vol");
 }
@@ -130,6 +132,7 @@ void SolverConfig::print(std::ostream& os) const
     line("local solver", local_solver);
     line("coarse solver", coarse_solver);
     line("coarse procs", coarse_procs == 0 ? std::string("all") : std::to_string(coarse_procs));
+    if (coarse_root_below > 0) line("coarse root below n0", coarse_root_below);
     line("GMRES restart", restart);
     line("rtol", rtol);
 }
@@ -166,6 +169,7 @@ std::string SolverConfig::help()
   --local-solver auto|sparselu|umfpack|pardiso                                       [auto]
   --coarse-solver auto|mumps|cpardiso|root  distributed MUMPS / MKL PARDISO, or rank 0 [auto]
   --coarse-procs N         processes of the distributed coarse factorization         [all]
+  --coarse-root-below N    use the root coarse solver when n0 < N (0 = never)        [0]
  Krylov:
   --restart N --rtol T --maxit N                                                     [30, 1e-8, 1000]
  Output:

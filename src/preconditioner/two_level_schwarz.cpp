@@ -68,7 +68,8 @@ TwoLevelSchwarz::TwoLevelSchwarz(const part::Subdomain& sd, const linalg::Distri
     // ---- Coarse space and coarse operator.
     coarse_ = std::make_unique<CoarseSpace>(sd_, eig_.Z, cfg.orth_tol);
     if (coarse_->dimension() > 0)
-        coarse_->assemble(cfg.coarse_solver, cfg.coarse_procs, cfg.local_solver, sd_.system().symmetric);
+        coarse_->assemble(cfg.coarse_solver, cfg.coarse_procs, cfg.local_solver, sd_.system().symmetric,
+                          static_cast<core::GlobalIndex>(cfg.coarse_root_below));
 
     // ---- Statistics.
     const int m = coarse_->localDimension();
@@ -85,6 +86,11 @@ TwoLevelSchwarz::TwoLevelSchwarz(const part::Subdomain& sd, const linalg::Distri
     stats_.nev_used_max = core::allreduceMax(eig_.nev_used, comm);
     stats_.nev_used_avg = static_cast<double>(core::allreduceSum(eig_.nev_used, comm)) / core::mpiSize(comm);
     stats_.matvecs_max = static_cast<long>(core::allreduceMax(static_cast<core::GlobalIndex>(eig_.matvecs), comm));
+    // Perturbed pivots (-1 = not reported): with PARDISO they switch iterative refinement back on.
+    stats_.perturbed_aii_max = static_cast<long>(
+        core::allreduceMax(static_cast<core::GlobalIndex>(one_->localSolver().perturbedPivots()), comm));
+    stats_.perturbed_atilde_max =
+        static_cast<long>(core::allreduceMax(static_cast<core::GlobalIndex>(eig_.perturbed_pivots), comm));
 }
 
 std::string TwoLevelSchwarz::name() const
@@ -98,16 +104,26 @@ void TwoLevelSchwarz::apply(const core::Vec& r, core::Vec& z) const
         one_->apply(r, z);
         return;
     }
+    // Timers: the three parts of one application (coarse correction, extra SpMV of the
+    // deflated variant, one-level solve), each split further inside CoarseSpace::apply()
+    // and OneLevelSchwarz::apply(). Their sum is "solve.preconditioner" (Gmres).
+    {
+        utils::ScopedTimer t("solve.preconditioner.coarse");
+        coarse_->apply(r, x0_); // x0 = R_0^T A_00^{-1} R_0 r
+    }
     if (correction_ == Correction::Additive) {
         // z = R_0^T A_00^{-1} R_0 r + M_*^{-1} r
-        coarse_->apply(r, x0_);
+        utils::ScopedTimer t("solve.preconditioner.local");
         one_->apply(r, z);
         z += x0_;
     } else {
-        // z = x0 + M_*^{-1} (r - A x0),  x0 = R_0^T A_00^{-1} R_0 r
-        coarse_->apply(r, x0_);
-        A_.apply(x0_, w_);
+        // z = x0 + M_*^{-1} (r - A x0)
+        {
+            utils::ScopedTimer t("solve.preconditioner.spmv");
+            A_.apply(x0_, w_);
+        }
         w_ = r - w_;
+        utils::ScopedTimer t("solve.preconditioner.local");
         one_->apply(w_, z1_);
         z = x0_ + z1_;
     }
@@ -129,6 +145,9 @@ void TwoLevelSchwarz::printStats(std::ostream& os) const
        << "  Arnoldi nev avg/max        " << std::fixed << std::setprecision(1) << stats_.nev_used_avg << " / "
        << stats_.nev_used_max << std::defaultfloat << "\n"
        << "  max operator applications  " << stats_.matvecs_max << "\n";
+    if (stats_.perturbed_aii_max >= 0 || stats_.perturbed_atilde_max >= 0)
+        os << "  perturbed pivots A_ii / A~ " << stats_.perturbed_aii_max << " / " << stats_.perturbed_atilde_max
+           << " (max over ranks)\n";
     if (coarse_->dimension() > 0) os << "  coarse solver              " << coarse_->solver().name() << "\n";
 }
 

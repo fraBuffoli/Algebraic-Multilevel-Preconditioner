@@ -97,7 +97,7 @@ Options are given as `--key value` or `--key=value`. Defaults reproduce the setu
 | Partition | `--metis-objective cut\|vol`, `--metis-vertex-weights 0\|1` |
 | Preconditioner | `--one-level ras\|asm`, `--coarse deflated\|additive\|none`, `--pou boolean\|multiplicity`, `--tau`, `--nev`, `--nev-start` |
 | Local eigensolver | `--eig-tol --eig-maxit --eig-ncv`, `--shift-rel`, `--kernel-tol`, `--kernel-probe`, `--dense-threshold`, `--orth-tol` |
-| Direct solvers | `--local-solver auto\|sparselu\|umfpack\|pardiso`, `--coarse-solver auto\|mumps\|cpardiso\|root`, `--coarse-procs N` |
+| Direct solvers | `--local-solver auto\|sparselu\|umfpack\|pardiso`, `--coarse-solver auto\|mumps\|cpardiso\|root`, `--coarse-procs N`, `--coarse-root-below N` |
 | GMRES | `--restart`, `--rtol`, `--maxit` |
 | Output | `--verbose 0\|1\|2`, `--csv FILE`, `--history FILE`, `--write-solution FILE` |
 
@@ -105,7 +105,9 @@ Options are given as `--key value` or `--key=value`. Defaults reproduce the setu
 
 **Output.** Rank 0 prints the configuration, min/avg/max subdomain sizes (n_I, n_Γ, neighbours, nnz(A_ii)), coarse
 space statistics (n0, m_i, kernel dimensions, Arnoldi convergence), GMRES iterations with the GMRES and true relative
-residuals, and a min/avg/max timing breakdown of every phase. `--csv` appends one line per run (problem, n, nnz, np,
+residuals, and a min/avg/max timing breakdown of every phase (the preconditioner application is split into
+`solve.preconditioner.coarse.{restrict,solve,prolong}`, `.spmv` and `.local.{halo,lu}`; the coarse solve contains
+collectives, so its max also includes waiting for the slowest rank). `--csv` appends one line per run (problem, n, nnz, np,
 options, n0, iterations, residual, setup / eigensolver / coarse assembly / coarse factorization / solve times),
 which is the format intended for strong/weak scaling studies. `--history` writes the residual at every iteration,
 `--write-solution` the solution in the original ordering. `--verbose 2` also prints, on stderr, one line per rank
@@ -208,10 +210,16 @@ Flow of `main.cpp`:
   solve). LDLᵀ (mtype −2) if A is symmetric, LU with scaling and matching otherwise, METIS ordering on the first
   process (the MPI ordering of PARDISO, iparm[1] = 10, hung in tests). With Open MPI the symmetric types crash inside
   MKL on communicators other than MPI_COMM_WORLD, so there symmetric A_00 are factorized as general matrices.
-  `root` (gather on rank 0 + sequential LU) is the non-scalable fallback/reference.
+  `root` (gather on rank 0 + sequential LU) is the non-scalable fallback/reference, but for small n0 it is faster:
+  the solve phase of a distributed solver has a fixed cost (collectives) that does not shrink with n0.
+  `--coarse-root-below N` switches to `root` when n0 < N (the choice is collective, n0 is known on every rank);
+  the CSV reports the coarse solver actually used.
 - Local: backends selected at run time behind one `LocalSolver` interface. UMFPACK runs with METIS ordering and no
   iterative refinement (faster factorizations and solves on 3D problems); PARDISO is meant to run with one thread
-  per rank (`MKL_NUM_THREADS=1`).
+  per rank (`MKL_NUM_THREADS=1`). PARDISO (local and `cpardiso`) also runs without iterative refinement (iparm[7] = 0;
+  Eigen sets 2, which performs two refinement steps in every solve, 3-3.7x slower solves on subdomain-sized
+  3D matrices): PARDISO still refines automatically when pivots were perturbed, and the log reports the maximum
+  number of perturbed pivots of A_ii and Ã_ii + σI. The kernel detection uses multi-RHS solves (one per step).
   Transposed solves are needed for the left kernel of Ã_ii.
 - GMRES: right preconditioning, so the stopping test is on the unpreconditioned residual as in the paper;
   classical Gram–Schmidt applied twice (CGS2), one `MPI_Allreduce` per pass instead of j+1; the true residual is

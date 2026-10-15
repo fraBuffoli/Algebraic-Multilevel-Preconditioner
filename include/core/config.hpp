@@ -51,6 +51,7 @@ struct SolverConfig{
     std::string local_solver = "auto";      ///< Local LU backend: "auto", "sparselu".
     std::string coarse_solver = "auto";     ///< Coarse solver: "auto", "mumps", "cpardiso" (distributed) or "root".
     int coarse_procs = 0;                   ///< Processes used for the distributed coarse factorization (0 = all).
+    long long coarse_root_below = 0;        ///< n0 below this: coarse solver "root" whatever coarse_solver says (0 = off).
 
     // KRYLOV SOLVER PARAMETERS
     int restart = 30;                       ///< GMRES restart length.

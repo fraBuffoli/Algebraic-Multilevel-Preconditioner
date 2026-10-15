@@ -70,7 +70,7 @@ CoarseSpace::CoarseSpace(const part::Subdomain& sd, const core::Mat& Z, double o
 }
 
 void CoarseSpace::assemble(const std::string& coarse_solver, int coarse_procs, const std::string& local_solver,
-                           bool symmetric)
+                           bool symmetric, core::GlobalIndex root_below)
 {
     const core::LocalIndex nI = sd_.nOwned(), nl = sd_.nLocal();
     const linalg::HaloExchange& halo = sd_.halo();
@@ -158,7 +158,10 @@ void CoarseSpace::assemble(const std::string& coarse_solver, int coarse_procs, c
         local_entries_ = entries.size();
     }
     utils::ScopedTimer timer("setup.coarse_factorization");
-    solver_ = makeCoarseSolver(coarse_solver, coarse_procs, local_solver);
+    // n0 = offsets_.back() is the same on every rank (Allgather): the choice is collective.
+    solver_kind_ = (root_below > 0 && dimension() < root_below) ? std::string("root")
+                 : (coarse_solver == "auto" ? availableCoarseSolvers().front() : coarse_solver);
+    solver_ = makeCoarseSolver(solver_kind_, coarse_procs, local_solver);
     solver_->setup(sd_.comm(), offsets_, entries, symmetric);
 }
 
@@ -190,9 +193,16 @@ void CoarseSpace::solve(const core::Vec& c, core::Vec& y) const { solver_->solve
 
 void CoarseSpace::apply(const core::Vec& r, core::Vec& x) const
 {
-    restrict(r, c_);
-    solve(c_, y_);
-    prolong(y_, x);
+    {
+        utils::ScopedTimer t("solve.preconditioner.coarse.restrict");
+        restrict(r, c_);    // V_i^T r (local GEMV with the Boolean PoU)
+    }
+    {
+        utils::ScopedTimer t("solve.preconditioner.coarse.solve");
+        solve(c_, y_);      // A_00^{-1}: collectives inside, waiting included
+    }
+    utils::ScopedTimer t("solve.preconditioner.coarse.prolong");
+    prolong(y_, x);         // V_i y
 }
 
 } // namespace schwarz2lvl::part

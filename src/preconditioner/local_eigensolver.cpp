@@ -48,15 +48,25 @@ core::Mat orthonormalize(const core::Mat& Y)
 }
 
 /**
+ * @brief Steps of block inverse iteration in detectKernel(). After k steps the components
+ *        outside the kernel are reduced by ~ (sigma / s_r)^k (s_r = smallest nonzero singular
+ *        value of A~). On ill-conditioned matrices (circuits: s_r ~ 1e-9 ||A~||) two steps
+ *        leave ~1e-8, i.e. right at kernel_tol, and a vector of L∩K can be classified as
+ *        (L∩K)^⊥ (nxp1, run 22861093: n0 + 1). Three steps keep that margin; with one
+ *        multi-RHS solve per step the third one costs ~0.1 s on 33k-unknown subdomains.
+ */
+constexpr int kKernelIterations = 3;
+
+/**
  * @brief Numerical kernel of a matrix M from block inverse iteration.
- * @param solve    x = (M + sigma I)^{-1} b.
+ * @param solve    X = (M + sigma I)^{-1} B for a block of right-hand sides (one call, nrhs = B.cols()).
  * @param M        The matrix (A~ or A~^T).
  * @param thr      Absolute threshold on ||M y|| for unit y.
  * @param probe    Initial block size.
  * @param forced_k If >= 0, return exactly the forced_k best vectors.
  * @return Orthonormal kernel basis.
  */
-core::Mat detectKernel(const std::function<void(const core::Vec&, core::Vec&)>& solve, const core::SpMat& M, double thr, int probe,
+core::Mat detectKernel(const std::function<void(const core::Mat&, core::Mat&)>& solve, const core::SpMat& M, double thr, int probe,
                  int forced_k)
 {
     const Eigen::Index n = M.rows();
@@ -68,13 +78,10 @@ core::Mat detectKernel(const std::function<void(const core::Vec&, core::Vec&)>& 
         for (Eigen::Index j = 0; j < p; ++j)
             for (Eigen::Index i = 0; i < n; ++i) Y(i, j) = dist(gen);
         Y = orthonormalize(Y);
-        core::Vec y;
-        for (int it = 0; it < 3; ++it) {
-            for (Eigen::Index j = 0; j < p; ++j) {
-                solve(Y.col(j), y);
-                Y.col(j) = y;
-            }
-            Y = orthonormalize(Y);
+        core::Mat X;
+        for (int it = 0; it < kKernelIterations; ++it) {
+            solve(Y, X);            // all p probe vectors in one multi-RHS solve
+            Y = orthonormalize(X);
         }
         // min over span(Y) of ||M y||: SVD of M Y (singular values in decreasing order).
         const core::Mat R = M * Y;
@@ -288,26 +295,27 @@ LocalEigensolverResult LocalEigensolver::computeSparse(const core::SpMat& Atilde
         if (!ok) throw std::runtime_error("cannot factorize A~_ii + sigma I: " + F->lastError());
     }
     res.shift = sigma;
+    res.perturbed_pivots = F->perturbedPivots();
 
     // 2. Right kernel Q and, for nonsymmetric matrices, left kernel P.
     core::Mat Q, P;
     {
         utils::ScopedTimer t("setup.eigensolver.kernel");
         const double thr = opt_.kernel_tol * normA;
-        Q = detectKernel([&](const core::Vec& b, core::Vec& x) { F->solve(b, x); }, Atilde, thr, opt_.kernel_probe, -1);
+        Q = detectKernel([&](const core::Mat& b, core::Mat& x) { F->solve(b, x); }, Atilde, thr, opt_.kernel_probe, -1);
         res.kernel_dim = static_cast<int>(Q.cols());
         if (opt_.symmetric || Q.cols() == 0) {
             P = Q;
         } else {
             const core::SpMat AtT = Atilde.transpose();
             if (F->hasTransposeSolve()) {
-                P = detectKernel([&](const core::Vec& b, core::Vec& x) { F->solveTranspose(b, x); }, AtT, thr, opt_.kernel_probe,
+                P = detectKernel([&](const core::Mat& b, core::Mat& x) { F->solveTranspose(b, x); }, AtT, thr, opt_.kernel_probe,
                                  static_cast<int>(Q.cols()));
             } else {
                 auto FT = linalg::makeLocalSolver("sparselu");
                 core::SpMat AsT = As.transpose();
                 if (!FT->factorize(AsT)) throw std::runtime_error("cannot factorize (A~_ii + sigma I)^T");
-                P = detectKernel([&](const core::Vec& b, core::Vec& x) { FT->solve(b, x); }, AtT, thr, opt_.kernel_probe,
+                P = detectKernel([&](const core::Mat& b, core::Mat& x) { FT->solve(b, x); }, AtT, thr, opt_.kernel_probe,
                                  static_cast<int>(Q.cols()));
             }
         }

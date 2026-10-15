@@ -269,7 +269,8 @@ private:
  *   Gatherv/Scatterv inside each group (no global gather on rank 0).
  * - Only the leaders with at least one coarse row take part in the factorization.
  * - mtype = -2 (symmetric indefinite, upper triangle) if A is symmetric, 11 otherwise,
- *   with the same pivoting/scaling options as the sequential PARDISO backend. With Open MPI
+ *   with the same pivoting/scaling/refinement options as the sequential PARDISO backend
+ *   (no iterative refinement unless pivots were perturbed). With Open MPI
  *   the symmetric types crash inside MKL (MKL 2023.2, Open MPI 4.1) on any communicator
  *   other than MPI_COMM_WORLD, so there symmetric matrices are factorized as general ones.
  * - Fill-in reducing ordering: METIS on the first process (iparm[1] = 2). The MPI nested
@@ -364,7 +365,7 @@ public:
             std::fill(std::begin(iparm_), std::end(iparm_), 0);
             iparm_[0] = 1;                               // no solver defaults
             iparm_[1] = 2;                               // METIS nested dissection
-            iparm_[7] = 2;                               // max iterative refinement steps
+            iparm_[7] = 0;                               // no refinement (2 automatic steps if pivots perturbed)
             iparm_[9] = symmetric ? 8 : 13;              // pivot perturbation 1e-8 / 1e-13
             iparm_[10] = symmetric ? 0 : 1;              // scaling
             iparm_[12] = symmetric ? 0 : 1;              // weighted matching

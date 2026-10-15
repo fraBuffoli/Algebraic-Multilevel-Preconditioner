@@ -31,6 +31,8 @@ struct CoarseStats {
     int nev_used_max = 0;        ///< Max eigenpairs computed by the last Arnoldi run.
     double nev_used_avg = 0.0;   ///< Average eigenpairs computed by the last Arnoldi run.
     long matvecs_max = 0;        ///< Max applications of the projected operator.
+    long perturbed_aii_max = -1;     ///< Max perturbed pivots in the LU of A_ii (-1 = not reported).
+    long perturbed_atilde_max = -1;  ///< Max perturbed pivots in the LU of A~_ii + sigma I (-1 = not reported).
 };
 
 /**

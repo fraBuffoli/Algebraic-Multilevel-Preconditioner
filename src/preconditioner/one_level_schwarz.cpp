@@ -28,8 +28,14 @@ void OneLevelSchwarz::apply(const core::Vec& r, core::Vec& z) const
 {
     const core::LocalIndex nI = sd_.nOwned();
     rloc_.head(nI) = r;
-    sd_.halo().forward(rloc_);          // R_i r
-    solver_->solve(rloc_, yloc_);       // A_ii^{-1} R_i r
+    {
+        utils::ScopedTimer t("solve.preconditioner.local.halo");
+        sd_.halo().forward(rloc_);      // R_i r
+    }
+    {
+        utils::ScopedTimer t("solve.preconditioner.local.lu");
+        solver_->solve(rloc_, yloc_);   // A_ii^{-1} R_i r
+    }
     if (variant_ == Variant::RAS) {
         yloc_.array() *= sd_.pou().array(); // D_i A_ii^{-1} R_i r
         if (!sd_.booleanPou()) sd_.halo().reverseAdd(yloc_);
