@@ -1,0 +1,2 @@
+problem,n,nnz,np,pou,one_level,coarse,tau,nev,local_solver,coarse_solver,n0,m_min,m_max,iterations,converged,true_rel_res,t_setup,t_eig,t_coarse_asm,t_coarse_fact,t_solve
+"/g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/matrices/atmosmodj.mtx (n=1270432, nnz=8814880)",1270432,8814880,240,boolean,ras,deflated,0.9,300,auto,cpardiso,68736,159,300,14,1,5.81549e-09,93.8549,27.7864,2.39238,63.7878,1.46143

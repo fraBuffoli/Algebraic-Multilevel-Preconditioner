@@ -16,15 +16,18 @@
 #   for sparse matrices", SIAM J. Sci. Comput. 45 (2023)
 # within 5 nodes (one subdomain per MPI process), with
 #   - A_00 factorized in parallel: MKL cluster_sparse_solver on 48 processes (COARSE)
-#     instead of gathered on rank 0;
+#     when n0 >= 10000, gathered on rank 0 below (--coarse-root-below 10000: crossover of
+#     the root / cp48 calibration of run 22861093, Allrun_perf.sh);
 #   - adaptive local eigensolver: k = 32, 64, ... eigenpairs until |lambda| < 1/tau
 #     (default --nev-start 32), same selected vectors as computing nev = 300;
+#   - PARDISO (local and cluster) without iterative refinement, kernel of A~_ii from
+#     multi-RHS solves, timers of the preconditioner application (since run 22861093);
 #   - Table 1 also at tau = 0.9 (the paper's G3_circuit row is its Fig. 2 at tau = 0.9).
 #
 #   1. once, on a LOGIN node (compute nodes are offline):  ./get_matrices.sh
 #   2. from test/paper:                                     sbatch Allrun.sh
 #   3. tables and plots:                                    python3 plot_paper.py run_<jobid>
-#      against the previous run (same names):               python3 plot_paper.py run_<jobid> --ref run_22838900
+#      against the previous run (same names):               python3 plot_paper.py run_<jobid> --ref run_22843541
 # The binary is built inside run_<jobid>/: ../../bin is not touched.
 # -------------------------------------------------------------------------------- #
 
@@ -37,7 +40,7 @@ RUN_FIG2=1           # G3_circuit, sweep on tau (Fig. 2)                        
 
 NP=240               # processes = subdomains for Tables 1-2 and Fig. 2 (paper: 256)
 RUN_TIMEOUT=1200     # seconds: a run that does not finish is stopped, the job goes on
-COARSE="--coarse-solver cpardiso --coarse-procs 48"   # rank 0 only, as before: --coarse-solver root
+COARSE="--coarse-solver cpardiso --coarse-procs 48 --coarse-root-below 10000"   # rank 0 only: --coarse-solver root
 TAB1_TAUS="0.6 0.9"  # 0.6 = paper setting -> tab1_<m>_2L; others -> tab1_<m>_2L_t<tau>
 MATRICES="finan512 nxp1 CoupCons3D ecology2 tmt_unsym thermal2 atmosmodj G3_circuit Transport memchip circuit5M_dc"
 # circuit5M_dc: the two-level setup was still running after 20 min in run 22838900. --verbose 2 prints
@@ -61,6 +64,7 @@ MAT=$REPO/matrices
 mkdir -p $OUT/csv $OUT/hist
 module list > $OUT/log.modules 2>&1
 git -C $REPO log -1 --format='%h %s' > $OUT/log.git 2>&1
+git -C $REPO status --short -- src include > $OUT/git_status.txt 2>&1   # uncommitted changes (not log.*: plot_paper.py reads log.* as runs)
 echo "NP=$NP COARSE='$COARSE' TAB1_TAUS='$TAB1_TAUS'" > $OUT/config.txt
 
 # -------------------------------------------------------------------------------- #

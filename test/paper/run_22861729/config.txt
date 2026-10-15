@@ -1,0 +1,1 @@
+NP=240 COARSE='--coarse-solver cpardiso --coarse-procs 48 --coarse-root-below 10000' TAB1_TAUS='0.6 0.9'

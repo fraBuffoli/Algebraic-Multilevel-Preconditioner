@@ -1,0 +1,2 @@
+problem,n,nnz,np,pou,one_level,coarse,tau,nev,local_solver,coarse_solver,n0,m_min,m_max,iterations,converged,true_rel_res,t_setup,t_eig,t_coarse_asm,t_coarse_fact,t_solve
+"/g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/matrices/circuit5M_dc.mtx (n=3523317, nnz=14865409)",3523317,14865409,240,boolean,ras,none,0.6,300,auto,auto,0,0,0,10,1,6.46149e-09,0.103944,0,0,0,0.0269368

@@ -1,0 +1,2 @@
+problem,n,nnz,np,pou,one_level,coarse,tau,nev,local_solver,coarse_solver,n0,m_min,m_max,iterations,converged,true_rel_res,t_setup,t_eig,t_coarse_asm,t_coarse_fact,t_solve
+"/g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/matrices/thermal2.mtx (n=1228045, nnz=8580313)",1228045,8580313,240,boolean,ras,deflated,0.9,300,auto,cpardiso,33435,69,190,5,1,1.01728e-09,17.6647,10.863,0.586447,6.32951,0.155609

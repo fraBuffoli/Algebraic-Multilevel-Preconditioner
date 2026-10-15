@@ -1,0 +1,132 @@
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+MPI startup(): Warning: I_MPI_PMI_LIBRARY will be ignored since the hydra process manager was found
+schwarz2lvl: two-level algebraic Schwarz (Al Daas, Jolivet, Rees, SISC 2023), 60 MPI processes
+Configuration
+  generator             convdiff3d (nx=200, ny=200, nz=200, nu=0.01, ncomp=4)
+  rhs                   generated
+  block size            auto
+  partition of unity    boolean
+  one-level             ras
+  coarse correction     deflated
+  tau                   0.3
+  nev                   60
+  nev start             32
+  local solver          auto
+  coarse solver         cpardiso
+  coarse procs          48
+  coarse root below n0  10000
+  GMRES restart         30
+  rtol                  1e-08
+Problem
+  convdiff3d 200x200x200 nu=0.01 (n=8000000, nnz=55760000)
+  block size 1, nonsymmetric
+Subdomains (min / avg / max)
+  owned unknowns n_I         133320 / 133333.3 / 133359
+  overlap unknowns n_Gamma   7345 / 11712.0 / 15658
+  neighbours                 4 / 9.5 / 16
+  nnz(A_ii)                  966861 / 995816.9 / 1022253
+Coarse space
+  n0                         3616
+  m_i min/avg/max            60 / 60.3 / 61
+  subdomains with ker(A~)    28 (max dim 1)
+  sum dim (L∩K)^⊥_K          28
+  dense eigensolves          0
+  Arnoldi not converged      0
+  Arnoldi retried            0
+  Arnoldi nev avg/max        59.5 / 60
+  max operator applications  184
+  perturbed pivots A_ii / A~ 0 / 0 (max over ranks)
+  coarse solver              root(auto)
+Preconditioner RAS,deflated, setup 9e+01 s
+GMRES(30)
+  converged in 14 iterations
+  relative residual (GMRES)  7.589e-09
+  relative residual (true)   7.589e-09
+  solve time 3.39 s, total (setup+solve) 97.5 s
+Timings [s] over 60 ranks
+  phase                                          min         avg         max
+  decomposition.generate                      0.0000      0.0702      4.2149
+  decomposition.metis                         0.0000      0.1306      7.8346
+  decomposition.scatter                       0.0200      0.4697      0.8967
+  decomposition                              12.2404     12.7226     13.2688
+  setup.subdomain                             0.0695      0.1030      0.1146
+  setup.local_factorization                  13.7709     13.7752     13.7762
+  setup.block_splitting                       0.0113      0.0186      0.0216
+  setup.eigensolver.factorization             5.5870     10.2285     15.8545
+  setup.eigensolver.kernel                    1.1888      2.3065      3.9675
+  setup.eigensolver.arnoldi.operator         13.6775     25.2241     29.7674
+  setup.eigensolver.arnoldi                  25.3368     47.3889     56.3474
+  setup.eigensolver                          33.4960     59.9950     72.5973
+  setup.coarse_basis                          2.1549      2.1602      2.1624
+  setup.coarse_assembly                       3.0947      4.4161      4.9030
+  setup.coarse_factorization                  0.5298      1.0168      2.3401
+  setup                                      93.9914     93.9953     93.9959
+  solve.preconditioner.coarse.restrict        0.0892      0.2051      0.2380
+  solve.preconditioner.coarse.solve           0.0715      0.1066      0.2327
+  solve.preconditioner.coarse.prolong         0.1448      0.2180      0.2759
+  solve.preconditioner.coarse                 0.4664      0.5298      0.5857
+  solve.preconditioner.spmv                   0.0276      0.0687      0.1561
+  solve.preconditioner.local.halo             0.0023      0.0237      0.0987
+  solve.preconditioner.local.lu               1.1075      2.1621      2.5920
+  solve.preconditioner.local                  1.1656      2.2019      2.6122
+  solve.preconditioner                        1.7624      2.8115      3.2448
+  solve.spmv                                  0.0247      0.3233      1.3248
+  solve                                       3.3845      3.3857      3.3859

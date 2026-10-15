@@ -42,6 +42,18 @@ Compared with run 22838900 (same experiments, A_00 on rank 0, nev = 300 always c
   (`grep "eigensolver done" log.tab1_circuit5M_dc_2L`), to find the ranks that kept the setup
   running for more than 20 min in run 22838900.
 
+Compared with run 22843541 (current `Allrun.sh`, `--ref run_22843541`), after the performance
+campaign of run 22861093 (`Allrun_perf.sh`, below):
+
+- PARDISO without iterative refinement (local solver and `cpardiso`), kernel of Ã_ii from
+  multi-RHS solves: same n0 and iterations, faster Arnoldi, kernel detection and solve;
+- `COARSE` adds `--coarse-root-below 10000`: A_00 goes to rank 0 when n0 < 10000 (crossover
+  of the root / cp48 calibration; it also avoids the cluster_sparse_solver crash of finan512
+  at tau = 0.6, n0 = 109);
+- the logs split the preconditioner application (`solve.preconditioner.coarse.*`,
+  `.spmv`, `.local.{halo,lu}`) and report the perturbed pivots of A_ii and Ã_ii + σI;
+  `git_status.txt` lists the files that differ from the commit in `log.git`.
+
 `--ref` adds a before -> after table (iterations, n0, Arnoldi, A_00 factorization, setup, solve, total)
 for the runs with the same name in both directories.
 
@@ -77,3 +89,27 @@ The log of every two-level run reports the coarse solver used, e.g.
 `coarse solver cpardiso(48 procs, mtype -2, nnz(LU) ..., perturbed pivots 0)`, and the timers
 `setup.coarse_factorization.{exchange,analysis,numeric}` split the distributed factorization;
 `setup.eigensolver.arnoldi.operator` is the part of Arnoldi spent applying the operator (sparse solves).
+
+## Third campaign: performance of setup and solve
+
+```bash
+sbatch Allrun_perf.sh                                        # one job, 5 nodes, ~30 min
+python3 plot_paper.py run_perf_<jobid> --ref run_22843541    # before -> after, same run names
+cat run_perf_<jobid>/cal_summary.txt                         # root vs cpardiso -> --coarse-root-below
+```
+
+Changes measured (same preconditioner: n0 and iterations must not change):
+
+- PARDISO without iterative refinement, local solver and `cpardiso` (`iparm[7] = 0`; Eigen sets 2);
+- kernel detection of Ã_ii with one multi-RHS solve per inverse iteration step (2 steps in run 22861093,
+  3 again afterwards: with 2, one vector of nxp1 crossed kernel_tol and n0 grew by 1);
+- timers of the preconditioner application: `solve.preconditioner.coarse.{restrict,solve,prolong}`,
+  `solve.preconditioner.spmv`, `solve.preconditioner.local.{halo,lu}`;
+- `--coarse-root-below N`: root coarse solver when n0 < N.
+
+| Step | Runs |
+|---|---|
+| `RUN_CHECK` | build + unit tests on 16 processes |
+| `RUN_REF` | fig4_N30 ... N240, tab2_{2d,3d}_nu1e-2_2L, tab1_{G3_circuit,memchip,CoupCons3D,nxp1}_2L (tau 0.6) and G3_circuit at tau 0.9, with the names and options of run_22843541 |
+| `RUN_CAL` | root vs cp48 on the same problems with n0 from ~0.7k to ~25k; `cal_summary.txt`: iterations, A_00 factorization and coarse solve per iteration for both |
+| `RUN_THR` | finan512, tau = 0.6 (n0 = 109, crashed inside cluster_sparse_solver) with `--coarse-root-below THR` |

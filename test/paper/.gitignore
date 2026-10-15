@@ -3,3 +3,5 @@ allrun.err
 allrun_coarse.out
 allrun_coarse.err
 __pycache__/
+allrun_perf.out
+allrun_perf.err

@@ -1,0 +1,14 @@
+ M include/core/config.hpp
+ M include/linalg/local_solver.hpp
+ M include/preconditioner/coarse_solver.hpp
+ M include/preconditioner/coarse_space.hpp
+ M include/preconditioner/local_eigensolver.hpp
+ M include/preconditioner/two_level_schwarz.hpp
+ M src/core/config.cpp
+ M src/linalg/local_solver.cpp
+ M src/main.cpp
+ M src/preconditioner/coarse_solver.cpp
+ M src/preconditioner/coarse_space.cpp
+ M src/preconditioner/local_eigensolver.cpp
+ M src/preconditioner/one_level_schwarz.cpp
+ M src/preconditioner/two_level_schwarz.cpp
