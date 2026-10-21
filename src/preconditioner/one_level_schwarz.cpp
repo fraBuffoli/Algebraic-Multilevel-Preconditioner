@@ -14,6 +14,12 @@ namespace schwarz2lvl::prec {
 OneLevelSchwarz::OneLevelSchwarz(const part::Subdomain& sd, Variant variant, const std::string& local_solver)
     : sd_(sd), variant_(variant), solver_(linalg::makeLocalSolver(local_solver))
 {
+    factorizeFull();
+    rloc_ = core::Vec::Zero(sd_.nLocal());
+}
+
+void OneLevelSchwarz::factorizeFull()
+{
     utils::ScopedTimer timer("setup.local_factorization");
     const bool ok = solver_->factorize(sd_.Aii());
     // Collective check: every rank throws, nobody hangs in a later collective.
@@ -21,7 +27,29 @@ OneLevelSchwarz::OneLevelSchwarz(const part::Subdomain& sd, Variant variant, con
     if (!all_ok)
         throw std::runtime_error("factorization of A_ii failed on at least one rank" +
                                  (ok ? std::string() : (": " + solver_->lastError())));
-    rloc_ = core::Vec::Zero(sd_.nLocal());
+    version_ = sd_.valuesVersion();
+}
+
+UpdateLevel OneLevelSchwarz::update(UpdateLevel requested)
+{
+    requested = agree(requested, sd_.comm());
+    if (requested == UpdateLevel::Reuse || (requested == UpdateLevel::Refactorize && upToDate()))
+        return UpdateLevel::Reuse;
+    if (requested == UpdateLevel::Rebuild) {
+        factorizeFull();
+        return UpdateLevel::Rebuild;
+    }
+    bool ok = false;
+    {
+        utils::ScopedTimer timer("update.local_refactorization");
+        ok = solver_->refactorize(sd_.Aii()); // falls back to a full LU by itself if needed
+    }
+    const int all_ok = core::allreduceMin(ok ? 1 : 0, sd_.comm());
+    if (!all_ok)
+        throw std::runtime_error("refactorization of A_ii failed on at least one rank" +
+                                 (ok ? std::string() : (": " + solver_->lastError())));
+    version_ = sd_.valuesVersion();
+    return UpdateLevel::Refactorize;
 }
 
 void OneLevelSchwarz::apply(const core::Vec& r, core::Vec& z) const

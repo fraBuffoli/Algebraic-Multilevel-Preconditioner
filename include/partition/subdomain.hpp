@@ -38,6 +38,14 @@ namespace schwarz2lvl::part {
  *
  * Local numbering: owned unknowns [0, n_I) in increasing global order,
  * then ghosts [n_I, n_I + n_Gamma) in increasing global order.
+ *
+ * **Structure vs values.** Steps 1, 2, 5 and the sparsity patterns of step 4
+ * depend only on the graph of A; in a CFD time loop they never change. When
+ * only the values of the owned rows change (same pattern), updateValues()
+ * refreshes A_ii, A(Omega_I, Omega_i) and the lumping sums in place: one
+ * halo exchange of the ghost-row *values* (no indices) and an indexed copy
+ * through maps computed once at construction. valuesVersion() counts these
+ * changes, so that a preconditioner can tell whether it is up to date.
  */
 class Subdomain {
 public:
@@ -79,6 +87,21 @@ public:
     /// @brief True for the Boolean partition of unity (D_i = 1 on Omega_I, 0 on Omega_Gamma).
     bool booleanPou() const { return boolean_; }
 
+    /**
+     * @brief Re-reads the values of the owned rows from the LocalSystem (collective).
+     *
+     * The LocalSystem must keep its pattern (row_ptr, col): only `val` may change.
+     * If no value changed on any rank, nothing is done (one MPI_Allreduce).
+     * Otherwise the ghost-row values are exchanged with the neighbours and A_ii,
+     * A(Omega_I, Omega_i) and the lumping sums are refilled; the patterns, the
+     * halo and the partition of unity are kept.
+     * @return True if the matrix changed (same result on every rank).
+     */
+    bool updateValues();
+
+    /// @brief Number of value changes seen by updateValues() (0 after construction).
+    long valuesVersion() const { return version_; }
+
 private:
     const core::LocalSystem& sys_;              ///< Owned rows.
     core::LocalIndex n_owned_ = 0;              ///< n_I.
@@ -91,10 +114,25 @@ private:
     core::Vec D_;                               ///< Partition of unity.
     bool boolean_ = true;                       ///< Boolean partition of unity.
 
+    // ---- value maps (built once, used by updateValues())
+    std::vector<core::LocalIndex> own_to_aii_;  ///< Owned CSR entry k -> position in Aii_.valuePtr().
+    std::vector<core::LocalIndex> own_to_aown_; ///< Owned CSR entry k -> position in Aowned_.valuePtr().
+    /// Received ghost-row value q (neighbours in order, rows in receive order): position in
+    /// Aii_.valuePtr() if its column is in Omega_i, otherwise -(1 + ghost row) (lumping sum).
+    std::vector<core::LocalIndex> ghost_map_;
+    std::vector<core::Scalar> val_snapshot_;    ///< Owned values of the last construction/update.
+    long version_ = 0;                          ///< Number of value changes.
+
     void buildOverlap();
     void buildMatrices(const std::vector<std::vector<std::int64_t>>& rcv_cols,
                        const std::vector<std::vector<core::Scalar>>& rcv_vals);
-    void buildPartitionOfUnity(const std::string& pou); 
+    void buildPartitionOfUnity(const std::string& pou);
+    /// @brief Values of the owned rows requested by each neighbour (rows in send order, CSR order inside a row).
+    std::vector<std::vector<core::Scalar>> packGhostRowValues() const;
+    /// @brief Computes own_to_aii_, own_to_aown_ and ghost_map_ (after buildMatrices()).
+    void buildValueMaps(const std::vector<std::vector<std::int64_t>>& rcv_cols);
+    /// @brief Refills the values of A_ii, A(Omega_I, Omega_i) and the lumping sums through the maps.
+    void refillValues(const std::vector<std::vector<core::Scalar>>& rcv_vals);
 };
 
 } // namespace schwarz2lvl::part

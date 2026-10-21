@@ -36,6 +36,11 @@ namespace schwarz2lvl::prec {
  *   \f$ A_{00} = \sum_i W(\Omega_I,:)^T \, A(\Omega_I,\Omega_i)\, W(\Omega_i,:) \f$,
  *   each process computing its term with local products only. The distributed
  *   contributions are summed by the coarse solver (MUMPS distributed input).
+ * - refresh():   A_00 = R_0 A R_0^T for *new values of A* with the same basis. W depends
+ *   only on V (not on A), so it is kept from assemble(): A_00 is recomputed with the two
+ *   local products, no halo exchange, and the coarse solver only refactorizes numerically.
+ *   The coefficients are emitted at the positions recorded by assemble(), so the coarse
+ *   pattern is identical even if a value happens to become exactly zero.
  */
 class CoarseSpace {
 public:
@@ -59,6 +64,14 @@ public:
      */
     void assemble(const std::string& coarse_solver, int coarse_procs, const std::string& local_solver,
                   bool symmetric, core::GlobalIndex root_below = 0);
+
+    /**
+     * @brief Recomputes A_00 = R_0 A R_0^T with the current values of A and the same basis,
+     *        then refactorizes it numerically (collective; requires assemble()).
+     *
+     * Timers `update.coarse_assembly` and `update.coarse_factorization`.
+     */
+    void refresh();
 
     /// @brief c = V_i^T R_i r (collective only if the PoU is not Boolean).
     void restrict(const core::Vec& r, core::Vec& c) const;
@@ -92,6 +105,19 @@ private:
     std::string solver_kind_;                ///< Coarse solver actually used.
     std::size_t local_entries_ = 0;          ///< Local A_00 contributions.
     mutable core::Vec loc_, c_, y_;                ///< Work vectors.
+
+    // ---- kept by assemble() for refresh(): everything here depends on V only, not on A.
+    core::SpMat W_;                          ///< W(Omega_i, :) with compressed local coarse columns.
+    std::vector<core::GlobalIndex> cols_;    ///< Global coarse index of each column of W_.
+    std::vector<core::LocalIndex> wc_;       ///< Columns of W_ that are nonzero on the owned rows.
+    core::Mat Wd_;                           ///< W(Omega_I, wc_) as a dense matrix.
+    std::vector<std::int64_t> epos_;         ///< Emitted entries of E = Wd^T (A W)_I: a * cols + b.
+
+    /// @brief Builds W_, cols_, wc_, Wd_ from V (halo exchanges of sparse rows).
+    void buildW();
+    /// @brief Local contributions of A_00 with the current values of A.
+    /// @param record true: emit the nonzeros of E and record their positions; false: emit the recorded positions.
+    void computeEntries(std::vector<core::GlobalTriplet>& entries, bool record);
 };
 
 } // namespace schwarz2lvl::prec

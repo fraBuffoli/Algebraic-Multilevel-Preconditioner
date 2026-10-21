@@ -10,6 +10,7 @@
 #include <Eigen/QR>
 
 #include <algorithm>
+#include <stdexcept>
 #include <utility>
 
 namespace schwarz2lvl::prec {
@@ -72,13 +73,40 @@ CoarseSpace::CoarseSpace(const part::Subdomain& sd, const core::Mat& Z, double o
 void CoarseSpace::assemble(const std::string& coarse_solver, int coarse_procs, const std::string& local_solver,
                            bool symmetric, core::GlobalIndex root_below)
 {
+    std::vector<core::GlobalTriplet> entries;
+    {
+        utils::ScopedTimer timer("setup.coarse_assembly");
+        buildW();
+        computeEntries(entries, true);
+        local_entries_ = entries.size();
+    }
+    utils::ScopedTimer timer("setup.coarse_factorization");
+    // n0 = offsets_.back() is the same on every rank (Allgather): the choice is collective.
+    solver_kind_ = (root_below > 0 && dimension() < root_below) ? std::string("root")
+                 : (coarse_solver == "auto" ? availableCoarseSolvers().front() : coarse_solver);
+    solver_ = makeCoarseSolver(solver_kind_, coarse_procs, local_solver);
+    solver_->setup(sd_.comm(), offsets_, entries, symmetric);
+}
+
+void CoarseSpace::refresh()
+{
+    if (!solver_) throw std::logic_error("CoarseSpace::refresh: assemble() was not called");
+    std::vector<core::GlobalTriplet> entries;
+    {
+        utils::ScopedTimer timer("update.coarse_assembly");
+        computeEntries(entries, false);
+    }
+    utils::ScopedTimer timer("update.coarse_factorization");
+    solver_->update(entries);
+}
+
+void CoarseSpace::buildW()
+{
     const core::LocalIndex nI = sd_.nOwned(), nl = sd_.nLocal();
     const linalg::HaloExchange& halo = sd_.halo();
     const int nn = halo.numNeighbors();
     const core::GlobalIndex off = offsets_[static_cast<std::size_t>(core::mpiRank(sd_.comm()))];
-    std::vector<core::GlobalTriplet> entries;
     {
-        utils::ScopedTimer timer("setup.coarse_assembly");
         // ---- 1. Owned rows of W = R_0^T: own V_i rows (+ neighbours' ghost rows of V_j).
         std::vector<SparseRow> rows(static_cast<std::size_t>(nl));
         for (core::LocalIndex l = 0; l < nI; ++l)
@@ -118,7 +146,8 @@ void CoarseSpace::assemble(const std::string& coarse_solver, int coarse_procs, c
         }
 
         // ---- 3. Local compressed column numbering of W(Omega_i, :).
-        std::vector<core::GlobalIndex> cols;
+        std::vector<core::GlobalIndex>& cols = cols_;
+        cols.clear();
         for (const auto& r : rows)
             for (const auto& e : r) cols.push_back(e.first);
         std::sort(cols.begin(), cols.end());
@@ -130,39 +159,46 @@ void CoarseSpace::assemble(const std::string& coarse_solver, int coarse_procs, c
         std::vector<core::Triplet> tw;
         for (core::LocalIndex l = 0; l < nl; ++l)
             for (const auto& [c, v] : rows[static_cast<std::size_t>(l)]) tw.emplace_back(l, lc(c), v);
-        core::SpMat W(nl, nc);
-        W.setFromTriplets(tw.begin(), tw.end());
+        W_.resize(nl, nc);
+        W_.setFromTriplets(tw.begin(), tw.end());
 
-        // ---- 4. A W restricted to the owned rows: A(Omega_I, Omega_i) W(Omega_i, :).
-        const core::SpMat AW = sd_.Aowned() * W;
-
-        // ---- 5. Local term W(Omega_I, :)^T (A W)(Omega_I, :) with a dense left factor
+        // ---- 4. Dense left factor W(Omega_I, :) for the local term of step 5 of computeEntries()
         //         (its nonzero columns only: m_i with the Boolean PoU).
-        std::vector<core::LocalIndex> wc;
+        std::vector<core::LocalIndex>& wc = wc_;
+        wc.clear();
         for (core::LocalIndex l = 0; l < nI; ++l)
             for (const auto& e : rows[static_cast<std::size_t>(l)]) wc.push_back(lc(e.first));
         std::sort(wc.begin(), wc.end());
         wc.erase(std::unique(wc.begin(), wc.end()), wc.end());
-        core::Mat Wd = core::Mat::Zero(nI, static_cast<Eigen::Index>(wc.size()));
+        Wd_ = core::Mat::Zero(nI, static_cast<Eigen::Index>(wc.size()));
         for (core::LocalIndex l = 0; l < nI; ++l)
             for (const auto& [c, v] : rows[static_cast<std::size_t>(l)]) {
                 const auto pos = std::lower_bound(wc.begin(), wc.end(), lc(c)) - wc.begin();
-                Wd(l, pos) += v;
+                Wd_(l, pos) += v;
             }
-        const core::Mat E = Wd.transpose() * AW; // |wc| x nc
-        for (Eigen::Index a = 0; a < E.rows(); ++a)
-            for (Eigen::Index b = 0; b < E.cols(); ++b)
-                if (E(a, b) != 0.0)
-                    entries.push_back({cols[static_cast<std::size_t>(wc[static_cast<std::size_t>(a)])],
-                                       cols[static_cast<std::size_t>(b)], E(a, b)});
-        local_entries_ = entries.size();
     }
-    utils::ScopedTimer timer("setup.coarse_factorization");
-    // n0 = offsets_.back() is the same on every rank (Allgather): the choice is collective.
-    solver_kind_ = (root_below > 0 && dimension() < root_below) ? std::string("root")
-                 : (coarse_solver == "auto" ? availableCoarseSolvers().front() : coarse_solver);
-    solver_ = makeCoarseSolver(solver_kind_, coarse_procs, local_solver);
-    solver_->setup(sd_.comm(), offsets_, entries, symmetric);
+}
+
+void CoarseSpace::computeEntries(std::vector<core::GlobalTriplet>& entries, bool record)
+{
+    // ---- 5. A W restricted to the owned rows, A(Omega_I, Omega_i) W(Omega_i, :), then the local
+    //         term W(Omega_I, :)^T (A W)(Omega_I, :). Only these two products depend on A.
+    const core::SpMat AW = sd_.Aowned() * W_;
+    const core::Mat E = Wd_.transpose() * AW; // |wc| x nc
+    const Eigen::Index nc = E.cols();
+    if (record) {
+        epos_.clear();
+        for (Eigen::Index a = 0; a < E.rows(); ++a)
+            for (Eigen::Index b = 0; b < nc; ++b)
+                if (E(a, b) != 0.0) epos_.push_back(static_cast<std::int64_t>(a) * nc + b);
+    }
+    entries.clear();
+    entries.reserve(epos_.size());
+    for (const std::int64_t p : epos_) {
+        const auto a = static_cast<Eigen::Index>(p / nc), b = static_cast<Eigen::Index>(p % nc);
+        entries.push_back({cols_[static_cast<std::size_t>(wc_[static_cast<std::size_t>(a)])],
+                           cols_[static_cast<std::size_t>(b)], E(a, b)});
+    }
 }
 
 void CoarseSpace::restrict(const core::Vec& r, core::Vec& c) const

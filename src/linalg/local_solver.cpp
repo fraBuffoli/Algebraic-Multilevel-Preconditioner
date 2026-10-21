@@ -58,6 +58,14 @@ public:
         }
         return true;
     }
+    bool refactorize(const core::SpMat& A) override
+    {
+        fell_back_ = false;
+        lu_.factorize(A); // the column ordering / elimination tree of analyzePattern() are kept
+        if (lu_.info() == Eigen::Success) return true;
+        fell_back_ = true;
+        return factorize(A);
+    }
     void solve(const core::Vec& b, core::Vec& x) const override { x = lu_.solve(b); }
     void solve(const core::Mat& B, core::Mat& X) const override { X = lu_.solve(B); }
     bool hasTransposeSolve() const override { return true; }
@@ -117,6 +125,20 @@ public:
         }
         return true;
     }
+    bool refactorize(const core::SpMat& A) override
+    {
+        fell_back_ = false;
+        if (symbolic_ == nullptr) return factorize(A);
+        if (numeric_) umfpack_di_free_numeric(&numeric_);
+        numeric_ = nullptr;
+        A_ = A; // same pattern: only the values are new
+        A_.makeCompressed();
+        const int status = umfpack_di_numeric(A_.outerIndexPtr(), A_.innerIndexPtr(), A_.valuePtr(), symbolic_,
+                                              &numeric_, control_, info_); // symbolic object reused
+        if (status == UMFPACK_OK) return true;
+        fell_back_ = true;
+        return factorize(A);
+    }
     void solve(const core::Vec& b, core::Vec& x) const override { run(UMFPACK_A, b, x); }
     bool hasTransposeSolve() const override { return true; }
     void solveTranspose(const core::Vec& b, core::Vec& x) const override { run(UMFPACK_At, b, x); }
@@ -163,12 +185,24 @@ public:
 
     bool factorize(const core::SpMat& A) override
     {
-        lu_.compute(A);
+        lu_.compute(A); // phase 12: analysis (ordering, scaling + matching from the values) + factorization
         if (lu_.info() != Eigen::Success) {
             error_ = "PARDISO factorization failed";
             return false;
         }
+        perturbed_full_ = perturbedPivots();
         return true;
+    }
+    /// Phase 22 only. For nonsymmetric matrices the scaling and the weighted matching of the
+    /// analysis come from the values of the last full factorization (MKL: they are computed in
+    /// phase 11); if they no longer fit, PARDISO perturbs more pivots: fall back to phase 12.
+    bool refactorize(const core::SpMat& A) override
+    {
+        fell_back_ = false;
+        lu_.factorize(A);
+        if (lu_.info() == Eigen::Success && perturbedPivots() <= perturbed_full_) return true;
+        fell_back_ = true;
+        return factorize(A);
     }
     void solve(const core::Vec& b, core::Vec& x) const override { x = lu_.solve(b); }
     void solve(const core::Mat& B, core::Mat& X) const override { X = lu_.solve(B); }
@@ -190,6 +224,7 @@ public:
 
 private:
     mutable Eigen::PardisoLU<core::SpMat> lu_; ///< Factorization (mutable: iparm is changed for A^T solves).
+    long perturbed_full_ = 0;                  ///< Perturbed pivots of the last full factorization.
 };
 #endif
 

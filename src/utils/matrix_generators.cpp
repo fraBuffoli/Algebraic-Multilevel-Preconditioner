@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 
@@ -42,12 +43,28 @@ double MatrixGenerator::kappa(double x, double y)
 
 GeneratedProblem MatrixGenerator::generate(const std::string& name, int nx, int ny, int nz, double nu, int ncomp)
 {
+    GeneratorOptions o;
+    o.nx = nx;
+    o.ny = ny;
+    o.nz = nz;
+    o.nu = nu;
+    o.ncomp = ncomp;
+    return generate(name, o);
+}
+
+GeneratedProblem MatrixGenerator::generate(const std::string& name, const GeneratorOptions& opt)
+{
     if (name.size() < 3) throw std::invalid_argument("unknown generator '" + name + "'");
     const std::string suffix = name.substr(name.size() - 2);
     const std::string kind = name.substr(0, name.size() - 2);
-    if ((suffix != "2d" && suffix != "3d") || (kind != "laplace" && kind != "convdiff" && kind != "coupled"))
+    if ((suffix != "2d" && suffix != "3d") ||
+        (kind != "laplace" && kind != "convdiff" && kind != "coupled" && kind != "bubbles"))
         throw std::invalid_argument("unknown generator '" + name + "'");
+    int nx = opt.nx, ny = opt.ny, nz = opt.nz;
+    const double nu = opt.nu;
+    const int ncomp = opt.ncomp;
     if (nx < 1 || ny < 1 || nz < 1) throw std::invalid_argument("generator: grid sizes must be positive");
+    if (kind == "bubbles") return bubbles(suffix == "3d" ? 3 : 2, opt);
 
     const int dim = (suffix == "3d") ? 3 : 2;
     if (dim == 2) nz = 1;
@@ -55,6 +72,9 @@ GeneratedProblem MatrixGenerator::generate(const std::string& name, int nx, int 
     const bool heterogeneous = (kind != "laplace");
     const int nc = (kind == "coupled") ? std::max(1, ncomp) : 1;
     const double nuBase = (kind == "laplace") ? 1.0 : nu;
+    // Time-dependent convection (sequences of matrices with the same pattern): factor 1 at time 0.
+    const double pi = 3.14159265358979323846;
+    const double convFactor = 1.0 + opt.pulse * std::sin(2.0 * pi * opt.time / std::max(1, opt.pulse_period));
 
     const double hx = 1.0 / nx, hy = 1.0 / ny, hz = (dim == 3) ? 1.0 / nz : 1.0;
     const core::GlobalIndex ncell = static_cast<core::GlobalIndex>(nx) * ny * nz;
@@ -81,6 +101,7 @@ GeneratedProblem MatrixGenerator::generate(const std::string& name, int nx, int 
     // Interior face between owner P and neighbour N. geom = kappa_f * area / dist,
     // F = convective flux from P to N (exact face integral of V.n).
     auto addFace = [&](core::GlobalIndex P, core::GlobalIndex N, double geom, double F) {
+        F *= convFactor;
         for (int c = 0; c < nc; ++c) {
             const double D = nuOf(c) * geom;
             const core::GlobalIndex p = dof(P, c), q = dof(N, c);
@@ -163,7 +184,130 @@ GeneratedProblem MatrixGenerator::generate(const std::string& name, int nx, int 
     if (dim == 3) d << "x" << nz;
     if (kind != "laplace") d << " nu=" << nu;
     if (nc > 1) d << " ncomp=" << nc;
+    if (opt.pulse != 0.0) d << " pulse=" << opt.pulse << " t=" << opt.time;
     d << " (n=" << n << ", nnz=" << g.A.nnz() << ")";
+    g.description = d.str();
+    return g;
+}
+
+GeneratedProblem MatrixGenerator::bubbles(int dim, const GeneratorOptions& opt)
+{
+    const int nx = opt.nx, ny = opt.ny, nz = (dim == 3) ? opt.nz : 1;
+    if (opt.rho_ratio <= 0.0 || opt.radius <= 0.0 || opt.nbubbles < 0)
+        throw std::invalid_argument("bubbles: rho_ratio and radius must be > 0, nbubbles >= 0");
+    const double hx = 1.0 / nx, hy = 1.0 / ny, hz = (dim == 3) ? 1.0 / nz : 1.0;
+    const int nv = (dim == 3) ? nz : ny;             // cells along the vertical (gravity) direction
+    const double hv = 1.0 / nv;
+    const core::GlobalIndex ncell = static_cast<core::GlobalIndex>(nx) * ny * nz;
+    auto cid = [&](int i, int j, int k) {
+        return static_cast<core::GlobalIndex>(i) + nx * (static_cast<core::GlobalIndex>(j) + static_cast<core::GlobalIndex>(ny) * k);
+    };
+
+    // ---- phase fraction alpha (gas = 1): union of smoothed spheres/discs.
+    const double pi = 3.14159265358979323846;
+    const double R = opt.radius;
+    const double w = std::max(hx, std::max(hy, (dim == 3) ? hz : hy)); // interface half-thickness ~ one cell
+    const double reach = R + 4.0 * w;                                  // beyond: alpha = 0 to round-off
+    std::vector<double> alpha(static_cast<std::size_t>(ncell), 0.0);
+    std::mt19937_64 gen(opt.seed);
+    std::uniform_real_distribution<double> u01(0.0, 1.0);
+    const double rise = opt.cfl * hv * opt.time;
+    for (int b = 0; b < opt.nbubbles; ++b) {
+        // Initial centre, wobble phase (drawn in the same order for every time: same bubbles).
+        const double x0 = R + (1.0 - 2.0 * R) * u01(gen), y0 = R + (1.0 - 2.0 * R) * u01(gen), z0 = u01(gen);
+        const double phase = 2.0 * pi * u01(gen);
+        const double wob = 0.5 * R * std::sin(2.0 * pi * opt.time / 40.0 + phase);
+        double c[3];
+        if (dim == 3) {
+            c[0] = std::clamp(x0 + wob, R, 1.0 - R);
+            c[1] = y0;
+            c[2] = z0 + rise;
+        } else {
+            c[0] = std::clamp(x0 + wob, R, 1.0 - R);
+            c[1] = z0 + rise;                       // vertical = y in 2D
+            c[2] = 0.5;
+        }
+        const int vdir = (dim == 3) ? 2 : 1;
+        c[vdir] -= std::floor(c[vdir]);             // periodic in the vertical direction
+        const double h[3] = {hx, hy, hz};
+        const int n[3] = {nx, ny, nz};
+        for (int image = -1; image <= 1; ++image) { // copies above/below for the periodic wrap
+            double cc[3] = {c[0], c[1], c[2]};
+            cc[vdir] += image;
+            int lo[3], hi[3];
+            bool empty = false;
+            for (int d = 0; d < dim; ++d) {
+                lo[d] = std::max(0, static_cast<int>(std::floor((cc[d] - reach) / h[d])));
+                hi[d] = std::min(n[d] - 1, static_cast<int>(std::floor((cc[d] + reach) / h[d])));
+                empty = empty || lo[d] > hi[d];
+            }
+            if (dim == 2) lo[2] = hi[2] = 0;
+            if (empty) continue;
+            for (int k = lo[2]; k <= hi[2]; ++k)
+                for (int j = lo[1]; j <= hi[1]; ++j)
+                    for (int i = lo[0]; i <= hi[0]; ++i) {
+                        const double dx = (i + 0.5) * hx - cc[0], dy = (j + 0.5) * hy - cc[1];
+                        const double dz = (dim == 3) ? (k + 0.5) * hz - cc[2] : 0.0;
+                        const double dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+                        const double a = 0.5 * (1.0 - std::tanh((dist - R) / w));
+                        double& al = alpha[static_cast<std::size_t>(cid(i, j, k))];
+                        al = std::max(al, a);
+                    }
+        }
+    }
+
+    // ---- beta = 1/rho per cell, rho = alpha rho_g + (1 - alpha) rho_l, rho_l = 1.
+    const double rho_g = 1.0 / opt.rho_ratio;
+    std::vector<double> beta(static_cast<std::size_t>(ncell));
+    for (std::size_t q = 0; q < beta.size(); ++q) beta[q] = 1.0 / (alpha[q] * rho_g + (1.0 - alpha[q]));
+
+    // ---- CSR assembly. The columns of a 5/7-point stencil are already sorted in the cell
+    //      numbering (k-1, j-1, i-1, P, i+1, j+1, k+1), so the CSR is written directly.
+    GeneratedProblem g;
+    part::CsrMatrix& A = g.A;
+    A.nrows = A.ncols = ncell;
+    A.row_ptr.assign(static_cast<std::size_t>(ncell) + 1, 0);
+    A.col.reserve(static_cast<std::size_t>(ncell) * (2 * dim + 1));
+    A.val.reserve(A.col.capacity());
+    g.rhs.assign(static_cast<std::size_t>(ncell), 0.0);
+    const double vol = hx * hy * hz;
+    const double gx = hy * hz / hx, gy = hx * hz / hy, gz = hx * hy / hz; // area / distance per direction
+    for (int k = 0; k < nz; ++k)
+        for (int j = 0; j < ny; ++j)
+            for (int i = 0; i < nx; ++i) {
+                const core::GlobalIndex P = cid(i, j, k);
+                const double bP = beta[static_cast<std::size_t>(P)];
+                double diag = 0.0;
+                std::size_t diag_pos = 0;
+                auto face = [&](core::GlobalIndex N, double geom) {
+                    const double coef = 0.5 * (bP + beta[static_cast<std::size_t>(N)]) * geom;
+                    A.col.push_back(N);
+                    A.val.push_back(-coef);
+                    diag += coef;
+                };
+                if (dim == 3 && k > 0) face(cid(i, j, k - 1), gz);
+                if (j > 0) face(cid(i, j - 1, k), gy);
+                if (i > 0) face(cid(i - 1, j, k), gx);
+                diag_pos = A.col.size();
+                A.col.push_back(P);
+                A.val.push_back(0.0);
+                if (i + 1 < nx) face(cid(i + 1, j, k), gx);
+                if (j + 1 < ny) face(cid(i, j + 1, k), gy);
+                if (dim == 3 && k + 1 < nz) face(cid(i, j, k + 1), gz);
+                // p = 0 on the top face (outlet / free atmosphere), zero flux elsewhere.
+                const bool top = (dim == 3) ? (k == nz - 1) : (j == ny - 1);
+                if (top) diag += bP * ((dim == 3) ? hx * hy / (0.5 * hz) : hx * hz / (0.5 * hy));
+                A.val[diag_pos] = diag;
+                A.row_ptr[static_cast<std::size_t>(P) + 1] = static_cast<core::GlobalIndex>(A.col.size());
+                g.rhs[static_cast<std::size_t>(P)] = vol * alpha[static_cast<std::size_t>(P)]; // buoyancy-like source
+            }
+    A.symmetric = true;
+    g.block_size = 1;
+    std::ostringstream d;
+    d << "bubbles" << dim << "d " << nx << "x" << ny;
+    if (dim == 3) d << "x" << nz;
+    d << " rho_ratio=" << opt.rho_ratio << " nb=" << opt.nbubbles << " R=" << opt.radius << " cfl=" << opt.cfl
+      << " t=" << opt.time << " (n=" << ncell << ", nnz=" << A.nnz() << ")";
     g.description = d.str();
     return g;
 }

@@ -85,6 +85,7 @@ mpirun ./bin/schwarz2lvl --matrix matrices/garon1.mtx --csv results.csv
 mpirun -np 4  ./bin/schwarz2lvl --matrix matrices/sherman4.mtx
 mpirun -np 16 ./bin/schwarz2lvl --generate convdiff3d --nx 40 --nu 1e-2 --tau 0.3 --nev 60
 mpirun -np 16 ./bin/schwarz2lvl --generate coupled2d --nx 200 --ncomp 4 --coarse none   # one-level RAS only
+mpirun -np 16 ./bin/schwarz2lvl --generate bubbles3d --nx 48 --tau 0.3 --nev 60 --steps 20 --reuse auto  # time loop
 ./bin/schwarz2lvl --help                                                                 # full option list
 ```
 
@@ -93,12 +94,13 @@ Options are given as `--key value` or `--key=value`. Defaults reproduce the setu
 
 | Group | Options |
 |---|---|
-| Input | `--matrix FILE` (Matrix Market coordinate, real/integer/pattern, general/symmetric/skew) **or** `--generate laplace2d\|laplace3d\|convdiff2d\|convdiff3d\|coupled2d\|coupled3d` with `--nx --ny --nz --nu --ncomp`; `--rhs random\|ones\|generated\|FILE`; `--block-size N` (unknowns per cell) |
+| Input | `--matrix FILE` (Matrix Market coordinate, real/integer/pattern, general/symmetric/skew) **or** `--generate laplace2d\|laplace3d\|convdiff2d\|convdiff3d\|coupled2d\|coupled3d\|bubbles2d\|bubbles3d` with `--nx --ny --nz --nu --ncomp`, `--rho-ratio --nbubbles --radius --cfl` (bubbles), `--pulse --pulse-period` (time-dependent convection); `--rhs random\|ones\|generated\|FILE`; `--block-size N` (unknowns per cell) |
 | Partition | `--metis-objective cut\|vol`, `--metis-vertex-weights 0\|1` |
 | Preconditioner | `--one-level ras\|asm`, `--coarse deflated\|additive\|none`, `--pou boolean\|multiplicity`, `--tau`, `--nev`, `--nev-start` |
 | Local eigensolver | `--eig-tol --eig-maxit --eig-ncv`, `--shift-rel`, `--kernel-tol`, `--kernel-probe`, `--dense-threshold`, `--orth-tol` |
 | Direct solvers | `--local-solver auto\|sparselu\|umfpack\|pardiso`, `--coarse-solver auto\|mumps\|cpardiso\|root`, `--coarse-procs N`, `--coarse-root-below N` |
 | GMRES | `--restart`, `--rtol`, `--maxit` |
+| Sequence | `--steps N` (time loop; 0 = single solve), `--correctors N`, `--reuse off\|refactor\|auto`, `--rebuild-growth G`, `--rebuild-every N`, `--steps-csv FILE`; `--matrix 'p_%04d.mtx'` reads one file per step |
 | Output | `--verbose 0\|1\|2`, `--csv FILE`, `--history FILE`, `--write-solution FILE` |
 
 `auto` picks the best backend compiled in (local: pardiso > umfpack > sparselu; coarse: mumps > cpardiso > root).
@@ -126,6 +128,7 @@ run them with several process counts:
 ```bash
 mpirun -np 4 ./bin/test_subdomain        # overlap, halo, A_ii, lumping sums, partition of unity, SpMV
 mpirun -np 4 ./bin/test_preconditioner   # sparse vs dense eigensolver, RAS/ASM x deflated/additive, GMRES
+mpirun -np 4 ./bin/test_reuse            # setup reuse: refactorizations vs fresh setups, policy, time loop
 ```
 
 `matrices/` contains small SuiteSparse test matrices (sherman4, nos5, e05r0400, fidapm05/10, garon1, graham1,
@@ -138,9 +141,9 @@ include/<module>/*.hpp, src/<module>/*.cpp      one class per header/source pair
 ├── core/            (core)    Scalar, LocalIndex (32-bit), GlobalIndex (64-bit); SolverConfig (CLI); LocalSystem; MPI helpers
 ├── partition/       (part)    CsrMatrix, MatrixMarketIO, GraphPartitioner (METIS), DomainDecomposer, Subdomain
 ├── linalg/          (linalg)  HaloExchange, DistributedMatrix (SpMV), LocalSolver (SparseLU/UMFPACK/PARDISO), global dot/norm
-├── preconditioner/  (prec)    Preconditioner, OneLevelSchwarz, local block splitting, LocalEigensolver,
-│                              CoarseSpace, CoarseSolver (MUMPS/cpardiso/root), TwoLevelSchwarz
-├── solver/          (solv)    Gmres
+├── preconditioner/  (prec)    Preconditioner (+ UpdateLevel), OneLevelSchwarz, local block splitting, LocalEigensolver,
+│                              CoarseSpace, CoarseSolver (MUMPS/cpardiso/root), TwoLevelSchwarz, ReusePolicy
+├── solver/          (solv)    Gmres, runTimeLoop (sequence of solves with setup reuse)
 └── utils/           (utils)   MatrixGenerator, TimerRegistry/ScopedTimer, Log
 src/main.cpp, src/matgen.cpp   drivers;   test/   MPI test programs;   external/   Eigen, Spectra
 ```
@@ -155,6 +158,8 @@ Flow of `main.cpp`:
    builds V_i = orth(D_i Z_i) and A_00 = R_0 A R_0ᵀ → `CoarseSolver` factorizes A_00.
    Deflated (2.4): z = x_0 + M₁⁻¹(r − A x_0), x_0 = R_0ᵀ A_00⁻¹ R_0 r; additive (2.2): z = R_0ᵀ A_00⁻¹ R_0 r + M₁⁻¹ r.
 5. **Solve** — `Gmres` with the preconditioner applied on the right.
+
+With `--steps N > 0` the driver runs `runTimeLoop()` instead (see [Setup reuse](#setup-reuse-between-solves-time-loops)).
 
 ## Implementation choices
 
@@ -228,6 +233,64 @@ Flow of `main.cpp`:
   Section 4.2 integrated exactly on the faces (zero row sums, hence singular Ã_ii that exercise the kernel handling),
   heterogeneous diffusivity, and coupled variants with unknowns interleaved per cell as in OpenFOAM coupled solvers.
 - The random right-hand side is generated in the original ordering, so it does not depend on the number of processes.
+
+## Setup reuse between solves (time loops)
+
+In a CFD time loop the pressure matrix keeps its sparsity pattern; its values change a little at
+every time step and not at all between the correctors of a step. Rebuilding the preconditioner at
+every solve (what happens when a new solver object is created at every solve) throws away work that
+depends only on the pattern, or only on the coarse basis. The setup is split by what each part
+depends on, and `Preconditioner::update(UpdateLevel)` redoes only what is needed:
+
+| depends on | what | Reuse | Refactorize | Rebuild |
+|---|---|:--:|:--:|:--:|
+| graph of A | overlap, halo, patterns of A_ii and A(Ω_I, Ω_i), partition of unity | kept | kept | kept |
+| pattern of A_ii | symbolic analysis of the LU (ordering, elimination tree) | kept | kept | redone |
+| values of A | A_ii, A(Ω_I, Ω_i), lumping sums (`Subdomain::updateValues`) | kept | refilled | refilled |
+| values of A | numerical LU of A_ii | kept | redone | redone |
+| coarse basis V | W = R_0ᵀ on Ω_i (halo exchanges), pattern and distribution of A_00 | kept | kept | redone |
+| values of A and V | A_00 = R_0 A R_0ᵀ and its numerical LU | kept | redone | redone |
+| values of A | Ã_ii, local eigenproblems, V | kept | **kept (old)** | redone |
+
+- **Refactorize** keeps the coarse basis of the last Rebuild but recomputes A_00 with the current A,
+  so the coarse correction stays consistent with the current matrix (`test_reuse` checks
+  R_0 (r - A R_0ᵀ A_00⁻¹ R_0 r) = 0): the preconditioner is a correct preconditioner of the new
+  matrix, only its coarse space is tuned to an older one. Its cost is a numerical LU of A_ii, two
+  local products and a numerical LU of A_00 (no eigensolver, no halo exchange of sparse rows).
+- **Numerical refactorizations** reuse the symbolic analysis: `LocalSolver::refactorize()`
+  (PARDISO phase 22, UMFPACK numeric with the old symbolic object, `SparseLU::factorize`) and
+  `CoarseSolver::update()` (root: same gather pattern; MUMPS: JOB = 2; cpardiso: values along the
+  Alltoallv pattern of the setup, phase 22). For nonsymmetric matrices PARDISO computes scaling and
+  matching in the analysis from the values of that time; if the numerical phase perturbs more pivots
+  than the full one, both fall back to a full factorization.
+- **Policy** (`ReusePolicy`, `--reuse`): `off` rebuilds before every solve (reference), `refactor`
+  never rebuilds (diagnostic: how the coarse basis ages), `auto` reuses when the matrix did not change,
+  refactorizes when it did, and rebuilds at **break-even**: each solve wastes
+  (iterations − q_ref · decades) × (time per iteration) because of the old basis, q_ref being the
+  iterations per decade of residual reduction right after the last rebuild; when the time wasted
+  since the last rebuild reaches the measured extra cost of a rebuild over a refactorization, the
+  basis is rebuilt (the rent-or-buy rule: at most twice the cost of the best choice in hindsight,
+  no threshold to tune). `--rebuild-growth G` (rebuild when q > G q_ref) and `--rebuild-every N` are
+  optional safety nets; a solve that does not converge always triggers a rebuild. Decisions are made
+  collective (`agree()`: maximum over the ranks).
+- **Driver** (`runTimeLoop`): steps × correctors; the matrix values of a step come from the
+  generator at pseudo-time = step or from one Matrix Market file per step (`--matrix 'p_%04d.mtx'`,
+  e.g. matrices written by OpenFOAM), sent by rank 0 without repartitioning
+  (`DomainDecomposer::updateValues`, pattern checked by hash); new random rhs per corrector; zero
+  initial guess. Output: one line per solve (level, update and solve time, iterations, iterations
+  per decade, n0, time wasted by the old basis), a summary, the timers `update.*` (refactorizations)
+  and `setup.*` (initial setup and rebuilds), and `--steps-csv`.
+- **Test problem** `bubbles2d/3d`: pressure equation of an incompressible two-phase flow,
+  −∇·(β∇p) = f with β = 1/ρ, rising gas bubbles with a smoothed (VoF-like) interface, density ratio
+  `--rho-ratio`; SPD and diagonally dominant (Lemma 3.2 of the paper applies). The pattern is fixed,
+  the values change near the moving interfaces.
+- `test/reuse/Allrun_reuse.sh` (G100, 5 nodes, < 1 h) compares `off`, `refactor` and `auto` on
+  bubbles at two densities and two subdomain sizes, one-level RAS, and a nonsymmetric sequence;
+  `plot_reuse.py` writes the report and the plots.
+
+In an OpenFOAM port the solver object is created at every `solve()`: the persistent state
+(subdomain structure, preconditioner, policy) must live outside it, e.g. in a `MeshObject` (as GAMG
+stores its agglomeration) or in a registry keyed by the field name; `p_rgh` and `p_rghFinal` share it.
 
 **Limitations.** Real matrices only; one subdomain per MPI process; the global matrix lives on rank 0 during the
 decomposition; local indices are 32-bit and the MUMPS / MKL interfaces require n0 < 2^31.

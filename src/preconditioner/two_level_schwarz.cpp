@@ -18,12 +18,39 @@
 namespace schwarz2lvl::prec {
 
 TwoLevelSchwarz::TwoLevelSchwarz(const part::Subdomain& sd, const linalg::DistributedMatrix& A, const core::SolverConfig& cfg)
-    : sd_(sd), A_(A), correction_(cfg.coarse == "additive" ? Correction::Additive : Correction::Deflated)
+    : sd_(sd), A_(A), cfg_(cfg), correction_(cfg.coarse == "additive" ? Correction::Additive : Correction::Deflated)
 {
     utils::ScopedTimer timer("setup");
-    MPI_Comm comm = sd_.comm();
     const auto variant = (cfg.one_level == "asm") ? OneLevelSchwarz::Variant::ASM : OneLevelSchwarz::Variant::RAS;
     one_ = std::make_unique<OneLevelSchwarz>(sd_, variant, cfg.local_solver);
+    buildCoarse();
+    version_ = sd_.valuesVersion();
+}
+
+UpdateLevel TwoLevelSchwarz::update(UpdateLevel requested)
+{
+    requested = agree(requested, sd_.comm());
+    if (requested == UpdateLevel::Reuse || (requested == UpdateLevel::Refactorize && upToDate()))
+        return UpdateLevel::Reuse;
+    if (requested == UpdateLevel::Refactorize) {
+        utils::ScopedTimer timer("update");
+        one_->update(UpdateLevel::Refactorize);                  // numerical LU of A_ii
+        if (coarse_->dimension() > 0) coarse_->refresh();        // A_00 = V^T A V, numerical LU
+        version_ = sd_.valuesVersion();
+        return UpdateLevel::Refactorize;
+    }
+    utils::ScopedTimer timer("setup");
+    one_->update(UpdateLevel::Rebuild);                          // full LU of A_ii
+    buildCoarse();                                               // eigenproblems, new V, new A_00
+    version_ = sd_.valuesVersion();
+    return UpdateLevel::Rebuild;
+}
+
+void TwoLevelSchwarz::buildCoarse()
+{
+    const core::SolverConfig& cfg = cfg_;
+    MPI_Comm comm = sd_.comm();
+    coarse_.reset(); // release the old coarse factorization first (Rebuild): lower memory peak
 
     // Local block splitting and local eigenproblem (no communication).
     std::string error;

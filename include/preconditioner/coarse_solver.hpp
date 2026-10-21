@@ -40,6 +40,17 @@ public:
                        bool symmetric) = 0;
 
     /**
+     * @brief Numerical refactorization of A_00 with new values (collective).
+     *
+     * @p entries must contain the same (row, col) sequence, on every rank, as the one passed
+     * to setup(): only the values differ. This is what CoarseSpace::refresh() produces when
+     * the coarse basis is kept. The symbolic analysis and the data distribution of setup()
+     * are reused: only the values travel, and only the numerical factorization is redone.
+     * @param entries Local contributions (may be modified).
+     */
+    virtual void update(std::vector<core::GlobalTriplet>& entries) = 0;
+
+    /**
      * @brief Solves A_00 y = c (collective).
      * @param c Owned coarse entries of the right-hand side (size m_i).
      * @param y Owned coarse entries of the solution (resized to m_i).

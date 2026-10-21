@@ -13,6 +13,24 @@
 
 namespace schwarz2lvl::part {
 
+namespace {
+/**
+ * @brief Position of the stored entry (outer, inner) in the value array of a compressed
+ *        Eigen sparse matrix (outer = column for column-major, row for row-major).
+ * @throws std::logic_error if the entry is not in the pattern.
+ */
+template <typename SparseMatrix>
+core::LocalIndex storagePosition(const SparseMatrix& M, core::LocalIndex outer, core::LocalIndex inner)
+{
+    const core::LocalIndex* idx = M.innerIndexPtr();
+    const core::LocalIndex* b = idx + M.outerIndexPtr()[outer];
+    const core::LocalIndex* e = idx + M.outerIndexPtr()[outer + 1];
+    const core::LocalIndex* it = std::lower_bound(b, e, inner);
+    if (it == e || *it != inner) throw std::logic_error("Subdomain: entry not found in the sparsity pattern");
+    return static_cast<core::LocalIndex>(it - idx);
+}
+} // namespace
+
 Subdomain::Subdomain(const core::LocalSystem& sys, const std::string& pou) : sys_(sys)
 {
     utils::ScopedTimer timer("setup.subdomain");
@@ -25,23 +43,108 @@ Subdomain::Subdomain(const core::LocalSystem& sys, const std::string& pou) : sys
     //For every requested unknown the owner sends [row length, columns...] and the values.
     const int nn = halo_.numNeighbors();
     std::vector<std::vector<core::GlobalIndex>> scols(static_cast<std::size_t>(nn)), rcols;
-    std::vector<std::vector<core::Scalar>> svals(static_cast<std::size_t>(nn)), rvals;
+    std::vector<std::vector<core::Scalar>> rvals;
     for (int k = 0; k < nn; ++k) {
         for (core::LocalIndex l : halo_.sendIndices(k)) {
             const core::GlobalIndex b = sys_.row_ptr[static_cast<std::size_t>(l)];
             const core::GlobalIndex e = sys_.row_ptr[static_cast<std::size_t>(l) + 1];
             scols[static_cast<std::size_t>(k)].push_back(e - b);
-            for (core::GlobalIndex q = b; q < e; ++q) {
+            for (core::GlobalIndex q = b; q < e; ++q)
                 scols[static_cast<std::size_t>(k)].push_back(sys_.col[static_cast<std::size_t>(q)]);
-                svals[static_cast<std::size_t>(k)].push_back(sys_.val[static_cast<std::size_t>(q)]);
-            }
         }
     }
     halo_.exchange(scols, rcols);
-    halo_.exchange(svals, rvals);
+    halo_.exchange(packGhostRowValues(), rvals); // same order as the columns: updateValues() relies on it
 
     buildMatrices(rcols, rvals);
+    buildValueMaps(rcols);
     buildPartitionOfUnity(pou);
+    val_snapshot_ = sys_.val;
+}
+
+std::vector<std::vector<core::Scalar>> Subdomain::packGhostRowValues() const
+{
+    const int nn = halo_.numNeighbors();
+    std::vector<std::vector<core::Scalar>> svals(static_cast<std::size_t>(nn));
+    for (int k = 0; k < nn; ++k) {
+        auto& s = svals[static_cast<std::size_t>(k)];
+        for (core::LocalIndex l : halo_.sendIndices(k)) {
+            const auto b = static_cast<std::size_t>(sys_.row_ptr[static_cast<std::size_t>(l)]);
+            const auto e = static_cast<std::size_t>(sys_.row_ptr[static_cast<std::size_t>(l) + 1]);
+            s.insert(s.end(), sys_.val.begin() + static_cast<std::ptrdiff_t>(b), sys_.val.begin() + static_cast<std::ptrdiff_t>(e));
+        }
+    }
+    return svals;
+}
+
+void Subdomain::buildValueMaps(const std::vector<std::vector<std::int64_t>>& rcols)
+{
+    // Owned rows: entry k of the CSR row l goes to A_ii(l, c) (column-major) and A(Omega_I, Omega_i)(l, c) (row-major).
+    own_to_aii_.resize(sys_.col.size());
+    own_to_aown_.resize(sys_.col.size());
+    for (core::LocalIndex l = 0; l < n_owned_; ++l)
+        for (core::GlobalIndex k = sys_.row_ptr[static_cast<std::size_t>(l)]; k < sys_.row_ptr[static_cast<std::size_t>(l) + 1]; ++k) {
+            const core::LocalIndex c = localIndex(sys_.col[static_cast<std::size_t>(k)]);
+            own_to_aii_[static_cast<std::size_t>(k)] = storagePosition(Aii_, c, l);
+            own_to_aown_[static_cast<std::size_t>(k)] = storagePosition(Aowned_, l, c);
+        }
+    // Ghost rows: same traversal as buildMatrices().
+    ghost_map_.clear();
+    for (int k = 0; k < halo_.numNeighbors(); ++k) {
+        const auto& cols = rcols[static_cast<std::size_t>(k)];
+        std::size_t pc = 0;
+        for (core::LocalIndex j = 0; j < halo_.recvCount(k); ++j) {
+            const core::LocalIndex row = halo_.recvStart(k) + j;
+            const core::GlobalIndex len = cols[pc++];
+            for (core::GlobalIndex q = 0; q < len; ++q, ++pc) {
+                const core::LocalIndex c = localIndex(cols[pc]);
+                ghost_map_.push_back(c >= 0 ? storagePosition(Aii_, c, row) : -(1 + (row - n_owned_)));
+            }
+        }
+    }
+}
+
+void Subdomain::refillValues(const std::vector<std::vector<core::Scalar>>& rvals)
+{
+    // Every stored entry of A_ii and A(Omega_I, Omega_i) comes from exactly one source value
+    // (the matrices were assembled without duplicates), so plain assignment is enough.
+    core::Scalar* aii = Aii_.valuePtr();
+    core::Scalar* aown = Aowned_.valuePtr();
+    for (std::size_t k = 0; k < sys_.val.size(); ++k) {
+        aii[own_to_aii_[k]] = sys_.val[k];
+        aown[own_to_aown_[k]] = sys_.val[k];
+    }
+    lump_.setZero();
+    std::size_t q = 0;
+    for (const auto& r : rvals)
+        for (const core::Scalar v : r) {
+            const core::LocalIndex m = ghost_map_[q++];
+            if (m >= 0)
+                aii[m] = v;
+            else
+                lump_[-m - 1] += std::abs(v);
+        }
+}
+
+bool Subdomain::updateValues()
+{
+    utils::ScopedTimer timer("update.subdomain");
+    if (sys_.val.size() != val_snapshot_.size())
+        throw std::logic_error("Subdomain::updateValues: the number of nonzeros changed (pattern must be kept)");
+    // A neighbour may have changed rows that this rank holds as ghosts: decide together.
+    const bool mine = (sys_.val != val_snapshot_);
+    if (core::allreduceMax(mine ? 1 : 0, sys_.comm) == 0) return false;
+
+    std::vector<std::vector<core::Scalar>> rvals;
+    halo_.exchange(packGhostRowValues(), rvals);
+    std::size_t nrecv = 0;
+    for (const auto& r : rvals) nrecv += r.size();
+    if (nrecv != ghost_map_.size())
+        throw std::logic_error("Subdomain::updateValues: ghost rows changed size (pattern must be kept)");
+    refillValues(rvals);
+    val_snapshot_ = sys_.val;
+    ++version_;
+    return true;
 }
 
 core::GlobalIndex Subdomain::globalId(core::LocalIndex l) const

@@ -37,6 +37,18 @@ SolverConfig SolverConfig::fromCommandLine(int argc, char** argv){
         {"ncomp", [&](const std::string& v) { c.ncomp = std::stoi(v); }},
         {"block-size", [&](const std::string& v) { c.block_size = std::stoi(v); }},
         {"seed", [&](const std::string& v) { c.seed = static_cast<unsigned>(std::stoul(v)); }},
+        {"rho-ratio", [&](const std::string& v) { c.rho_ratio = std::stod(v); }},
+        {"nbubbles", [&](const std::string& v) { c.nbubbles = std::stoi(v); }},
+        {"radius", [&](const std::string& v) { c.radius = std::stod(v); }},
+        {"cfl", [&](const std::string& v) { c.cfl = std::stod(v); }},
+        {"pulse", [&](const std::string& v) { c.pulse = std::stod(v); }},
+        {"pulse-period", [&](const std::string& v) { c.pulse_period = std::stoi(v); }},
+        {"steps", [&](const std::string& v) { c.steps = std::stoi(v); }},
+        {"correctors", [&](const std::string& v) { c.correctors = std::stoi(v); }},
+        {"reuse", [&](const std::string& v) { c.reuse = v; }},
+        {"rebuild-growth", [&](const std::string& v) { c.rebuild_growth = std::stod(v); }},
+        {"rebuild-every", [&](const std::string& v) { c.rebuild_every = std::stoi(v); }},
+        {"steps-csv", [&](const std::string& v) { c.steps_csv = v; }},
         {"metis-objective", [&](const std::string& v) { c.metis_objective = v; }},
         {"metis-vertex-weights", [&](const std::string& v) { c.metis_vertex_weights = parseBool(v); }},
         {"pou", [&](const std::string& v) { c.pou = v; }},
@@ -109,6 +121,15 @@ void SolverConfig::validate() const
     if (coarse_root_below < 0) throw std::invalid_argument("--coarse-root-below must be >= 0");
     if (metis_objective != "cut" && metis_objective != "vol")
         throw std::invalid_argument("--metis-objective must be cut|vol");
+    if (steps < 0) throw std::invalid_argument("--steps must be >= 0");
+    if (correctors < 1) throw std::invalid_argument("--correctors must be >= 1");
+    if (reuse != "off" && reuse != "refactor" && reuse != "auto")
+        throw std::invalid_argument("--reuse must be off|refactor|auto");
+    if (rebuild_every < 0) throw std::invalid_argument("--rebuild-every must be >= 0");
+    if (rho_ratio <= 0.0) throw std::invalid_argument("--rho-ratio must be > 0");
+    if (radius <= 0.0) throw std::invalid_argument("--radius must be > 0");
+    if (nbubbles < 0) throw std::invalid_argument("--nbubbles must be >= 0");
+    if (pulse_period < 1) throw std::invalid_argument("--pulse-period must be >= 1");
 }
 
 void SolverConfig::print(std::ostream& os) const
@@ -118,7 +139,11 @@ void SolverConfig::print(std::ostream& os) const
     if (!matrix_file.empty()) line("matrix", matrix_file);
     if (!generate.empty()) {
         std::ostringstream g;
-        g << generate << " (nx=" << nx << ", ny=" << ny << ", nz=" << nz << ", nu=" << nu << ", ncomp=" << ncomp << ")";
+        g << generate << " (nx=" << nx << ", ny=" << ny << ", nz=" << nz << ", nu=" << nu << ", ncomp=" << ncomp;
+        if (generate.rfind("bubbles", 0) == 0)
+            g << ", rho_ratio=" << rho_ratio << ", nbubbles=" << nbubbles << ", radius=" << radius << ", cfl=" << cfl;
+        if (pulse != 0.0) g << ", pulse=" << pulse << ", period=" << pulse_period;
+        g << ")";
         line("generator", g.str());
     }
     line("rhs", rhs);
@@ -135,6 +160,18 @@ void SolverConfig::print(std::ostream& os) const
     if (coarse_root_below > 0) line("coarse root below n0", coarse_root_below);
     line("GMRES restart", restart);
     line("rtol", rtol);
+    if (steps > 0) {
+        line("steps x correctors", std::to_string(steps) + " x " + std::to_string(correctors));
+        std::ostringstream r;
+        r << reuse;
+        if (reuse == "auto") {
+            r << " (rebuild at break-even";
+            if (rebuild_growth > 0.0) r << ", or when it/decade > " << rebuild_growth << " x reference";
+            if (rebuild_every > 0) r << ", or after " << rebuild_every << " refactorizations";
+            r << ")";
+        }
+        line("setup reuse", r.str());
+    }
 }
 
 std::string SolverConfig::help()
@@ -143,10 +180,13 @@ std::string SolverConfig::help()
  Input:
   --matrix FILE            Matrix Market file (coordinate, real, general/symmetric)
   --rhs KIND               random | ones | generated | FILE (Matrix Market array)   [random]
-  --generate NAME          laplace2d | laplace3d | convdiff2d | convdiff3d | coupled2d | coupled3d
+  --generate NAME          laplace2d | laplace3d | convdiff2d | convdiff3d | coupled2d | coupled3d |
+                           bubbles2d | bubbles3d (pressure of a two-phase VoF flow)
   --nx N --ny N --nz N     generator grid size                                       [64]
   --nu V                   generator viscosity nu of Eq. (4.1)                        [1]
   --ncomp N                unknowns per cell of the coupled generators                [4]
+  --rho-ratio R --nbubbles N --radius R --cfl C   bubbles generators              [1000, 50, 0.06, 0.5]
+  --pulse A --pulse-period P   convdiff/coupled: convection x (1 + A sin(2 pi t / P))  [0, 20]
   --block-size N           unknowns per cell (partition by cells)                     [auto]
   --seed N                 seed of the random right-hand side                         [12345]
  Partition:
@@ -172,6 +212,17 @@ std::string SolverConfig::help()
   --coarse-root-below N    use the root coarse solver when n0 < N (0 = never)        [0]
  Krylov:
   --restart N --rtol T --maxit N                                                     [30, 1e-8, 1000]
+ Sequence of solves (same pattern, values changing with the step):
+  --steps N                steps of the time loop (0 = one solve)                     [0]
+                           --generate: pseudo-time = step; --matrix with a printf pattern
+                           (e.g. p_%04d.mtx): one file per step, starting from 0
+  --correctors N           solves per step with the same matrix, new random rhs       [3]
+  --reuse off|refactor|auto  off: full setup at every solve; refactor: never rebuild
+                           the coarse basis; auto: reuse / refactorize, rebuild when the
+                           time lost to the old basis reaches the cost of a rebuild  [auto]
+  --rebuild-growth G       auto: also rebuild when it/decade > G x reference (0 = off) [0]
+  --rebuild-every N        auto: also rebuild after N refactorizations (0 = off)       [0]
+  --steps-csv FILE         one line per solve (step, level, times, iterations)
  Output:
   --verbose 0|1|2 --csv FILE --history FILE --write-solution FILE
 )";

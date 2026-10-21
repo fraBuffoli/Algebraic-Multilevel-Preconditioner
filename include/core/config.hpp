@@ -26,8 +26,22 @@ struct SolverConfig{
     int nz = 0;                             ///< Generator: cells along z-axis (0 = same as nx).
     double nu = 1.0;                        ///< Generator: viscosity.
     int ncomp = 4;                          ///< Generator: numeber of unknowns per cell for coupled problems. 
-    int block_size = 0;                     ///< Unknowns per cell (0 = automatic: 1 or ncomp).     
-    unsigned seed = 12345;                  ///< Seed of the random right-hand side. 
+    int block_size = 0;                     ///< Unknowns per cell (0 = automatic: 1 or ncomp).
+    unsigned seed = 12345;                  ///< Seed of the random right-hand side.
+    double rho_ratio = 1000.0;              ///< Generator bubbles: liquid / gas density ratio.
+    int nbubbles = 50;                      ///< Generator bubbles: number of bubbles.
+    double radius = 0.06;                   ///< Generator bubbles: radius (unit domain).
+    double cfl = 0.5;                       ///< Generator bubbles: rise per step [cells].
+    double pulse = 0.0;                     ///< Generators convdiff/coupled: amplitude of the convection pulsation in time.
+    int pulse_period = 20;                  ///< Period of the pulsation [steps].
+
+    // SEQUENCE OF SOLVES (time loop, same sparsity pattern)
+    int steps = 0;                          ///< Steps of the time loop (0 = a single solve, as in the paper).
+    int correctors = 3;                     ///< Solves per step with the same matrix and a new right-hand side.
+    std::string reuse = "auto";             ///< Setup reuse between solves: "off" (rebuild every solve), "refactor" (never rebuild) or "auto" (break-even).
+    double rebuild_growth = 0.0;            ///< auto: also rebuild when iterations per decade exceed this factor times the reference (0 = off).
+    int rebuild_every = 0;                  ///< auto: also rebuild after this many refactorizations (0 = off).
+    std::string steps_csv;                  ///< Append one line per solve to this CSV file (rank 0).
 
     // PARTITIONING PARAMETERS
     std::string metis_objective = "cut";    ///< METIS objective: "cut" or "vol".

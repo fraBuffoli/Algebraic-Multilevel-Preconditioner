@@ -6,7 +6,10 @@
  * @code
  * mpirun -np 16 ./bin/schwarz2lvl --generate convdiff3d --nx 40 --nu 1e-2 --tau 0.3 --nev 60
  * mpirun -np 64 ./bin/schwarz2lvl --matrix matrices/G3_circuit.mtx --csv results.csv
+ * mpirun -np 16 ./bin/schwarz2lvl --generate bubbles3d --nx 48 --tau 0.3 --nev 60 --steps 10 --reuse auto
  * @endcode
+ * With `--steps N > 0` the driver runs a sequence of solves with the same pattern
+ * (runTimeLoop(): setup reuse between time steps), otherwise the single solve of the paper.
  */
 #include "config.hpp"
 #include "distributed_matrix.hpp"
@@ -18,9 +21,11 @@
 #include "mpi_utils.hpp"
 #include "one_level_schwarz.hpp"
 #include "subdomain.hpp"
+#include "time_loop.hpp"
 #include "timer.hpp"
 #include "two_level_schwarz.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -62,6 +67,15 @@ int run(int argc, char** argv)
     out << "schwarz2lvl: two-level algebraic Schwarz (Al Daas, Jolivet, Rees, SISC 2023), " << np
         << " MPI processes\n";
     if (rank == 0 && cfg.verbose >= 1) cfg.print(out);
+
+    // ---------------------------------------------------------------- sequence of solves
+    if (cfg.steps > 0) {
+        const std::vector<solv::SolveRecord> recs = solv::runTimeLoop(cfg, comm, out);
+        solv::printTimeLoopSummary(recs, cfg, comm, out);
+        utils::TimerRegistry::instance().report(comm, cfg.verbose >= 1 ? out : utils::Log::nullStream());
+        const bool all = std::all_of(recs.begin(), recs.end(), [](const solv::SolveRecord& r) { return r.converged; });
+        return all ? 0 : 2;
+    }
 
     // ---------------------------------------------------------------- decomposition
     part::DecompositionInfo info;

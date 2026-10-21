@@ -47,6 +47,17 @@ struct CoarseStats {
  *  4. V_i = orth(D_i Z_i), coarse numbering, A_00 = R_0 A R_0^T and its
  *     distributed factorization (CoarseSpace).
  * If the coarse space is empty (n0 = 0) the preconditioner reduces to the one-level one.
+ *
+ * update() follows new values of A with the same pattern (see UpdateLevel):
+ *  - Refactorize: numerical LU of A_ii (step 1) and, with the *same* basis V,
+ *    A_00 = R_0 A R_0^T and its numerical LU (step 4 without the halo exchanges);
+ *    steps 2-3 are skipped. Cost: a fraction of the setup (timer `update`).
+ *  - Rebuild: steps 1-4 as in the constructor (timer `setup`), on the subdomain
+ *    structure that already exists.
+ * The preconditioner stays a valid preconditioner of the *current* A after a
+ * Refactorize: only the coarse space (the selected eigenvectors) is the old one,
+ * so the number of iterations may grow as the matrix drifts away from the one
+ * the eigenvectors were computed for; a ReusePolicy decides when to rebuild.
  */
 class TwoLevelSchwarz final : public Preconditioner {
 public:
@@ -64,6 +75,10 @@ public:
     void apply(const core::Vec& r, core::Vec& z) const override;
     std::string name() const override;
 
+    /// @brief See the class description and Preconditioner::update() (collective).
+    UpdateLevel update(UpdateLevel requested) override;
+    bool upToDate() const override { return version_ == sd_.valuesVersion(); }
+
     /// @brief Coarse space statistics.
     const CoarseStats& stats() const { return stats_; }
     /// @brief Result of the local eigensolver on this rank.
@@ -78,12 +93,17 @@ public:
 private:
     const part::Subdomain& sd_;                     ///< Subdomain.
     const linalg::DistributedMatrix& A_;            ///< Global operator.
+    core::SolverConfig cfg_;                        ///< Configuration (kept for Rebuild).
+    long version_ = 0;                              ///< Subdomain::valuesVersion() of the current setup.
     Correction correction_;                         ///< Deflated or additive.
     std::unique_ptr<OneLevelSchwarz> one_;          ///< One-level preconditioner.
     std::unique_ptr<CoarseSpace> coarse_;           ///< Coarse space.
     LocalEigensolverResult eig_;                    ///< Local eigensolver output.
     CoarseStats stats_;                             ///< Statistics.
     mutable core::Vec x0_, w_, z1_;                 ///< Work vectors.
+
+    /// @brief Steps 2-4: A~_ii, local eigenproblem, coarse basis, A_00 and its factorization, statistics.
+    void buildCoarse();
 };
 
 } // namespace schwarz2lvl::prec

@@ -37,6 +37,23 @@ public:
     virtual bool factorize(const core::SpMat& A) = 0;
 
     /**
+     * @brief Numerical refactorization of a matrix with the same sparsity pattern as the last
+     *        one passed to factorize(): the symbolic analysis (fill-reducing ordering,
+     *        elimination tree, memory of the factors) is reused, only the numbers are recomputed.
+     *
+     * The default is a full factorize(); the backends override it. If the numerical phase
+     * fails, or it is less accurate than the full factorization (PARDISO: more perturbed
+     * pivots, e.g. because scaling and matching were computed from the old values), the
+     * backend falls back to factorize() and refactorizationFellBack() returns true.
+     * @pre factorize() succeeded once, and @p A has the same pattern (not checked).
+     * @return false if the (fallback) factorization failed.
+     */
+    virtual bool refactorize(const core::SpMat& A) { return factorize(A); }
+
+    /// @brief True if the last refactorize() had to perform a full factorization.
+    bool refactorizationFellBack() const { return fell_back_; }
+
+    /**
      * @brief Solves A x = b with the current factorization.
      * @param b Right-hand side.
      * @param x Solution (resized).
@@ -76,7 +93,8 @@ public:
     const std::string& lastError() const { return error_; }
 
 protected:
-    std::string error_; ///< Last error message.
+    std::string error_;      ///< Last error message.
+    bool fell_back_ = false; ///< The last refactorize() performed a full factorization.
 };
 
 /**

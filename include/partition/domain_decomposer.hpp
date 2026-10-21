@@ -12,6 +12,7 @@
 
 #include <mpi.h>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -32,6 +33,7 @@ struct DecompositionInfo {
     bool keep_global = false;                       ///< Input: keep the permuted global system on rank 0.
     CsrMatrix A_perm;                               ///< Rank 0 (if keep_global): permuted global matrix.
     std::vector<core::Scalar> b_perm;               ///< Rank 0 (if keep_global): permuted right-hand side.
+    std::uint64_t pattern_hash = 0;                 ///< Rank 0: hash of the sparsity pattern (original ordering).
 };
 
 /**
@@ -62,6 +64,29 @@ public:
      * @return The local part of the system on every process.
      */
     static core::LocalSystem decompose(const core::SolverConfig& cfg, MPI_Comm comm, DecompositionInfo& info);
+
+    /**
+     * @brief Replaces the values of the distributed system with those of step @p step (collective).
+     *
+     * Rank 0 loads the matrix of the step (generator at pseudo-time @p step, or the file
+     * obtained by formatting `--matrix` with @p step), checks that its sparsity pattern is the
+     * one of the decomposition (hash) and sends every rank the *values* of its rows, in the
+     * order of `sys.col`, plus its right-hand side. Partition, numbering and pattern are kept:
+     * this is what happens in OpenFOAM, where each processor reassembles its matrix on the same
+     * mesh at every time step.
+     * @throws std::runtime_error if the pattern, the size or the symmetry changed.
+     */
+    static void updateValues(const core::SolverConfig& cfg, int step, core::LocalSystem& sys, DecompositionInfo& info);
+
+    /**
+     * @brief Distributes a global vector given on rank 0 in the *original* ordering (collective).
+     * @param sys  Local system (ownership).
+     * @param xg   Rank 0: global vector, original ordering (ignored elsewhere).
+     * @param info Decomposition info (permutation on rank 0).
+     * @return The owned entries.
+     */
+    static core::Vec scatterOriginalOrder(const core::LocalSystem& sys, const std::vector<core::Scalar>& xg,
+                                          const DecompositionInfo& info);
 
     /**
      * @brief Gathers a distributed vector on rank 0 in the *original* ordering (collective).

@@ -22,6 +22,27 @@ struct GeneratedProblem {
 };
 
 /**
+ * @brief Parameters of the generators, including the time-dependent ones.
+ *
+ * `time` is a pseudo-time measured in steps. Every generator gives a matrix with the
+ * same sparsity pattern for every `time`, so that a sequence of matrices mimics the
+ * pressure matrices of a CFD time loop.
+ */
+struct GeneratorOptions {
+    int nx = 64, ny = 64, nz = 64; ///< Cells per direction (nz ignored in 2D).
+    double nu = 1.0;               ///< Viscosity (convdiff, coupled).
+    int ncomp = 4;                 ///< Unknowns per cell (coupled).
+    double time = 0.0;             ///< Pseudo-time [steps].
+    double pulse = 0.0;            ///< convdiff/coupled: convection scaled by 1 + pulse sin(2 pi time / pulse_period).
+    int pulse_period = 20;         ///< Period of the pulsation [steps].
+    double rho_ratio = 1000.0;     ///< bubbles: liquid / gas density ratio.
+    int nbubbles = 50;             ///< bubbles: number of bubbles.
+    double radius = 0.06;          ///< bubbles: radius (domain = unit square/cube).
+    double cfl = 0.5;              ///< bubbles: rise per step, in cells.
+    unsigned seed = 2024;          ///< bubbles: seed of the initial positions.
+};
+
+/**
  * @class MatrixGenerator
  * @brief Cell-centred finite-volume generators on the unit square/cube.
  *
@@ -47,9 +68,30 @@ struct GeneratedProblem {
  *    (viscosity nu*(1+c) for component c) with a nonsymmetric cyclic coupling
  *    between components, unknowns interleaved cell by cell as in OpenFOAM
  *    coupled solvers (block size = ncomp).
+ *  - `bubbles2d`, `bubbles3d`   : pressure equation of an incompressible two-phase (VoF)
+ *    flow, -div(beta grad p) = f with beta = 1/rho: gas bubbles (rho_g = 1/rho_ratio)
+ *    rising in a liquid (rho_l = 1). The phase fraction alpha is a smoothed indicator of
+ *    the bubbles (interface about two cells thick, as a VoF interface), rho = alpha rho_g +
+ *    (1 - alpha) rho_l per cell, and the face coefficient is the arithmetic mean of the cell
+ *    values of beta (OpenFOAM: fvc::interpolate(rAU), with rAU ~ dt / rho). Walls (zero flux)
+ *    everywhere, p = 0 on the top face. SPD, diagonally dominant (an M-matrix): the setting of
+ *    Lemma 3.2 of the paper. The bubbles rise by `cfl` cells per step (periodic in the
+ *    vertical direction: a bubble leaving the top re-enters at the bottom) and wobble
+ *    sideways, so the matrix values change from step to step near the interfaces only.
+ *
+ * With `pulse` > 0 the convection of `convdiff`/`coupled` is scaled by
+ * 1 + pulse sin(2 pi time / pulse_period): nonsymmetric matrices that change with time.
  */
 class MatrixGenerator {
 public:
+    /**
+     * @brief Generates a problem (all parameters, including the pseudo-time).
+     * @param name Generator name (see class description).
+     * @param opt  Parameters.
+     * @throws std::invalid_argument for unknown names.
+     */
+    static GeneratedProblem generate(const std::string& name, const GeneratorOptions& opt);
+
     /**
      * @brief Generates a problem.
      * @param name  Generator name (see class description).
@@ -69,6 +111,10 @@ public:
      * @param y Ordinate in [0, 1].
      */
     static double kappa(double x, double y);
+
+private:
+    /// @brief bubbles2d (dim = 2) / bubbles3d (dim = 3).
+    static GeneratedProblem bubbles(int dim, const GeneratorOptions& opt);
 };
 
 } // namespace schwarz2lvl::utils

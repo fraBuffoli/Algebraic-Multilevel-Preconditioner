@@ -12,6 +12,7 @@
 #include "timer.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <climits>
 #include <cmath>
 #include <numeric>
@@ -63,23 +64,79 @@ struct GlobalProblem {
     std::string description;  ///< Description.
 };
 
-/// @brief Rank 0: reads or generates the matrix and builds the right-hand side.
-GlobalProblem loadProblem(const core::SolverConfig& cfg)
+/**
+ * @brief File name of step @p step: a pattern with one integer conversion (%d, %4d, %04d)
+ *        is formatted with the step; a name without '%' is returned unchanged.
+ */
+std::string stepFileName(const std::string& pattern, int step)
+{
+    const auto p = pattern.find('%');
+    if (p == std::string::npos) return pattern;
+    std::size_t q = p + 1;
+    const bool zero = q < pattern.size() && pattern[q] == '0';
+    if (zero) ++q;
+    int width = 0;
+    while (q < pattern.size() && std::isdigit(static_cast<unsigned char>(pattern[q]))) width = 10 * width + (pattern[q++] - '0');
+    if (q >= pattern.size() || pattern[q] != 'd' || pattern.find('%', q + 1) != std::string::npos)
+        throw std::invalid_argument("--matrix: a step pattern must contain exactly one %d / %0Nd conversion");
+    std::string num = std::to_string(step);
+    if (static_cast<int>(num.size()) < width) num.insert(0, static_cast<std::size_t>(width) - num.size(), zero ? '0' : ' ');
+    return pattern.substr(0, p) + num + pattern.substr(q + 1);
+}
+
+/// @brief Generator parameters of the configuration at pseudo-time @p step.
+utils::GeneratorOptions generatorOptions(const core::SolverConfig& cfg, int step)
+{
+    utils::GeneratorOptions o;
+    o.nx = cfg.nx;
+    o.ny = cfg.ny;
+    o.nz = cfg.nz;
+    o.nu = cfg.nu;
+    o.ncomp = cfg.ncomp;
+    o.time = step;
+    o.pulse = cfg.pulse;
+    o.pulse_period = cfg.pulse_period;
+    o.rho_ratio = cfg.rho_ratio;
+    o.nbubbles = cfg.nbubbles;
+    o.radius = cfg.radius;
+    o.cfl = cfg.cfl;
+    return o;
+}
+
+/// @brief FNV-1a hash of the sparsity pattern (size, row pointer, columns).
+std::uint64_t hashPattern(const CsrMatrix& A)
+{
+    std::uint64_t h = 1469598103934665603ULL;
+    auto mix = [&h](std::uint64_t v) {
+        for (int b = 0; b < 8; ++b) {
+            h ^= (v >> (8 * b)) & 0xffULL;
+            h *= 1099511628211ULL;
+        }
+    };
+    mix(static_cast<std::uint64_t>(A.nrows));
+    for (const auto v : A.row_ptr) mix(static_cast<std::uint64_t>(v));
+    for (const auto v : A.col) mix(static_cast<std::uint64_t>(v));
+    return h;
+}
+
+/// @brief Rank 0: reads or generates the matrix of step @p step and builds the right-hand side.
+GlobalProblem loadProblem(const core::SolverConfig& cfg, int step = 0)
 {
     GlobalProblem g;
     std::vector<core::Scalar> generated_rhs;
     if (!cfg.generate.empty()) {
         utils::ScopedTimer t("decomposition.generate");
-        utils::GeneratedProblem p = utils::MatrixGenerator::generate(cfg.generate, cfg.nx, cfg.ny, cfg.nz, cfg.nu, cfg.ncomp);
+        utils::GeneratedProblem p = utils::MatrixGenerator::generate(cfg.generate, generatorOptions(cfg, step));
         g.A = std::move(p.A);
         generated_rhs = std::move(p.rhs);
         g.block_size = p.block_size;
         g.description = p.description;
     } else {
         utils::ScopedTimer t("decomposition.read");
-        g.A = MatrixMarketIO::readMatrix(cfg.matrix_file);
+        const std::string file = stepFileName(cfg.matrix_file, step);
+        g.A = MatrixMarketIO::readMatrix(file);
         std::ostringstream d;
-        d << cfg.matrix_file << " (n=" << g.A.nrows << ", nnz=" << g.A.nnz() << ")";
+        d << file << " (n=" << g.A.nrows << ", nnz=" << g.A.nnz() << ")";
         g.description = d.str();
     }
     if (g.A.nrows != g.A.ncols) throw std::runtime_error("the matrix must be square");
@@ -198,6 +255,7 @@ core::LocalSystem DomainDecomposer::decompose(const core::SolverConfig& cfg, MPI
                 new_to_old[static_cast<std::size_t>(k)] = static_cast<core::GlobalIndex>(i);
                 old_to_new[i] = k;
             }
+            info.pattern_hash = hashPattern(g.A);
             meta[0] = static_cast<long long>(g.A.nrows);
             meta[1] = static_cast<long long>(g.A.nnz());
             meta[2] = g.block_size;
@@ -260,6 +318,82 @@ core::LocalSystem DomainDecomposer::decompose(const core::SolverConfig& cfg, MPI
         MPI_Recv(sys.rhs.data(), toCount(sys.rhs.size()), MPI_DOUBLE, 0, kTagRhs, comm, MPI_STATUS_IGNORE);
     }
     return sys;
+}
+
+void DomainDecomposer::updateValues(const core::SolverConfig& cfg, int step, core::LocalSystem& sys, DecompositionInfo& info)
+{
+    utils::ScopedTimer timer("decomposition.update");
+    MPI_Comm comm = sys.comm;
+    const int rank = core::mpiRank(comm);
+    const int nranks = core::mpiSize(comm);
+    GlobalProblem g;
+    std::vector<core::GlobalIndex> old_to_new;
+    std::string error;
+    if (rank == 0) {
+        try {
+            g = loadProblem(cfg, step);
+            if (g.A.nrows != sys.n_global || g.block_size != sys.block_size)
+                throw std::runtime_error("step " + std::to_string(step) + ": size or block size changed");
+            if (hashPattern(g.A) != info.pattern_hash)
+                throw std::runtime_error("step " + std::to_string(step) + ": the sparsity pattern changed");
+            if (g.A.symmetric != sys.symmetric)
+                throw std::runtime_error("step " + std::to_string(step) + ": the symmetry of the matrix changed");
+            old_to_new.resize(info.new_to_old.size());
+            for (std::size_t k = 0; k < info.new_to_old.size(); ++k)
+                old_to_new[static_cast<std::size_t>(info.new_to_old[k])] = static_cast<core::GlobalIndex>(k);
+            info.description = g.description;
+        } catch (const std::exception& e) {
+            error = e.what();
+        }
+    }
+    bcastString(error, comm);
+    if (!error.empty()) throw std::runtime_error(error);
+    bcastString(info.description, comm);
+
+    // Values and right-hand side only: the receivers already have row_ptr and col, and
+    // extractRows() orders every row by new column index exactly as decompose() did.
+    if (rank == 0) {
+        std::vector<std::int64_t> rp;
+        std::vector<core::GlobalIndex> cl;
+        std::vector<core::Scalar> vl, rh;
+        for (int p = 1; p < nranks; ++p) {
+            extractRows(g.A, g.b, info.new_to_old, old_to_new, sys.ownership[static_cast<std::size_t>(p)],
+                        sys.ownership[static_cast<std::size_t>(p) + 1], rp, cl, vl, rh);
+            MPI_Send(vl.data(), toCount(vl.size()), MPI_DOUBLE, p, kTagVal, comm);
+            MPI_Send(rh.data(), toCount(rh.size()), MPI_DOUBLE, p, kTagRhs, comm);
+        }
+        extractRows(g.A, g.b, info.new_to_old, old_to_new, sys.ownership[0], sys.ownership[1], rp, cl, vl, rh);
+        if (cl != sys.col) throw std::logic_error("DomainDecomposer::updateValues: column order changed");
+        sys.val = std::move(vl);
+        sys.rhs = std::move(rh);
+        if (info.keep_global)
+            extractRows(g.A, g.b, info.new_to_old, old_to_new, 0, g.A.nrows, info.A_perm.row_ptr, info.A_perm.col,
+                        info.A_perm.val, info.b_perm);
+    } else {
+        MPI_Recv(sys.val.data(), toCount(sys.val.size()), MPI_DOUBLE, 0, kTagVal, comm, MPI_STATUS_IGNORE);
+        MPI_Recv(sys.rhs.data(), toCount(sys.rhs.size()), MPI_DOUBLE, 0, kTagRhs, comm, MPI_STATUS_IGNORE);
+    }
+}
+
+core::Vec DomainDecomposer::scatterOriginalOrder(const core::LocalSystem& sys, const std::vector<core::Scalar>& xg,
+                                                 const DecompositionInfo& info)
+{
+    const int rank = core::mpiRank(sys.comm);
+    const int nranks = core::mpiSize(sys.comm);
+    std::vector<int> counts(static_cast<std::size_t>(nranks));
+    for (int p = 0; p < nranks; ++p)
+        counts[static_cast<std::size_t>(p)] = toCount(static_cast<std::size_t>(sys.ownership[static_cast<std::size_t>(p) + 1] - sys.ownership[static_cast<std::size_t>(p)]));
+    const std::vector<int> displs = core::displacements(counts);
+    std::vector<core::Scalar> xp;
+    if (rank == 0) {
+        if (xg.size() != static_cast<std::size_t>(sys.n_global)) throw std::invalid_argument("scatterOriginalOrder: wrong size");
+        xp.resize(xg.size());
+        for (std::size_t k = 0; k < xp.size(); ++k) xp[k] = xg[static_cast<std::size_t>(info.new_to_old[k])];
+    }
+    core::Vec x(sys.nOwned());
+    MPI_Scatterv(xp.data(), counts.data(), displs.data(), MPI_DOUBLE, x.data(), static_cast<int>(x.size()), MPI_DOUBLE, 0,
+                 sys.comm);
+    return x;
 }
 
 std::vector<core::Scalar> DomainDecomposer::gather(const core::LocalSystem& sys, const core::Vec& x_owned)

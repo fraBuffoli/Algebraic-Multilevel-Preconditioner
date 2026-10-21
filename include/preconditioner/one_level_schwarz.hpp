@@ -44,6 +44,17 @@ public:
     void apply(const core::Vec& r, core::Vec& z) const override;
     std::string name() const override { return variant_ == Variant::RAS ? "RAS" : "ASM"; }
 
+    /**
+     * @brief Follows the values of A_ii (collective).
+     *
+     * Refactorize: numerical LU of A_ii with the symbolic analysis of the last full
+     * factorization (timer `update.local_refactorization`). Rebuild: full LU, as in the
+     * constructor (timer `setup.local_factorization`).
+     * @throws std::runtime_error if the factorization fails on some rank.
+     */
+    UpdateLevel update(UpdateLevel requested) override;
+    bool upToDate() const override { return version_ == sd_.valuesVersion(); }
+
     /// @brief Local factorization backend.
     const linalg::LocalSolver& localSolver() const { return *solver_; }
     /// @brief Variant.
@@ -53,7 +64,11 @@ private:
     const part::Subdomain& sd_;                     ///< Subdomain.
     Variant variant_;                               ///< RAS or ASM.
     std::unique_ptr<linalg::LocalSolver> solver_;   ///< LU of A_ii.
+    long version_ = 0;                              ///< Subdomain::valuesVersion() of the current LU.
     mutable core::Vec rloc_, yloc_;                 ///< Work vectors on Omega_i.
+
+    /// @brief Full factorization of A_ii, collective failure check.
+    void factorizeFull();
 };
 
 } // namespace schwarz2lvl::prec

@@ -61,10 +61,30 @@ void gatherTriplets(const std::vector<core::GlobalTriplet>& t, MPI_Comm comm, in
     MPI_Gatherv(v.data(), mine, MPI_DOUBLE, vals.data(), cnt.data(), dsp.data(), MPI_DOUBLE, root, comm);
 }
 
+/// @brief Gathers only the values of the triplets on rank @p root, in the same order as gatherTriplets().
+std::vector<core::Scalar> gatherValues(const std::vector<core::GlobalTriplet>& t, MPI_Comm comm, int root)
+{
+    const int np = core::mpiSize(comm);
+    std::vector<core::Scalar> v(t.size());
+    for (std::size_t k = 0; k < t.size(); ++k) v[k] = t[k].val;
+    int mine = static_cast<int>(t.size());
+    std::vector<int> cnt(static_cast<std::size_t>(np));
+    MPI_Gather(&mine, 1, MPI_INT, cnt.data(), 1, MPI_INT, root, comm);
+    const std::vector<int> dsp = core::displacements(cnt);
+    const bool is_root = core::mpiRank(comm) == root;
+    std::vector<core::Scalar> vals(is_root ? static_cast<std::size_t>(dsp.back() + cnt.back()) : 0);
+    MPI_Gatherv(v.data(), mine, MPI_DOUBLE, vals.data(), cnt.data(), dsp.data(), MPI_DOUBLE, root, comm);
+    return vals;
+}
+
 // ------------------------------------------------------------------ root solver
 /**
  * @brief Gathers A_00 on rank 0 and factorizes it with a sequential LU.
  *        Simple and robust, but not scalable: a fallback and a reference.
+ *
+ * update(): rank 0 keeps the assembled matrix and, for every gathered coefficient, its
+ * position in the value array (duplicates share a position), so new values are summed in
+ * place and the LU is redone with LocalSolver::refactorize().
  */
 class RootCoarseSolver final : public CoarseSolver {
 public:
@@ -87,14 +107,39 @@ public:
             t.reserve(r.size());
             for (std::size_t k = 0; k < r.size(); ++k)
                 t.emplace_back(static_cast<core::LocalIndex>(r[k]), static_cast<core::LocalIndex>(c[k]), v[k]);
-            core::SpMat E(n0, n0);
-            E.setFromTriplets(t.begin(), t.end()); // duplicates are summed
+            E_.resize(n0, n0);
+            E_.setFromTriplets(t.begin(), t.end()); // duplicates are summed
+            // Position of every gathered coefficient in E_.valuePtr() (column-major, compressed).
+            pos_.resize(r.size());
+            const core::LocalIndex* inner = E_.innerIndexPtr();
+            for (std::size_t k = 0; k < r.size(); ++k) {
+                const core::LocalIndex* b = inner + E_.outerIndexPtr()[c[k]];
+                const core::LocalIndex* e = inner + E_.outerIndexPtr()[c[k] + 1];
+                pos_[k] = static_cast<core::LocalIndex>(std::lower_bound(b, e, static_cast<core::LocalIndex>(r[k])) - inner);
+            }
             solver_ = linalg::makeLocalSolver(backend_);
-            ok = solver_->factorize(E) ? 1 : 0;
+            ok = solver_->factorize(E_) ? 1 : 0;
             if (!ok) err = solver_->lastError();
         }
         MPI_Bcast(&ok, 1, MPI_INT, 0, comm_);
         if (!ok) throw std::runtime_error("coarse matrix factorization failed (root solver) " + err);
+    }
+
+    void update(std::vector<core::GlobalTriplet>& entries) override
+    {
+        const std::vector<core::Scalar> v = gatherValues(entries, comm_, 0);
+        int ok = 1;
+        std::string err;
+        if (core::mpiRank(comm_) == 0) {
+            if (v.size() != pos_.size()) throw std::logic_error("root coarse solver: the coarse pattern changed");
+            core::Scalar* e = E_.valuePtr();
+            std::fill(e, e + E_.nonZeros(), 0.0);
+            for (std::size_t k = 0; k < v.size(); ++k) e[pos_[k]] += v[k];
+            ok = solver_->refactorize(E_) ? 1 : 0;
+            if (!ok) err = solver_->lastError();
+        }
+        MPI_Bcast(&ok, 1, MPI_INT, 0, comm_);
+        if (!ok) throw std::runtime_error("coarse matrix refactorization failed (root solver) " + err);
     }
 
     void solve(const core::Vec& c, core::Vec& y) const override
@@ -120,6 +165,8 @@ private:
     std::vector<core::GlobalIndex> offsets_;
     std::vector<int> cnt_, dsp_;
     std::unique_ptr<linalg::LocalSolver> solver_;
+    core::SpMat E_;                     ///< Rank 0: assembled A_00 (kept for update()).
+    std::vector<core::LocalIndex> pos_; ///< Rank 0: gathered coefficient k -> position in E_.valuePtr().
     mutable core::Vec buf_, sol_;
 };
 
@@ -137,6 +184,8 @@ private:
  * - Centralized right-hand side and solution on the host (world rank 0):
  *   one MPI_Gatherv / MPI_Scatterv per application.
  * - SYM = 2 (general symmetric LDL^T) if A is symmetric, SYM = 0 otherwise.
+ * - update(): the values are gathered on the leaders in the order of setup() (same irn/jcn)
+ *   and MUMPS is called with JOB = 2 (numerical factorization, analysis of JOB = 4 kept).
  */
 class MumpsCoarseSolver final : public CoarseSolver {
 public:
@@ -157,6 +206,7 @@ public:
     {
         comm_ = comm;
         offsets_ = offsets;
+        symmetric_ = symmetric;
         coarseCounts(offsets_, cnt_, dsp_);
         const int rank = core::mpiRank(comm_), np = core::mpiSize(comm_);
         if (offsets_.back() > INT_MAX) throw std::runtime_error("coarse problem too large for 32-bit MUMPS");
@@ -169,10 +219,7 @@ public:
         MPI_Comm_split(comm_, group, rank, &group_comm_);
         MPI_Comm_split(comm_, leader_ ? 0 : MPI_UNDEFINED, rank, &mumps_comm_);
 
-        if (symmetric) // SYM = 2: only one triangle must be provided
-            entries.erase(std::remove_if(entries.begin(), entries.end(),
-                                         [](const core::GlobalTriplet& t) { return t.row < t.col; }),
-                          entries.end());
+        filter(entries);
         std::vector<core::GlobalIndex> r, c;
         gatherTriplets(entries, group_comm_, 0, r, c, a_);
         irn_.resize(r.size());
@@ -202,22 +249,28 @@ public:
             id_.irn_loc = irn_.data();
             id_.jcn_loc = jcn_.data();
             id_.a_loc = a_.data();
-            for (int attempt = 0; attempt < 5; ++attempt) {
-                id_.job = 4;               // analysis + factorization
-                dmumps_c(&id_);
-                status = id_.infog[0];
-                // -9 / -8 / -14 / -15 ... : workspace too small -> more relaxation (ICNTL(14)).
-                if (status == -9 || status == -8 || status == -14 || status == -15 || status == -17 ||
-                    status == -20) {
-                    id_.icntl[13] = std::max(40, 2 * id_.icntl[13]);
-                    continue;
-                }
-                break;
-            }
+            status = run(4);               // analysis + factorization
         }
         MPI_Bcast(&status, 1, MPI_INT, 0, comm_);
         if (status < 0)
             throw std::runtime_error("MUMPS factorization of the coarse matrix failed, INFOG(1) = " +
+                                     std::to_string(status));
+    }
+
+    void update(std::vector<core::GlobalTriplet>& entries) override
+    {
+        filter(entries);
+        std::vector<core::Scalar> v = gatherValues(entries, group_comm_, 0);
+        int status = 0;
+        if (leader_) {
+            if (v.size() != a_.size()) throw std::logic_error("MUMPS coarse solver: the coarse pattern changed");
+            a_ = std::move(v);
+            id_.a_loc = a_.data();
+            status = run(2);               // numerical factorization only (analysis of setup() kept)
+        }
+        MPI_Bcast(&status, 1, MPI_INT, 0, comm_);
+        if (status < 0)
+            throw std::runtime_error("MUMPS refactorization of the coarse matrix failed, INFOG(1) = " +
                                      std::to_string(status));
     }
 
@@ -243,6 +296,7 @@ public:
 
 private:
     int coarse_procs_;
+    bool symmetric_ = false;
     MPI_Comm comm_ = MPI_COMM_NULL, group_comm_ = MPI_COMM_NULL, mumps_comm_ = MPI_COMM_NULL;
     bool leader_ = false, initialized_ = false;
     std::vector<core::GlobalIndex> offsets_;
@@ -251,6 +305,33 @@ private:
     std::vector<core::Scalar> a_;
     mutable DMUMPS_STRUC_C id_{};
     mutable std::vector<core::Scalar> rhs_;
+
+    /// @brief SYM = 2: only one triangle must be provided (same filter in setup() and update()).
+    void filter(std::vector<core::GlobalTriplet>& entries) const
+    {
+        if (symmetric_)
+            entries.erase(std::remove_if(entries.begin(), entries.end(),
+                                         [](const core::GlobalTriplet& t) { return t.row < t.col; }),
+                          entries.end());
+    }
+
+    /// @brief Calls MUMPS with JOB = @p job; retries with more workspace on the "too small" errors.
+    int run(int job)
+    {
+        int status = 0;
+        for (int attempt = 0; attempt < 5; ++attempt) {
+            id_.job = job;
+            dmumps_c(&id_);
+            status = id_.infog[0];
+            // -9 / -8 / -14 / -15 ... : workspace too small -> more relaxation (ICNTL(14)).
+            if (status == -9 || status == -8 || status == -14 || status == -15 || status == -17 || status == -20) {
+                id_.icntl[13] = std::max(40, 2 * id_.icntl[13]);
+                continue;
+            }
+            break;
+        }
+        return status;
+    }
 };
 #endif
 
@@ -275,6 +356,12 @@ private:
  *   other than MPI_COMM_WORLD, so there symmetric matrices are factorized as general ones.
  * - Fill-in reducing ordering: METIS on the first process (iparm[1] = 2). The MPI nested
  *   dissection of PARDISO (iparm[1] = 10) hung in the tests (MKL 2023.2), so it is not used.
+ * - update(): setup() keeps the communication pattern (send position of every coefficient,
+ *   counts/displacements of the Alltoallv) and, on the leaders, the CSR position of every
+ *   received coefficient. New values travel with one Alltoallv of doubles, are summed in
+ *   place, and only phase 22 (numerical factorization) is run. If the factorization fails or
+ *   perturbs more pivots than the full one (scaling/matching computed in phase 11 from the
+ *   old values), phases 11 + 22 are redone.
  */
 class CPardisoCoarseSolver final : public CoarseSolver {
 public:
@@ -321,36 +408,41 @@ public:
         mtype_ = symmetric ? -2 : 11;
 
         // ---- send every coefficient to the leader owning its row.
-        if (symmetric) // mtype -2: upper triangle only
-            entries.erase(std::remove_if(entries.begin(), entries.end(),
-                                         [](const core::GlobalTriplet& t) { return t.row > t.col; }),
-                          entries.end());
-        std::vector<int> scnt(static_cast<std::size_t>(np), 0), rcnt(static_cast<std::size_t>(np));
+        filter(entries);
+        scnt_.assign(static_cast<std::size_t>(np), 0);
+        rcnt_.assign(static_cast<std::size_t>(np), 0);
         std::vector<int> dest(entries.size());
         {
             utils::ScopedTimer t("setup.coarse_factorization.exchange");
             for (std::size_t k = 0; k < entries.size(); ++k) {
                 const auto owner = std::upper_bound(offsets.begin(), offsets.end(), entries[k].row) - offsets.begin() - 1;
                 dest[k] = static_cast<int>(owner / stride_) * stride_;
-                ++scnt[static_cast<std::size_t>(dest[k])];
+                ++scnt_[static_cast<std::size_t>(dest[k])];
             }
-            MPI_Alltoall(scnt.data(), 1, MPI_INT, rcnt.data(), 1, MPI_INT, comm_);
-            std::vector<int> sdsp = core::displacements(scnt), rdsp = core::displacements(rcnt), pos = sdsp;
-            const std::size_t nrecv = static_cast<std::size_t>(rdsp.back() + rcnt.back());
-            std::vector<core::GlobalIndex> sr(entries.size()), sc(entries.size()), rr(nrecv), rc(nrecv);
-            std::vector<core::Scalar> sv(entries.size()), rv(nrecv);
+            MPI_Alltoall(scnt_.data(), 1, MPI_INT, rcnt_.data(), 1, MPI_INT, comm_);
+            sdsp_ = core::displacements(scnt_);
+            rdsp_ = core::displacements(rcnt_);
+            std::vector<int> pos = sdsp_;
+            nrecv_ = static_cast<std::size_t>(rdsp_.back() + rcnt_.back());
+            send_pos_.resize(entries.size());
+            for (std::size_t k = 0; k < entries.size(); ++k) send_pos_[k] = pos[static_cast<std::size_t>(dest[k])]++;
+            std::vector<core::GlobalIndex> sr(entries.size()), sc(entries.size()), rr(nrecv_), rc(nrecv_);
+            std::vector<core::Scalar> sv(entries.size()), rv(nrecv_);
             for (std::size_t k = 0; k < entries.size(); ++k) {
-                const int q = pos[static_cast<std::size_t>(dest[k])]++;
-                sr[static_cast<std::size_t>(q)] = entries[k].row;
-                sc[static_cast<std::size_t>(q)] = entries[k].col;
-                sv[static_cast<std::size_t>(q)] = entries[k].val;
+                const auto q = static_cast<std::size_t>(send_pos_[k]);
+                sr[q] = entries[k].row;
+                sc[q] = entries[k].col;
+                sv[q] = entries[k].val;
             }
             const MPI_Datatype gi = core::mpiType<core::GlobalIndex>();
-            MPI_Alltoallv(sr.data(), scnt.data(), sdsp.data(), gi, rr.data(), rcnt.data(), rdsp.data(), gi, comm_);
-            MPI_Alltoallv(sc.data(), scnt.data(), sdsp.data(), gi, rc.data(), rcnt.data(), rdsp.data(), gi, comm_);
-            MPI_Alltoallv(sv.data(), scnt.data(), sdsp.data(), MPI_DOUBLE, rv.data(), rcnt.data(), rdsp.data(),
+            MPI_Alltoallv(sr.data(), scnt_.data(), sdsp_.data(), gi, rr.data(), rcnt_.data(), rdsp_.data(), gi, comm_);
+            MPI_Alltoallv(sc.data(), scnt_.data(), sdsp_.data(), gi, rc.data(), rcnt_.data(), rdsp_.data(), gi, comm_);
+            MPI_Alltoallv(sv.data(), scnt_.data(), sdsp_.data(), MPI_DOUBLE, rv.data(), rcnt_.data(), rdsp_.data(),
                           MPI_DOUBLE, comm_);
-            if (active_) buildCsr(rr, rc, rv);
+            if (active_) {
+                buildPattern(rr, rc);
+                fillValues(rv);
+            }
         }
 
         // ---- analysis + numerical factorization (collective over the active leaders).
@@ -401,6 +493,45 @@ public:
         }
     }
 
+    void update(std::vector<core::GlobalTriplet>& entries) override
+    {
+        filter(entries);
+        if (entries.size() != send_pos_.size()) throw std::logic_error("cpardiso coarse solver: the coarse pattern changed");
+        // ---- only the values travel, along the communication pattern of setup().
+        std::vector<core::Scalar> sv(entries.size()), rv(nrecv_);
+        for (std::size_t k = 0; k < entries.size(); ++k) sv[static_cast<std::size_t>(send_pos_[k])] = entries[k].val;
+        MPI_Alltoallv(sv.data(), scnt_.data(), sdsp_.data(), MPI_DOUBLE, rv.data(), rcnt_.data(), rdsp_.data(),
+                      MPI_DOUBLE, comm_);
+        // ---- phase 22 with the analysis of the last full factorization.
+        MKL_INT error = 0;
+        long long perturbed = 0;
+        if (active_) {
+            fillValues(rv);
+            MKL_INT phase = 22;
+            error = call(phase, nullptr, nullptr);
+            perturbed = static_cast<long long>(iparm_[13]);
+        }
+        long long err = core::allreduceMin(static_cast<core::GlobalIndex>(error), comm_);
+        perturbed = core::allreduceMax(static_cast<core::GlobalIndex>(perturbed), comm_);
+        if (err != 0 || perturbed > perturbed_) { // stale scaling/matching: full analysis + factorization
+            ++full_refactorizations_;
+            if (active_) {
+                MKL_INT phase = 11;
+                error = call(phase, nullptr, nullptr);
+                if (error == 0) {
+                    phase = 22;
+                    error = call(phase, nullptr, nullptr);
+                }
+                perturbed = static_cast<long long>(iparm_[13]);
+            }
+            err = core::allreduceMin(static_cast<core::GlobalIndex>(error), comm_);
+            perturbed_ = core::allreduceMax(static_cast<core::GlobalIndex>(perturbed), comm_);
+        }
+        if (err != 0)
+            throw std::runtime_error("MKL cluster_sparse_solver: coarse refactorization failed, error = " +
+                                     std::to_string(err));
+    }
+
     void solve(const core::Vec& c, core::Vec& y) const override
     {
         MPI_Gatherv(c.data(), static_cast<int>(c.size()), MPI_DOUBLE, rhs_.data(), gcnt_.data(), gdsp_.data(),
@@ -420,26 +551,38 @@ public:
     std::string name() const override
     {
         return "cpardiso(" + std::to_string(nprocs_) + " procs, mtype " + std::to_string(mtype_) + ", nnz(LU) " +
-               std::to_string(factor_nnz_) + ", perturbed pivots " + std::to_string(perturbed_) + ")";
+               std::to_string(factor_nnz_) + ", perturbed pivots " + std::to_string(perturbed_) +
+               (full_refactorizations_ ? ", full refactorizations " + std::to_string(full_refactorizations_) : "") + ")";
     }
 
 private:
-    /// @brief Sorted, duplicate-free one-based CSR of the rows [first_, last_) (diagonal always stored).
-    void buildCsr(const std::vector<core::GlobalIndex>& r, const std::vector<core::GlobalIndex>& c,
-                  const std::vector<core::Scalar>& v)
+    /// @brief mtype -2: upper triangle only (same filter in setup() and update()).
+    void filter(std::vector<core::GlobalTriplet>& entries) const
+    {
+        if (mtype_ == -2)
+            entries.erase(std::remove_if(entries.begin(), entries.end(),
+                                         [](const core::GlobalTriplet& t) { return t.row > t.col; }),
+                          entries.end());
+    }
+
+    /**
+     * @brief Sorted, duplicate-free one-based CSR pattern of the rows [first_, last_) (diagonal
+     *        always stored) and, for every received coefficient, its position in a_ (recv_pos_).
+     */
+    void buildPattern(const std::vector<core::GlobalIndex>& r, const std::vector<core::GlobalIndex>& c)
     {
         const auto nloc = static_cast<std::size_t>(last_ - first_);
         std::vector<std::size_t> cnt(nloc + 1, 0);
         for (const auto row : r) ++cnt[static_cast<std::size_t>(row - first_) + 1];
         for (std::size_t i = 0; i < nloc; ++i) cnt[i + 1] += cnt[i];
-        std::vector<std::pair<core::GlobalIndex, core::Scalar>> e(r.size());
+        std::vector<std::pair<core::GlobalIndex, std::size_t>> e(r.size()); // (column, received index)
         {
             std::vector<std::size_t> pos(cnt.begin(), cnt.end() - 1);
-            for (std::size_t k = 0; k < r.size(); ++k) e[pos[static_cast<std::size_t>(r[k] - first_)]++] = {c[k], v[k]};
+            for (std::size_t k = 0; k < r.size(); ++k) e[pos[static_cast<std::size_t>(r[k] - first_)]++] = {c[k], k};
         }
         ia_.assign(nloc + 1, 1);
         ja_.clear();
-        a_.clear();
+        recv_pos_.assign(r.size(), 0);
         for (std::size_t i = 0; i < nloc; ++i) {
             auto b = e.begin() + static_cast<std::ptrdiff_t>(cnt[i]), f = e.begin() + static_cast<std::ptrdiff_t>(cnt[i + 1]);
             std::sort(b, f, [](const auto& x, const auto& y) { return x.first < y.first; });
@@ -448,27 +591,31 @@ private:
             bool has_diag = false;
             for (auto it = b; it != f; ++it) {
                 const auto col = static_cast<MKL_INT>(it->first + 1);
-                if (ja_.size() > row_start && ja_.back() == col) { // duplicate: summed
-                    a_.back() += it->second;
+                if (ja_.size() > row_start && ja_.back() == col) { // duplicate: summed into the same position
+                    recv_pos_[it->second] = ja_.size() - 1;
                     continue;
                 }
                 if (!has_diag && it->first > diag) { // diagonal kept in place (needed for mtype -2)
                     ja_.push_back(static_cast<MKL_INT>(diag + 1));
-                    a_.push_back(0.0);
                     has_diag = true;
                 }
                 has_diag = has_diag || it->first == diag;
                 ja_.push_back(col);
-                a_.push_back(it->second);
+                recv_pos_[it->second] = ja_.size() - 1;
             }
-            if (!has_diag) {
-                ja_.push_back(static_cast<MKL_INT>(diag + 1));
-                a_.push_back(0.0);
-            }
+            if (!has_diag) ja_.push_back(static_cast<MKL_INT>(diag + 1));
             if (ja_.size() > static_cast<std::size_t>(INT_MAX))
                 throw std::runtime_error("coarse matrix block too large for 32-bit MKL PARDISO (use more --coarse-procs)");
             ia_[i + 1] = static_cast<MKL_INT>(ja_.size()) + 1;
         }
+        a_.assign(ja_.size(), 0.0);
+    }
+
+    /// @brief a_ = sum of the received values at their CSR positions (inserted diagonals stay 0).
+    void fillValues(const std::vector<core::Scalar>& v)
+    {
+        std::fill(a_.begin(), a_.end(), 0.0);
+        for (std::size_t k = 0; k < v.size(); ++k) a_[recv_pos_[k]] += v[k];
     }
 
     /// @brief One call of cluster_sparse_solver with the stored matrix.
@@ -487,10 +634,15 @@ private:
     core::GlobalIndex first_ = 0, last_ = 0;
     MPI_Comm comm_ = MPI_COMM_NULL, group_comm_ = MPI_COMM_NULL, solver_comm_ = MPI_COMM_NULL;
     std::vector<int> gcnt_, gdsp_;
+    std::vector<int> scnt_, sdsp_, rcnt_, rdsp_;  ///< Alltoallv pattern of the coefficients (kept for update()).
+    std::vector<int> send_pos_;                   ///< Coefficient k -> position in the send buffer.
+    std::size_t nrecv_ = 0;                       ///< Coefficients received (leaders).
+    std::vector<std::size_t> recv_pos_;           ///< Received coefficient -> position in a_ (active leaders).
     std::vector<MKL_INT> ia_, ja_;
     std::vector<core::Scalar> a_;
     MKL_INT n0_ = 0, mtype_ = 11;
     long long factor_nnz_ = 0, perturbed_ = 0;
+    int full_refactorizations_ = 0;               ///< update() calls that needed phases 11 + 22.
     mutable void* pt_[64] = {};
     mutable MKL_INT iparm_[64] = {};
     mutable std::vector<core::Scalar> rhs_, sol_;
@@ -513,6 +665,7 @@ std::vector<std::string> availableCoarseSolvers()
 std::unique_ptr<CoarseSolver> makeCoarseSolver(const std::string& name, int coarse_procs,
                                                const std::string& local_solver)
 {
+    (void)coarse_procs; // unused when no distributed coarse solver is compiled in
     const std::string n = (name == "auto") ? availableCoarseSolvers().front() : name;
 #ifdef USE_MUMPS
     if (n == "mumps") return std::make_unique<MumpsCoarseSolver>(coarse_procs);
