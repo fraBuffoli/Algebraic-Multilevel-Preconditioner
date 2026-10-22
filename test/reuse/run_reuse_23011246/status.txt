@@ -1,0 +1,10 @@
+bub128_r1000_off 240 ok 178 0
+bub128_r1000_refactor 240 ok 160 0
+bub128_r1000_auto 240 ok 159 0
+bub128_r10_refactor 240 ok 124 0
+bub128_r10_auto 240 ok 145 0
+bub128_r1000_ras 240 ok 163 0
+bub192_r1000_off 240 ok 269 0
+bub192_r1000_auto 240 ok 317 0
+cd100_pulse_off 240 ok 78 0
+cd100_pulse_auto 240 ok 85 0

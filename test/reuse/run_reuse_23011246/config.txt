@@ -1,0 +1,1 @@
+NP=240 COARSE='--coarse-solver cpardiso --coarse-procs 48 --coarse-root-below 10000' STEPS=60 STEPS_OFF=15 CORR=3 N_SEQ=128 N_LARGE=192
