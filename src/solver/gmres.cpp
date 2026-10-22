@@ -104,6 +104,11 @@ GmresResult Gmres::solve(const linalg::DistributedMatrix& A, const prec::Precond
         r = b - r;
         beta = linalg::norm2(r, comm);
         if (breakdown) res.converged = (beta <= rtol_ * bnorm) || res.converged;
+        // The GMRES estimate can be optimistic when M^{-1} is not exactly linear (e.g. factors in
+        // single precision): accept convergence only if the true residual agrees (10% slack: in
+        // double precision both agree to ~1e-15, so this never triggers there). Otherwise restart
+        // from the true residual, which is mixed-precision iterative refinement.
+        if (res.converged && beta > 1.1 * rtol_ * bnorm) res.converged = false;
         if (beta == 0.0) res.converged = true;
     }
     res.true_rel_residual = beta / bnorm;

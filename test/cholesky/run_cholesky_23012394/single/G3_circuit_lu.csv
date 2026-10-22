@@ -1,0 +1,2 @@
+problem,n,nnz,np,pou,one_level,coarse,tau,nev,local_solver,coarse_solver,n0,m_min,m_max,iterations,converged,true_rel_res,t_setup,t_eig,t_coarse_asm,t_coarse_fact,t_solve
+"/g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/matrices/G3_circuit.mtx (n=1585478, nnz=7660826)",1585478,7660826,240,boolean,ras,deflated,0.6,300,auto,cpardiso,25473,40,178,10,1,4.30411e-09,13.2161,9.32396,0.652008,3.49724,0.292963

@@ -72,9 +72,14 @@ public:
  * @param coarse_procs Number of processes taking part in the distributed
  *                     factorization (0 = all; mumps and cpardiso only).
  * @param local_solver Sequential backend of the "root" solver.
+ * @param factorization Factorization request for a symmetric A_00 ("auto", "lu", "cholesky", "ldlt"):
+ *                      "root" builds the chain of linalg::makeLocalSolver() (Cholesky -> LDL^T -> LU);
+ *                      "cpardiso" uses mtype 2 (Cholesky) for auto/cholesky, falling back to
+ *                      mtype -2 (LDL^T) if the factorization fails, -2 for ldlt, 11 for lu;
+ *                      "mumps" ignores it (SYM = 2). Nonsymmetric A_00: always LU.
  */
 std::unique_ptr<CoarseSolver> makeCoarseSolver(const std::string& name, int coarse_procs,
-                                               const std::string& local_solver);
+                                               const std::string& local_solver, const std::string& factorization = "lu");
 
 /// @brief Coarse solvers compiled into this build, in order of preference (mumps, cpardiso, root).
 std::vector<std::string> availableCoarseSolvers();

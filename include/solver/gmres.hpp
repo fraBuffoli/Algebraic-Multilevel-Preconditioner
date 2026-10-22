@@ -36,6 +36,9 @@ struct GmresResult {
  * of j+1), which matters at large process counts. Givens rotations update the
  * least-squares residual. M^{-1} is applied once per iteration plus once per
  * restart cycle (x += M^{-1} V y), so only the Krylov basis V is stored.
+ * Convergence is accepted only if the true residual ||b - A x||, recomputed at the end of
+ * the cycle, is within 10% of the tolerance; otherwise GMRES restarts from it (relevant
+ * when the preconditioner is applied in single precision).
  */
 class Gmres {
 public:

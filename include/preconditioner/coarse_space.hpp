@@ -57,13 +57,14 @@ public:
      * @param coarse_solver "auto", "mumps", "cpardiso" or "root".
      * @param coarse_procs  Processes of the distributed factorization (0 = all).
      * @param local_solver  Sequential backend of the root solver.
+     * @param factorization Factorization request for A_00 (root and cpardiso; see makeCoarseSolver()).
      * @param symmetric     A is symmetric (then A_00 is symmetric).
      * @param root_below    If n0 < root_below, "root" is used instead of @p coarse_solver
      *                      (0 = never): the solve phase of a distributed solver has a fixed
      *                      cost (collectives) that dominates for small n0.
      */
     void assemble(const std::string& coarse_solver, int coarse_procs, const std::string& local_solver,
-                  bool symmetric, core::GlobalIndex root_below = 0);
+                  const std::string& factorization, bool symmetric, core::GlobalIndex root_below = 0);
 
     /**
      * @brief Recomputes A_00 = R_0 A R_0^T with the current values of A and the same basis,

@@ -62,8 +62,11 @@ struct SolverConfig{
     int kernel_probe = 8;                   ///< Initial block size of the kernel detection.
     int dense_threshold = 400;              ///< Subdomains with n_i <= threshold use dense eigensolvers.
     double orth_tol = 1e-10;                ///< Rank threshold of the local coarse basis orthonormalization.
-    std::string local_solver = "auto";      ///< Local LU backend: "auto", "sparselu".
+    std::string local_solver = "auto";      ///< Local backend: "auto", "sparselu", "umfpack", "pardiso".
+    std::string local_factorization = "auto"; ///< "auto" (symmetric A: Cholesky -> LDL^T -> LU), "lu", "cholesky", "ldlt".
+    std::string local_precision = "double"; ///< Precision of the factors of A_ii (one-level part): "double" or "single".
     std::string coarse_solver = "auto";     ///< Coarse solver: "auto", "mumps", "cpardiso" (distributed) or "root".
+    std::string coarse_factorization = "auto"; ///< A_00 (root, cpardiso): "auto" (symmetric A: Cholesky -> LDL^T [-> LU]), "lu", "cholesky", "ldlt".
     int coarse_procs = 0;                   ///< Processes used for the distributed coarse factorization (0 = all).
     long long coarse_root_below = 0;        ///< n0 below this: coarse solver "root" whatever coarse_solver says (0 = off).
 

@@ -11,8 +11,25 @@
 
 namespace schwarz2lvl::prec {
 
+linalg::LocalSolverSpec localSolverSpec(const core::SolverConfig& cfg, bool symmetric)
+{
+    linalg::LocalSolverSpec s;
+    s.backend = cfg.local_solver;
+    s.factorization = cfg.local_factorization;
+    s.symmetric = symmetric;
+    s.single = (cfg.local_precision == "single");
+    return s;
+}
+
 OneLevelSchwarz::OneLevelSchwarz(const part::Subdomain& sd, Variant variant, const std::string& local_solver)
     : sd_(sd), variant_(variant), solver_(linalg::makeLocalSolver(local_solver))
+{
+    factorizeFull();
+    rloc_ = core::Vec::Zero(sd_.nLocal());
+}
+
+OneLevelSchwarz::OneLevelSchwarz(const part::Subdomain& sd, Variant variant, const linalg::LocalSolverSpec& spec)
+    : sd_(sd), variant_(variant), solver_(linalg::makeLocalSolver(spec))
 {
     factorizeFull();
     rloc_ = core::Vec::Zero(sd_.nLocal());

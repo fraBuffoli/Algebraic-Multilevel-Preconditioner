@@ -22,7 +22,7 @@ TwoLevelSchwarz::TwoLevelSchwarz(const part::Subdomain& sd, const linalg::Distri
 {
     utils::ScopedTimer timer("setup");
     const auto variant = (cfg.one_level == "asm") ? OneLevelSchwarz::Variant::ASM : OneLevelSchwarz::Variant::RAS;
-    one_ = std::make_unique<OneLevelSchwarz>(sd_, variant, cfg.local_solver);
+    one_ = std::make_unique<OneLevelSchwarz>(sd_, variant, localSolverSpec(cfg, sd_.system().symmetric));
     buildCoarse();
     version_ = sd_.valuesVersion();
 }
@@ -74,6 +74,7 @@ void TwoLevelSchwarz::buildCoarse()
         eo.kernel_probe = cfg.kernel_probe;
         eo.dense_threshold = cfg.dense_threshold;
         eo.local_solver = cfg.local_solver;
+        eo.factorization = cfg.local_factorization; // A~_ii + sigma I: Cholesky chain if A is symmetric (double)
         eo.symmetric = sd_.system().symmetric;
         eig_ = LocalEigensolver(eo).compute(sd_.Aii(), At, sd_.pou());
     } catch (const std::exception& e) {
@@ -96,7 +97,7 @@ void TwoLevelSchwarz::buildCoarse()
     // ---- Coarse space and coarse operator.
     coarse_ = std::make_unique<CoarseSpace>(sd_, eig_.Z, cfg.orth_tol);
     if (coarse_->dimension() > 0)
-        coarse_->assemble(cfg.coarse_solver, cfg.coarse_procs, cfg.local_solver, sd_.system().symmetric,
+        coarse_->assemble(cfg.coarse_solver, cfg.coarse_procs, cfg.local_solver, cfg.coarse_factorization, sd_.system().symmetric,
                           static_cast<core::GlobalIndex>(cfg.coarse_root_below));
 
     // ---- Statistics.
@@ -119,6 +120,10 @@ void TwoLevelSchwarz::buildCoarse()
         core::allreduceMax(static_cast<core::GlobalIndex>(one_->localSolver().perturbedPivots()), comm));
     stats_.perturbed_atilde_max =
         static_cast<long>(core::allreduceMax(static_cast<core::GlobalIndex>(eig_.perturbed_pivots), comm));
+    stats_.local_factorization = one_->localSolver().name();
+    stats_.atilde_factorization = eig_.dense ? std::string("dense") : eig_.backend;
+    stats_.local_chain_fallbacks = core::allreduceSum(one_->localSolver().chainLevel() > 0 ? 1 : 0, comm);
+    stats_.atilde_chain_fallbacks = core::allreduceSum(eig_.chain_level > 0 ? 1 : 0, comm);
 }
 
 std::string TwoLevelSchwarz::name() const
@@ -176,6 +181,10 @@ void TwoLevelSchwarz::printStats(std::ostream& os) const
     if (stats_.perturbed_aii_max >= 0 || stats_.perturbed_atilde_max >= 0)
         os << "  perturbed pivots A_ii / A~ " << stats_.perturbed_aii_max << " / " << stats_.perturbed_atilde_max
            << " (max over ranks)\n";
+    os << "  A_ii factorization         " << stats_.local_factorization << " (rank 0; chain fallbacks on "
+       << stats_.local_chain_fallbacks << " ranks)\n"
+       << "  A~_ii factorization        " << stats_.atilde_factorization << " (rank 0; chain fallbacks on "
+       << stats_.atilde_chain_fallbacks << " ranks)\n";
     if (coarse_->dimension() > 0) os << "  coarse solver              " << coarse_->solver().name() << "\n";
 }
 

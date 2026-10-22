@@ -5,6 +5,7 @@
 #ifndef SCHWARZ2LVL_PRECONDITIONER_ONE_LEVEL_SCHWARZ_HPP
 #define SCHWARZ2LVL_PRECONDITIONER_ONE_LEVEL_SCHWARZ_HPP
 
+#include "config.hpp"
 #include "local_solver.hpp"
 #include "preconditioner.hpp"
 #include "subdomain.hpp"
@@ -13,6 +14,12 @@
 #include <string>
 
 namespace schwarz2lvl::prec {
+
+/**
+ * @brief Solver specification of the local matrices A_ii from the configuration:
+ *        `--local-solver`, `--local-factorization`, `--local-precision`, and the symmetry of A.
+ */
+linalg::LocalSolverSpec localSolverSpec(const core::SolverConfig& cfg, bool symmetric);
 
 /**
  * @class OneLevelSchwarz
@@ -40,6 +47,12 @@ public:
      * @throws std::runtime_error if some A_ii is singular.
      */
     OneLevelSchwarz(const part::Subdomain& sd, Variant variant, const std::string& local_solver);
+
+    /**
+     * @brief Factorizes A_ii with the given solver specification (factorization type, precision).
+     * @throws std::runtime_error if some A_ii cannot be factorized.
+     */
+    OneLevelSchwarz(const part::Subdomain& sd, Variant variant, const linalg::LocalSolverSpec& spec);
 
     void apply(const core::Vec& r, core::Vec& z) const override;
     std::string name() const override { return variant_ == Variant::RAS ? "RAS" : "ASM"; }

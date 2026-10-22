@@ -1,0 +1,33 @@
+case convdiff2d 16x16 nu=0.01 (n=256, nnz=1216), pou=boolean, np=16
+  [ OK ] overlap Omega_Gamma = distance-1 neighbours in G(A+A^T)
+  [ OK ] A_ii = R_i A R_i^T
+  [ OK ] lumping sums s_i (Def. 3.1)
+  [ OK ] sum_i R_i^T D_i R_i = I
+  [ OK ] distributed SpMV
+  [ OK ] halo forward = restriction R_i
+  [ OK ] gather in original ordering
+case convdiff2d 16x16 nu=0.01 (n=256, nnz=1216), pou=multiplicity, np=16
+  [ OK ] overlap Omega_Gamma = distance-1 neighbours in G(A+A^T)
+  [ OK ] A_ii = R_i A R_i^T
+  [ OK ] lumping sums s_i (Def. 3.1)
+  [ OK ] sum_i R_i^T D_i R_i = I
+  [ OK ] distributed SpMV
+  [ OK ] halo forward = restriction R_i
+  [ OK ] gather in original ordering
+case coupled2d 10x10 nu=0.01 ncomp=3 (n=300, nnz=1680), pou=multiplicity, np=16
+  [ OK ] overlap Omega_Gamma = distance-1 neighbours in G(A+A^T)
+  [ OK ] A_ii = R_i A R_i^T
+  [ OK ] lumping sums s_i (Def. 3.1)
+  [ OK ] sum_i R_i^T D_i R_i = I
+  [ OK ] distributed SpMV
+  [ OK ] halo forward = restriction R_i
+  [ OK ] gather in original ordering
+case laplace3d 7x7x7 (n=343, nnz=2107), pou=boolean, np=16
+  [ OK ] overlap Omega_Gamma = distance-1 neighbours in G(A+A^T)
+  [ OK ] A_ii = R_i A R_i^T
+  [ OK ] lumping sums s_i (Def. 3.1)
+  [ OK ] sum_i R_i^T D_i R_i = I
+  [ OK ] distributed SpMV
+  [ OK ] halo forward = restriction R_i
+  [ OK ] gather in original ordering
+ALL PASSED

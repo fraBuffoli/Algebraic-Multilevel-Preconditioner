@@ -277,8 +277,11 @@ LocalEigensolverResult LocalEigensolver::computeSparse(const core::SpMat& Atilde
     const double normA = normEstimate(Atilde);
 
     // 1. Factorization of A~ + sigma I (retry with a larger shift if it fails).
-    auto F = linalg::makeLocalSolver(opt_.local_solver);
-    res.backend = F->name();
+    linalg::LocalSolverSpec spec;
+    spec.backend = opt_.local_solver;
+    spec.factorization = opt_.factorization;
+    spec.symmetric = opt_.symmetric; // A~_ii + sigma I is symmetric (PSD + shift for diagonally dominant SPD A)
+    auto F = linalg::makeLocalSolver(spec);
     core::SpMat Id(n, n);
     Id.setIdentity();
     double sigma = opt_.shift_rel * (normA > 0.0 ? normA : 1.0);
@@ -294,6 +297,8 @@ LocalEigensolverResult LocalEigensolver::computeSparse(const core::SpMat& Atilde
         }
         if (!ok) throw std::runtime_error("cannot factorize A~_ii + sigma I: " + F->lastError());
     }
+    res.backend = F->name();
+    res.chain_level = F->chainLevel();
     res.shift = sigma;
     res.perturbed_pivots = F->perturbedPivots();
 

@@ -98,7 +98,7 @@ Options are given as `--key value` or `--key=value`. Defaults reproduce the setu
 | Partition | `--metis-objective cut\|vol`, `--metis-vertex-weights 0\|1` |
 | Preconditioner | `--one-level ras\|asm`, `--coarse deflated\|additive\|none`, `--pou boolean\|multiplicity`, `--tau`, `--nev`, `--nev-start` |
 | Local eigensolver | `--eig-tol --eig-maxit --eig-ncv`, `--shift-rel`, `--kernel-tol`, `--kernel-probe`, `--dense-threshold`, `--orth-tol` |
-| Direct solvers | `--local-solver auto\|sparselu\|umfpack\|pardiso`, `--coarse-solver auto\|mumps\|cpardiso\|root`, `--coarse-procs N`, `--coarse-root-below N` |
+| Direct solvers | `--local-solver auto\|sparselu\|umfpack\|pardiso`, `--local-factorization auto\|lu\|cholesky\|ldlt`, `--local-precision double\|single`, `--coarse-solver auto\|mumps\|cpardiso\|root`, `--coarse-factorization auto\|lu\|cholesky\|ldlt`, `--coarse-procs N`, `--coarse-root-below N` |
 | GMRES | `--restart`, `--rtol`, `--maxit` |
 | Sequence | `--steps N` (time loop; 0 = single solve), `--correctors N`, `--reuse off\|refactor\|auto`, `--rebuild-growth G`, `--rebuild-every N`, `--steps-csv FILE`; `--matrix 'p_%04d.mtx'` reads one file per step |
 | Output | `--verbose 0\|1\|2`, `--csv FILE`, `--history FILE`, `--write-solution FILE` |
@@ -129,6 +129,7 @@ run them with several process counts:
 mpirun -np 4 ./bin/test_subdomain        # overlap, halo, A_ii, lumping sums, partition of unity, SpMV
 mpirun -np 4 ./bin/test_preconditioner   # sparse vs dense eigensolver, RAS/ASM x deflated/additive, GMRES
 mpirun -np 4 ./bin/test_reuse            # setup reuse: refactorizations vs fresh setups, policy, time loop
+mpirun -np 4 ./bin/test_factorization    # Cholesky / LDLT / LU chains, single precision, coarse solvers
 ```
 
 `matrices/` contains small SuiteSparse test matrices (sherman4, nos5, e05r0400, fidapm05/10, garon1, graham1,
@@ -212,7 +213,8 @@ With `--steps N > 0` the driver runs `runTimeLoop()` instead (see [Setup reuse](
   consecutive ranks). Each coefficient is sent to the leader owning its row, so every leader passes a contiguous
   block of rows (distributed CSR,
   iparm[39] = 2, right-hand side and solution distributed the same way: only a Gatherv/Scatterv inside each group per
-  solve). LDLᵀ (mtype −2) if A is symmetric, LU with scaling and matching otherwise, METIS ordering on the first
+  solve). Cholesky (mtype 2, checked by a probe solve) or LDLᵀ (mtype −2) if A is symmetric (see
+  `--coarse-factorization` below), LU with scaling and matching otherwise, METIS ordering on the first
   process (the MPI ordering of PARDISO, iparm[1] = 10, hung in tests). With Open MPI the symmetric types crash inside
   MKL on communicators other than MPI_COMM_WORLD, so there symmetric A_00 are factorized as general matrices.
   `root` (gather on rank 0 + sequential LU) is the non-scalable fallback/reference, but for small n0 it is faster:
@@ -228,7 +230,8 @@ With `--steps N > 0` the driver runs `runTimeLoop()` instead (see [Setup reuse](
   Transposed solves are needed for the left kernel of Ã_ii.
 - GMRES: right preconditioning, so the stopping test is on the unpreconditioned residual as in the paper;
   classical Gram–Schmidt applied twice (CGS2), one `MPI_Allreduce` per pass instead of j+1; the true residual is
-  recomputed at every restart.
+  recomputed at every restart, and convergence is declared only if it is within 10% of the tolerance (the
+  GMRES residual and the true one can drift apart, e.g. with single-precision local factors).
 - Test generators: cell-centred finite volumes for Eq. (4.1) with upwind convection, the velocity fields of
   Section 4.2 integrated exactly on the faces (zero row sums, hence singular Ã_ii that exercise the kernel handling),
   heterogeneous diffusivity, and coupled variants with unknowns interleaved per cell as in OpenFOAM coupled solvers.
@@ -291,6 +294,52 @@ depends on, and `Preconditioner::update(UpdateLevel)` redoes only what is needed
 In an OpenFOAM port the solver object is created at every `solve()`: the persistent state
 (subdomain structure, preconditioner, policy) must live outside it, e.g. in a `MeshObject` (as GAMG
 stores its agglomeration) or in a registry keyed by the field name; `p_rgh` and `p_rghFinal` share it.
+
+## Symmetric factorizations and single precision (P2)
+
+Every application of the preconditioner solves with the factors of A_ii (one-level part) and of
+A_00 (coarse part); every refactorization recomputes them. For a symmetric matrix a symmetric
+factorization stores one triangular factor instead of two, so it can be done with less work and
+memory. What is factorized, and how:
+
+| matrix | symmetric A (e.g. pressure) | factorization with `auto` | precision |
+|---|---|---|---|
+| A_ii (one-level solves, every iteration) | SPD if A is SPD | Cholesky → LDLᵀ → LU | `--local-precision` |
+| Ã_ii + σI (eigensolver operator) | PSD + shift | Cholesky → LDLᵀ → LU | always double |
+| A_00 = Vᵀ A V (coarse solves, every iteration) | SPD if A is SPD | root: Cholesky → LDLᵀ → LU; cpardiso: mtype 2 → −2; mumps: SYM = 2 (request ignored) | always double |
+
+UMFPACK has neither symmetric factorizations nor single precision: it always uses LU in double (and
+says so in its name). PARDISO and the Eigen built-in solvers (SimplicialLLT / SimplicialLDLT) have both.
+
+- **Chains.** `--local-factorization` (A_ii, Ã_ii) and `--coarse-factorization` (A_00) accept
+  `auto` (= `cholesky`), `ldlt`, `lu`. Each candidate of the chain is tried until one factorizes
+  successfully, and the solver stays there (also in the numerical refactorizations of a time loop:
+  if a refactorization fails, e.g. the matrix is no longer positive definite, the next candidate
+  is used). A symmetric factorization only reads one triangle, so it would be silently wrong for a
+  nonsymmetric matrix: if A is not known to be symmetric every request becomes LU. The log reports
+  the factorization actually used (`A_ii factorization`, `A~_ii factorization`, `coarse solver`) and
+  on how many ranks the chain had to move on.
+- **What it gains** (measured with PARDISO, one thread, on a 32³ subdomain of the bubbles problem):
+  Cholesky halves the (re)factorization time; a solve still reads the factor twice (L, then Lᵀ),
+  as many bytes as L and U, so it is only ~20% faster (smaller factor). LDLᵀ with Bunch–Kaufman
+  pivoting is not faster than LU in sequential PARDISO: it is only a fallback. With
+  cluster_sparse_solver Cholesky refactorizations were ~25-30% faster than LDLᵀ (1-2 processes).
+- **Distributed Cholesky.** With more than one process MKL (2023.2) does not report a Cholesky
+  factorization of a matrix that is not positive definite (no error code; NaN or wrong factors):
+  every mtype 2 factorization is checked with a probe solve A_00 x = 1 (backward error < 1e-8),
+  and a failure moves to mtype −2. This path cannot run with Open MPI (see above); it was tested
+  with MPICH (same ABI as Intel MPI) and `test_factorization` checks it on G100.
+- **Single precision** (`--local-precision single`): the factors of A_ii are stored in float (PARDISO
+  iparm[27] = 1, Eigen solvers on float matrices); the right-hand side is rounded to float, solved,
+  and converted back. Solves read half the bytes (~45% faster than Cholesky in double), but the
+  local solves are only accurate to ~1e-7 κ(A_ii), so GMRES may need more iterations (+15-20% on
+  bubbles at ρ = 1000): it pays off only when the local solves dominate the iteration. Ã_ii (the
+  eigenvectors must be accurate) and A_00 stay in double. GMRES works in double precision and the
+  true-residual check guarantees the requested tolerance.
+- `test/p2/Allrun_p2.sh` (G100, 5 nodes, < 1 h) compares the P1 configuration (LU) with Cholesky,
+  Cholesky + single precision, and root vs distributed A_00, on the bubbles problems of P1 and on
+  SPD SuiteSparse matrices; `report_p2.py` writes the report (cost per solve and cost of every
+  operation).
 
 **Limitations.** Real matrices only; one subdomain per MPI process; the global matrix lives on rank 0 during the
 decomposition; local indices are 32-bit and the MUMPS / MKL interfaces require n0 < 2^31.

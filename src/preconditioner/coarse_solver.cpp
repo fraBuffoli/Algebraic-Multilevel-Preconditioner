@@ -18,6 +18,7 @@
 #endif
 
 #include <algorithm>
+#include <cmath>
 #include <climits>
 #include <stdexcept>
 
@@ -85,13 +86,16 @@ std::vector<core::Scalar> gatherValues(const std::vector<core::GlobalTriplet>& t
  * update(): rank 0 keeps the assembled matrix and, for every gathered coefficient, its
  * position in the value array (duplicates share a position), so new values are summed in
  * place and the LU is redone with LocalSolver::refactorize().
+ * Symmetric A: A_00 = V^T A V is symmetric (SPD if A is SPD, V having full rank): the
+ * factorization request (default auto) gives Cholesky -> LDL^T -> LU, in double precision.
  */
 class RootCoarseSolver final : public CoarseSolver {
 public:
-    explicit RootCoarseSolver(std::string backend) : backend_(std::move(backend)) {}
+    RootCoarseSolver(std::string backend, std::string factorization)
+        : backend_(std::move(backend)), factorization_(std::move(factorization)) {}
 
     void setup(MPI_Comm comm, const std::vector<core::GlobalIndex>& offsets, std::vector<core::GlobalTriplet>& entries,
-               bool /*symmetric*/) override
+               bool symmetric) override
     {
         comm_ = comm;
         offsets_ = offsets;
@@ -117,12 +121,18 @@ public:
                 const core::LocalIndex* e = inner + E_.outerIndexPtr()[c[k] + 1];
                 pos_[k] = static_cast<core::LocalIndex>(std::lower_bound(b, e, static_cast<core::LocalIndex>(r[k])) - inner);
             }
-            solver_ = linalg::makeLocalSolver(backend_);
+            linalg::LocalSolverSpec spec;
+            spec.backend = backend_;
+            spec.factorization = factorization_;
+            spec.symmetric = symmetric;
+            solver_ = linalg::makeLocalSolver(spec);
             ok = solver_->factorize(E_) ? 1 : 0;
             if (!ok) err = solver_->lastError();
+            solver_name_ = solver_->name();
         }
         MPI_Bcast(&ok, 1, MPI_INT, 0, comm_);
         if (!ok) throw std::runtime_error("coarse matrix factorization failed (root solver) " + err);
+        bcastName();
     }
 
     void update(std::vector<core::GlobalTriplet>& entries) override
@@ -139,8 +149,14 @@ public:
             if (!ok) err = solver_->lastError();
             if (solver_->refactorizationFellBack()) ++fallbacks_;
         }
-        MPI_Bcast(&ok, 1, MPI_INT, 0, comm_);
-        if (!ok) throw std::runtime_error("coarse matrix refactorization failed (root solver) " + err);
+        // st[1]: the chain moved to another factorization (e.g. A_00 no longer positive definite).
+        int st[2] = {ok, core::mpiRank(comm_) == 0 && solver_->name() != solver_name_ ? 1 : 0};
+        MPI_Bcast(st, 2, MPI_INT, 0, comm_);
+        if (!st[0]) throw std::runtime_error("coarse matrix refactorization failed (root solver) " + err);
+        if (st[1]) {
+            if (core::mpiRank(comm_) == 0) solver_name_ = solver_->name();
+            bcastName();
+        }
     }
 
     long fallbacks() const override { return fallbacks_; } // rank 0 only (max over ranks when reported)
@@ -160,10 +176,21 @@ public:
                      MPI_DOUBLE, 0, comm_);
     }
 
-    std::string name() const override { return "root(" + backend_ + ")"; }
+    std::string name() const override { return "root(" + solver_name_ + ")"; }
 
 private:
+    /// @brief The name (with the factorization actually used) is known on rank 0 only: broadcast it.
+    void bcastName()
+    {
+        int len = static_cast<int>(solver_name_.size());
+        MPI_Bcast(&len, 1, MPI_INT, 0, comm_);
+        solver_name_.resize(static_cast<std::size_t>(len));
+        MPI_Bcast(solver_name_.data(), len, MPI_CHAR, 0, comm_);
+    }
+
     std::string backend_;
+    std::string factorization_;         ///< Factorization request (see linalg::LocalSolverSpec).
+    std::string solver_name_;           ///< Name of the solver in use (all ranks).
     MPI_Comm comm_ = MPI_COMM_NULL;
     std::vector<core::GlobalIndex> offsets_;
     std::vector<int> cnt_, dsp_;
@@ -353,11 +380,19 @@ private:
  *   right-hand side and solution are distributed by rows, so the solve only needs a
  *   Gatherv/Scatterv inside each group (no global gather on rank 0).
  * - Only the leaders with at least one coarse row take part in the factorization.
- * - mtype = -2 (symmetric indefinite, upper triangle) if A is symmetric, 11 otherwise,
- *   with the same pivoting/scaling/refinement options as the sequential PARDISO backend
- *   (no iterative refinement unless pivots were perturbed). With Open MPI
- *   the symmetric types crash inside MKL (MKL 2023.2, Open MPI 4.1) on any communicator
- *   other than MPI_COMM_WORLD, so there symmetric matrices are factorized as general ones.
+ * - Matrix type (P2): for a symmetric A (A_00 = V^T A V is symmetric, and SPD if A is SPD)
+ *   the request `auto`/`cholesky` uses mtype = 2 (Cholesky, upper triangle); if that
+ *   factorization fails (A_00 not positive definite) the solver moves to mtype = -2
+ *   (symmetric indefinite LDL^T, Bunch-Kaufman pivoting) and stays there. `ldlt` starts from
+ *   -2, `lu` uses 11 (general LU), as does every nonsymmetric A. Same pivoting/scaling/
+ *   refinement options as the sequential PARDISO backend (no iterative refinement unless
+ *   pivots were perturbed). With more than one process MKL (2023.2) does *not* report a
+ *   Cholesky factorization of a matrix that is not positive definite (no error code, NaN or
+ *   wrong factors; one process does report it): every mtype 2 factorization is therefore
+ *   checked with a probe solve A_00 x = 1 and its backward error (probeOk()).
+ *   With Open MPI the symmetric types crash inside MKL (MKL 2023.2,
+ *   Open MPI 4.1) on any communicator other than MPI_COMM_WORLD, so there symmetric matrices
+ *   are factorized as general ones (mtype 11); Intel MPI (CINECA G100) is not affected.
  * - Fill-in reducing ordering: METIS on the first process (iparm[1] = 2). The MPI nested
  *   dissection of PARDISO (iparm[1] = 10) hung in the tests (MKL 2023.2), so it is not used.
  * - update(): setup() keeps the communication pattern (send position of every coefficient,
@@ -369,7 +404,8 @@ private:
  */
 class CPardisoCoarseSolver final : public CoarseSolver {
 public:
-    explicit CPardisoCoarseSolver(int coarse_procs) : coarse_procs_(coarse_procs) {}
+    CPardisoCoarseSolver(int coarse_procs, std::string factorization)
+        : coarse_procs_(coarse_procs), factorization_(std::move(factorization)) {}
 
     ~CPardisoCoarseSolver() override
     {
@@ -409,7 +445,13 @@ public:
 #ifdef OPEN_MPI
         symmetric = false; // see the class documentation
 #endif
-        mtype_ = symmetric ? -2 : 11;
+        // Chain of matrix types: the symmetric ones share the storage (upper triangle), so moving
+        // along the chain needs no new communication pattern.
+        if (!symmetric || factorization_ == "lu") chain_ = {11};
+        else if (factorization_ == "ldlt") chain_ = {-2};
+        else chain_ = {2, -2};
+        level_ = 0;
+        mtype_ = chain_[0];
 
         // ---- send every coefficient to the leader owning its row.
         filter(entries);
@@ -449,48 +491,20 @@ public:
             }
         }
 
-        // ---- analysis + numerical factorization (collective over the active leaders).
-        MKL_INT error = 0;
+        // ---- analysis + numerical factorization (collective over the active leaders), moving
+        //      along the chain of matrix types while the factorization fails.
         if (!active_) { // same timer list on every rank (the report follows rank 0)
             utils::TimerRegistry::instance().add("setup.coarse_factorization.analysis", 0.0);
             utils::TimerRegistry::instance().add("setup.coarse_factorization.numeric", 0.0);
         }
-        if (active_) {
-            fcomm_ = static_cast<int>(MPI_Comm_c2f(solver_comm_));
-            std::fill(std::begin(pt_), std::end(pt_), nullptr);
-            std::fill(std::begin(iparm_), std::end(iparm_), 0);
-            iparm_[0] = 1;                               // no solver defaults
-            iparm_[1] = 2;                               // METIS nested dissection
-            iparm_[7] = 0;                               // no refinement (2 automatic steps if pivots perturbed)
-            iparm_[9] = symmetric ? 8 : 13;              // pivot perturbation 1e-8 / 1e-13
-            iparm_[10] = symmetric ? 0 : 1;              // scaling
-            iparm_[12] = symmetric ? 0 : 1;              // weighted matching
-            iparm_[17] = -1;                             // report nnz of the factors
-            iparm_[20] = 1;                              // Bunch-Kaufman pivoting (mtype -2)
-            iparm_[34] = 0;                              // one-based ia/ja and domain bounds
-            iparm_[39] = 2;                              // distributed A, rhs and solution
-            iparm_[40] = static_cast<MKL_INT>(first_ + 1);
-            iparm_[41] = static_cast<MKL_INT>(last_);
-            {
-                utils::ScopedTimer t("setup.coarse_factorization.analysis");
-                MKL_INT phase = 11;
-                error = call(phase, nullptr, nullptr);
-            }
-            if (error == 0) {
-                utils::ScopedTimer t("setup.coarse_factorization.numeric");
-                MKL_INT phase = 22;
-                error = call(phase, nullptr, nullptr);
-            }
-            factorized_ = true; // memory to release even after an error
-            factor_nnz_ = static_cast<long long>(iparm_[17]);
-            perturbed_ = static_cast<long long>(iparm_[13]);
+        long long err = factorizeFull(true);
+        while (err != 0 && level_ + 1 < chain_.size()) {
+            nextInChain();
+            err = factorizeFull(true);
         }
-        const auto err = static_cast<long long>(core::allreduceMin(static_cast<core::GlobalIndex>(error), comm_));
-        factor_nnz_ = core::allreduceMax(static_cast<core::GlobalIndex>(factor_nnz_), comm_);
-        perturbed_ = core::allreduceMax(static_cast<core::GlobalIndex>(perturbed_), comm_);
         if (err != 0)
-            throw std::runtime_error("MKL cluster_sparse_solver failed on the coarse matrix, error = " +
-                                     std::to_string(err));
+            throw std::runtime_error("MKL cluster_sparse_solver failed on the coarse matrix (mtype " +
+                                     std::to_string(mtype_) + "), error = " + std::to_string(err));
         if (active_) {
             rhs_.resize(static_cast<std::size_t>(last_ - first_));
             sol_.resize(static_cast<std::size_t>(last_ - first_));
@@ -517,23 +531,18 @@ public:
         }
         long long err = core::allreduceMin(static_cast<core::GlobalIndex>(error), comm_);
         perturbed = core::allreduceMax(static_cast<core::GlobalIndex>(perturbed), comm_);
+        if (err == 0 && mtype_ == 2 && !probeOk(false)) err = -4; // not reported by MKL (see the class doc)
         if (err != 0 || perturbed > perturbed_) { // stale scaling/matching: full analysis + factorization
             ++full_refactorizations_;
-            if (active_) {
-                MKL_INT phase = 11;
-                error = call(phase, nullptr, nullptr);
-                if (error == 0) {
-                    phase = 22;
-                    error = call(phase, nullptr, nullptr);
-                }
-                perturbed = static_cast<long long>(iparm_[13]);
+            err = factorizeFull(false);
+            while (err != 0 && level_ + 1 < chain_.size()) { // e.g. A_00 no longer positive definite
+                nextInChain();
+                err = factorizeFull(false);
             }
-            err = core::allreduceMin(static_cast<core::GlobalIndex>(error), comm_);
-            perturbed_ = core::allreduceMax(static_cast<core::GlobalIndex>(perturbed), comm_);
         }
         if (err != 0)
-            throw std::runtime_error("MKL cluster_sparse_solver: coarse refactorization failed, error = " +
-                                     std::to_string(err));
+            throw std::runtime_error("MKL cluster_sparse_solver: coarse refactorization failed (mtype " +
+                                     std::to_string(mtype_) + "), error = " + std::to_string(err));
     }
 
     void solve(const core::Vec& c, core::Vec& y) const override
@@ -556,16 +565,128 @@ public:
 
     std::string name() const override
     {
-        return "cpardiso(" + std::to_string(nprocs_) + " procs, mtype " + std::to_string(mtype_) + ", nnz(LU) " +
+        const char* kind = mtype_ == 2 ? " cholesky" : (mtype_ == -2 ? " ldlt" : " lu");
+        return "cpardiso(" + std::to_string(nprocs_) + " procs, mtype " + std::to_string(mtype_) + kind +
+               (level_ > 0 ? " (fallback from cholesky)" : "") + ", nnz(L" + (mtype_ == 11 ? "U" : "") + ") " +
                std::to_string(factor_nnz_) + ", perturbed pivots " + std::to_string(perturbed_) +
                (full_refactorizations_ ? ", full refactorizations " + std::to_string(full_refactorizations_) : "") + ")";
     }
 
 private:
-    /// @brief mtype -2: upper triangle only (same filter in setup() and update()).
+    /**
+     * @brief Phases 11 + 22 with the current mtype_ (collective over comm_).
+     * @param timed Record the setup timers (analysis, numeric).
+     * @return The minimum PARDISO error over the ranks (0 = success).
+     */
+    long long factorizeFull(bool timed)
+    {
+        MKL_INT error = 0;
+        if (active_) {
+            if (factorized_) { // release the previous factorization (refactorization or chain step)
+                MKL_INT phase = -1;
+                call(phase, nullptr, nullptr);
+                factorized_ = false;
+            }
+            const bool sym = mtype_ != 11;
+            fcomm_ = static_cast<int>(MPI_Comm_c2f(solver_comm_));
+            std::fill(std::begin(pt_), std::end(pt_), nullptr);
+            std::fill(std::begin(iparm_), std::end(iparm_), 0);
+            iparm_[0] = 1;                               // no solver defaults
+            iparm_[1] = 2;                               // METIS nested dissection
+            iparm_[7] = 0;                               // no refinement (2 automatic steps if pivots perturbed)
+            iparm_[9] = sym ? 8 : 13;                    // pivot perturbation 1e-8 / 1e-13 (not used by mtype 2)
+            iparm_[10] = sym ? 0 : 1;                    // scaling
+            iparm_[12] = sym ? 0 : 1;                    // weighted matching
+            iparm_[17] = -1;                             // report nnz of the factors
+            iparm_[20] = 1;                              // Bunch-Kaufman pivoting (mtype -2)
+            iparm_[34] = 0;                              // one-based ia/ja and domain bounds
+            iparm_[39] = 2;                              // distributed A, rhs and solution
+            iparm_[40] = static_cast<MKL_INT>(first_ + 1);
+            iparm_[41] = static_cast<MKL_INT>(last_);
+            {
+                utils::ScopedTimer t(timed ? "setup.coarse_factorization.analysis" : "update.coarse_factorization.analysis");
+                MKL_INT phase = 11;
+                error = call(phase, nullptr, nullptr);
+            }
+            if (error == 0) {
+                utils::ScopedTimer t(timed ? "setup.coarse_factorization.numeric" : "update.coarse_factorization.numeric");
+                MKL_INT phase = 22;
+                error = call(phase, nullptr, nullptr);
+            }
+            factorized_ = true; // memory to release even after an error
+            factor_nnz_ = static_cast<long long>(iparm_[17]);
+            perturbed_ = static_cast<long long>(iparm_[13]);
+        } else if (!timed) {
+            utils::TimerRegistry::instance().add("update.coarse_factorization.analysis", 0.0);
+            utils::TimerRegistry::instance().add("update.coarse_factorization.numeric", 0.0);
+        }
+        auto err = static_cast<long long>(core::allreduceMin(static_cast<core::GlobalIndex>(error), comm_));
+        factor_nnz_ = core::allreduceMax(static_cast<core::GlobalIndex>(factor_nnz_), comm_);
+        perturbed_ = core::allreduceMax(static_cast<core::GlobalIndex>(perturbed_), comm_);
+        if (err == 0 && mtype_ == 2 && !probeOk(timed)) err = -4; // as PARDISO: zero or negative pivot
+        return err;
+    }
+
+    /**
+     * @brief Checks the current factorization with a probe solve A_00 x = 1 (collective over comm_).
+     *
+     * The leaders gather x, multiply by their rows of the upper triangle (and, by symmetry, the
+     * transposed contributions), and sum the products: backward error
+     * ||A x - 1|| / (||A||_F ||x|| + sqrt(n0)) must be below 1e-8 (a correct Cholesky gives
+     * ~1e-16 whatever the conditioning; a failed one gives NaN or O(1)).
+     * @param timed Timer of the setup (true) or of an update (false).
+     */
+    bool probeOk(bool timed) const
+    {
+        utils::ScopedTimer t(timed ? "setup.coarse_factorization.probe" : "update.coarse_factorization.probe");
+        int ok = 1;
+        if (active_) {
+            const auto nloc = static_cast<std::size_t>(last_ - first_);
+            std::vector<core::Scalar> b(nloc, 1.0), x(nloc, 0.0);
+            MKL_INT phase = 33;
+            const MKL_INT error = call(phase, b.data(), x.data());
+            // Full x on every active leader (row blocks are contiguous and in rank order).
+            const int nl = static_cast<int>(nloc), ns = core::mpiSize(solver_comm_);
+            std::vector<int> cnt(static_cast<std::size_t>(ns));
+            MPI_Allgather(&nl, 1, MPI_INT, cnt.data(), 1, MPI_INT, solver_comm_);
+            const std::vector<int> dsp = core::displacements(cnt);
+            std::vector<core::Scalar> xg(static_cast<std::size_t>(n0_)), y(static_cast<std::size_t>(n0_), 0.0);
+            MPI_Allgatherv(x.data(), nl, MPI_DOUBLE, xg.data(), cnt.data(), dsp.data(), MPI_DOUBLE, solver_comm_);
+            double s[4] = {0.0, 0.0, 0.0, error != 0 ? 1.0 : 0.0}; // ||r||^2, ||x||^2, ||A||_F^2, failures
+            for (std::size_t i = 0; i < nloc; ++i) {
+                const auto gi = static_cast<std::size_t>(first_) + i;
+                for (MKL_INT k = ia_[i] - 1; k < ia_[i + 1] - 1; ++k) {
+                    const auto j = static_cast<std::size_t>(ja_[static_cast<std::size_t>(k)] - 1);
+                    const double a = a_[static_cast<std::size_t>(k)];
+                    y[gi] += a * xg[j];
+                    if (j != gi) y[j] += a * xg[gi];
+                    s[2] += (j != gi ? 2.0 : 1.0) * a * a;
+                }
+            }
+            MPI_Allreduce(MPI_IN_PLACE, y.data(), static_cast<int>(n0_), MPI_DOUBLE, MPI_SUM, solver_comm_);
+            for (std::size_t i = 0; i < nloc; ++i) {
+                const double r = y[static_cast<std::size_t>(first_) + i] - 1.0;
+                s[0] += r * r;
+                s[1] += x[i] * x[i];
+            }
+            MPI_Allreduce(MPI_IN_PLACE, s, 4, MPI_DOUBLE, MPI_SUM, solver_comm_);
+            const double be = std::sqrt(s[0]) / (std::sqrt(s[2]) * std::sqrt(s[1]) + std::sqrt(static_cast<double>(n0_)));
+            ok = (s[3] == 0.0 && std::isfinite(be) && be < 1e-8) ? 1 : 0;
+        }
+        return core::allreduceMin(static_cast<core::GlobalIndex>(ok), comm_) == 1;
+    }
+
+    /// @brief Next matrix type of the chain (same symmetric storage: pattern and buffers unchanged).
+    void nextInChain()
+    {
+        ++level_;
+        mtype_ = chain_[level_];
+    }
+
+    /// @brief Symmetric mtypes (2, -2): upper triangle only (same filter in setup() and update()).
     void filter(std::vector<core::GlobalTriplet>& entries) const
     {
-        if (mtype_ == -2)
+        if (mtype_ != 11)
             entries.erase(std::remove_if(entries.begin(), entries.end(),
                                          [](const core::GlobalTriplet& t) { return t.row > t.col; }),
                           entries.end());
@@ -601,7 +722,7 @@ private:
                     recv_pos_[it->second] = ja_.size() - 1;
                     continue;
                 }
-                if (!has_diag && it->first > diag) { // diagonal kept in place (needed for mtype -2)
+                if (!has_diag && it->first > diag) { // diagonal kept in place (needed by the symmetric mtypes)
                     ja_.push_back(static_cast<MKL_INT>(diag + 1));
                     has_diag = true;
                 }
@@ -635,6 +756,9 @@ private:
     }
 
     int coarse_procs_;
+    std::string factorization_;                   ///< Request: "auto", "lu", "cholesky", "ldlt".
+    std::vector<MKL_INT> chain_{11};              ///< Matrix types to try, in order.
+    std::size_t level_ = 0;                       ///< Position of mtype_ in chain_.
     int stride_ = 1, nprocs_ = 0, fcomm_ = 0;
     bool leader_ = false, active_ = false, factorized_ = false;
     core::GlobalIndex first_ = 0, last_ = 0;
@@ -669,7 +793,7 @@ std::vector<std::string> availableCoarseSolvers()
 }
 
 std::unique_ptr<CoarseSolver> makeCoarseSolver(const std::string& name, int coarse_procs,
-                                               const std::string& local_solver)
+                                               const std::string& local_solver, const std::string& factorization)
 {
     (void)coarse_procs; // unused when no distributed coarse solver is compiled in
     const std::string n = (name == "auto") ? availableCoarseSolvers().front() : name;
@@ -677,9 +801,9 @@ std::unique_ptr<CoarseSolver> makeCoarseSolver(const std::string& name, int coar
     if (n == "mumps") return std::make_unique<MumpsCoarseSolver>(coarse_procs);
 #endif
 #ifdef USE_CPARDISO
-    if (n == "cpardiso") return std::make_unique<CPardisoCoarseSolver>(coarse_procs);
+    if (n == "cpardiso") return std::make_unique<CPardisoCoarseSolver>(coarse_procs, factorization);
 #endif
-    if (n == "root") return std::make_unique<RootCoarseSolver>(local_solver);
+    if (n == "root") return std::make_unique<RootCoarseSolver>(local_solver, factorization);
     throw std::invalid_argument("coarse solver '" + n + "' is unknown or not compiled in (USE_MUMPS / USE_CPARDISO)");
 }
 

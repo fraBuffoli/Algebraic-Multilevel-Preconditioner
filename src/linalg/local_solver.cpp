@@ -4,6 +4,7 @@
  */
 #include "local_solver.hpp"
 
+#include <Eigen/SparseCholesky>
 #include <Eigen/SparseLU>
 
 #ifdef USE_UMFPACK
@@ -13,9 +14,21 @@
 #include <Eigen/PardisoSupport>
 #endif
 
+#include <functional>
 #include <stdexcept>
+#include <type_traits>
 
 namespace schwarz2lvl::linalg {
+
+const char* toString(Factorization f)
+{
+    switch (f) {
+    case Factorization::LU: return "lu";
+    case Factorization::Cholesky: return "cholesky";
+    case Factorization::LDLT: return "ldlt";
+    }
+    return "?";
+}
 
 void LocalSolver::solve(const core::Mat& B, core::Mat& X) const
 {
@@ -42,18 +55,52 @@ void LocalSolver::solveTranspose(const core::Mat& B, core::Mat& X) const
     }
 }
 
-// --------------------------------------------------------------------- SparseLU
+namespace {
+
+template <typename Real> using SpMatT = Eigen::SparseMatrix<Real, Eigen::ColMajor, core::LocalIndex>;
+
+/// @brief Calls @p f with the matrix in precision Real (no copy in double precision).
+template <typename Real, typename F> void withPrecision(const core::SpMat& A, F&& f)
+{
+    if constexpr (std::is_same_v<Real, double>) {
+        f(A);
+    } else {
+        const SpMatT<Real> Ar = A.template cast<Real>();
+        f(Ar);
+    }
+}
+
+/// @brief x = solve(b) in precision Real (b rounded, x converted back).
+template <typename Real, typename B, typename X, typename S> void solveIn(const S& solve, const B& b, X& x)
+{
+    if constexpr (std::is_same_v<Real, double>) {
+        x = solve(b);
+    } else {
+        x = solve(b.template cast<Real>().eval()).template cast<double>();
+    }
+}
+
+std::string precisionSuffix(bool single) { return single ? " single" : ""; }
+
+} // namespace
+
+// ---------------------------------------------------------------- Eigen built-in solvers
 /**
- * @brief Eigen::SparseLU backend (supernodal LU with partial pivoting, COLAMD ordering).
+ * @brief Eigen built-in backend: SparseLU (supernodal LU with partial pivoting, COLAMD ordering)
+ *        or SimplicialLLT / SimplicialLDLT (AMD ordering), in double or single precision.
  */
-class SparseLuSolver final : public LocalSolver {
+template <typename Solver, typename Real> class EigenSolver final : public LocalSolver {
 public:
+    explicit EigenSolver(Factorization f) : f_(f) {}
+
     bool factorize(const core::SpMat& A) override
     {
-        lu_.analyzePattern(A);
-        lu_.factorize(A);
-        if (lu_.info() != Eigen::Success) {
-            error_ = "Eigen::SparseLU: " + lu_.lastErrorMessage();
+        withPrecision<Real>(A, [&](const auto& M) {
+            s_.analyzePattern(M);
+            s_.factorize(M);
+        });
+        if (s_.info() != Eigen::Success) {
+            error_ = name() + ": factorization failed";
             return false;
         }
         return true;
@@ -61,30 +108,49 @@ public:
     bool refactorize(const core::SpMat& A) override
     {
         fell_back_ = false;
-        lu_.factorize(A); // the column ordering / elimination tree of analyzePattern() are kept
-        if (lu_.info() == Eigen::Success) return true;
+        withPrecision<Real>(A, [&](const auto& M) { s_.factorize(M); }); // ordering / elimination tree kept
+        if (s_.info() == Eigen::Success) return true;
         fell_back_ = true;
         return factorize(A);
     }
-    void solve(const core::Vec& b, core::Vec& x) const override { x = lu_.solve(b); }
-    void solve(const core::Mat& B, core::Mat& X) const override { X = lu_.solve(B); }
+    void solve(const core::Vec& b, core::Vec& x) const override
+    {
+        solveIn<Real>([&](const auto& r) { return s_.solve(r).eval(); }, b, x);
+    }
+    void solve(const core::Mat& B, core::Mat& X) const override
+    {
+        solveIn<Real>([&](const auto& R) { return s_.solve(R).eval(); }, B, X);
+    }
     bool hasTransposeSolve() const override { return true; }
     void solveTranspose(const core::Vec& b, core::Vec& x) const override
     {
-        // SparseLU::transpose() is a non-const view in Eigen 3.4.
-        x = const_cast<Eigen::SparseLU<core::SpMat, Eigen::COLAMDOrdering<core::LocalIndex>>&>(lu_).transpose().solve(b);
+        if (f_ != Factorization::LU) { // symmetric factorization: A^T = A
+            solve(b, x);
+            return;
+        }
+        if constexpr (std::is_same_v<Solver, Eigen::SparseLU<SpMatT<Real>, Eigen::COLAMDOrdering<core::LocalIndex>>>) {
+            // SparseLU::transpose() is a non-const view in Eigen 3.4.
+            auto& lu = const_cast<Solver&>(s_);
+            solveIn<Real>([&](const auto& r) { return lu.transpose().solve(r).eval(); }, b, x);
+        }
     }
-    std::string name() const override { return "sparselu"; }
+    std::string name() const override
+    {
+        return std::string(f_ == Factorization::LU ? "sparselu" : "eigen") + " " + toString(f_) +
+               precisionSuffix(std::is_same_v<Real, float>);
+    }
+    Factorization factorization() const override { return f_; }
 
 private:
-    Eigen::SparseLU<core::SpMat, Eigen::COLAMDOrdering<core::LocalIndex>> lu_; ///< Factorization.
+    Factorization f_;
+    Solver s_;
 };
 
 #ifdef USE_UMFPACK
 // ---------------------------------------------------------------------- UMFPACK
 /**
- * @brief SuiteSparse UMFPACK backend (unsymmetric multifrontal LU), called directly
- *        on the compressed column arrays of the Eigen matrix (no conversion).
+ * @brief SuiteSparse UMFPACK backend (unsymmetric multifrontal LU, double precision), called
+ *        directly on the compressed column arrays of the Eigen matrix (no conversion).
  */
 class UmfpackSolver final : public LocalSolver {
 public:
@@ -142,7 +208,7 @@ public:
     void solve(const core::Vec& b, core::Vec& x) const override { run(UMFPACK_A, b, x); }
     bool hasTransposeSolve() const override { return true; }
     void solveTranspose(const core::Vec& b, core::Vec& x) const override { run(UMFPACK_At, b, x); }
-    std::string name() const override { return "umfpack"; }
+    std::string name() const override { return "umfpack lu"; }
 
 private:
     core::SpMat A_;                          ///< Copy of the factorized matrix (required by the UMFPACK API).
@@ -171,23 +237,31 @@ private:
 #ifdef USE_PARDISO
 // ---------------------------------------------------------------------- PARDISO
 /**
- * @brief Intel MKL PARDISO backend through Eigen::PardisoLU (one thread per MPI rank:
- *        set MKL_NUM_THREADS=1). Transposed solves use iparm(12) = 2.
+ * @brief Intel MKL PARDISO backend through Eigen (one thread per MPI rank: set MKL_NUM_THREADS=1):
+ *        PardisoLU (mtype 11), PardisoLLT (mtype 2), PardisoLDLT (mtype -2), double or single.
  *
  * No iterative refinement (iparm(8) = 0; Eigen sets 2): inside a preconditioner and an
- * eigensolver the backward error of the LU is sufficient, and the two refinement steps
- * (1 SpMV + 1 solve each, always performed) made every solve 3-3.7x slower. PARDISO still
+ * eigensolver the backward error of the factorization is sufficient, and the two refinement
+ * steps (1 SpMV + 1 solve each, always performed) made every solve 3-3.7x slower. PARDISO still
  * refines automatically (2 steps) the solves of a factorization with perturbed pivots.
+ * LDL^T uses Bunch-Kaufman 1x1 and 2x2 pivots (iparm(21) = 1; Eigen sets 1x1 only).
+ * A Cholesky factorization of a matrix that is not positive definite fails (error -4): the
+ * chain of makeLocalSolver() then moves on to LDL^T.
+ * Transposed solves: iparm(12) = 2 for LU; the symmetric factorizations solve with A.
  */
-class PardisoSolver final : public LocalSolver {
+template <typename Pardiso, typename Real> class PardisoSolver final : public LocalSolver {
 public:
-    PardisoSolver() { lu_.pardisoParameterArray()[7] = 0; } // kept by compute(): set once
+    explicit PardisoSolver(Factorization f) : f_(f)
+    {
+        lu_.pardisoParameterArray()[7] = 0;                           // kept by compute(): set once
+        if (f_ == Factorization::LDLT) lu_.pardisoParameterArray()[20] = 1; // Bunch-Kaufman pivoting
+    }
 
     bool factorize(const core::SpMat& A) override
     {
-        lu_.compute(A); // phase 12: analysis (ordering, scaling + matching from the values) + factorization
+        withPrecision<Real>(A, [&](const auto& M) { lu_.compute(M); }); // phase 12: analysis + factorization
         if (lu_.info() != Eigen::Success) {
-            error_ = "PARDISO factorization failed";
+            error_ = "PARDISO " + std::string(toString(f_)) + " factorization failed";
             return false;
         }
         perturbed_full_ = perturbedPivots();
@@ -199,34 +273,103 @@ public:
     bool refactorize(const core::SpMat& A) override
     {
         fell_back_ = false;
-        lu_.factorize(A);
+        withPrecision<Real>(A, [&](const auto& M) { lu_.factorize(M); });
         if (lu_.info() == Eigen::Success && perturbedPivots() <= perturbed_full_) return true;
         fell_back_ = true;
         return factorize(A);
     }
-    void solve(const core::Vec& b, core::Vec& x) const override { x = lu_.solve(b); }
-    void solve(const core::Mat& B, core::Mat& X) const override { X = lu_.solve(B); }
+    void solve(const core::Vec& b, core::Vec& x) const override
+    {
+        solveIn<Real>([&](const auto& r) { return lu_.solve(r).eval(); }, b, x);
+    }
+    void solve(const core::Mat& B, core::Mat& X) const override // one call, nrhs = B.cols()
+    {
+        solveIn<Real>([&](const auto& R) { return lu_.solve(R).eval(); }, B, X);
+    }
     bool hasTransposeSolve() const override { return true; }
     void solveTranspose(const core::Vec& b, core::Vec& x) const override
     {
-        lu_.pardisoParameterArray()[11] = 2; // solve with the transposed matrix
-        x = lu_.solve(b);
+        if (f_ == Factorization::LU) lu_.pardisoParameterArray()[11] = 2; // solve with the transposed matrix
+        solve(b, x);
         lu_.pardisoParameterArray()[11] = 0;
     }
-    void solveTranspose(const core::Mat& B, core::Mat& X) const override // one call, nrhs = B.cols()
+    void solveTranspose(const core::Mat& B, core::Mat& X) const override
     {
-        lu_.pardisoParameterArray()[11] = 2;
-        X = lu_.solve(B);
+        if (f_ == Factorization::LU) lu_.pardisoParameterArray()[11] = 2;
+        solve(B, X);
         lu_.pardisoParameterArray()[11] = 0;
     }
     long perturbedPivots() const override { return static_cast<long>(lu_.pardisoParameterArray()[13]); }
-    std::string name() const override { return "pardiso"; }
+    std::string name() const override
+    {
+        return std::string("pardiso ") + toString(f_) + precisionSuffix(std::is_same_v<Real, float>);
+    }
+    Factorization factorization() const override { return f_; }
 
 private:
-    mutable Eigen::PardisoLU<core::SpMat> lu_; ///< Factorization (mutable: iparm is changed for A^T solves).
-    long perturbed_full_ = 0;                  ///< Perturbed pivots of the last full factorization.
+    Factorization f_;
+    mutable Pardiso lu_;      ///< Factorization (mutable: iparm is changed for A^T solves).
+    long perturbed_full_ = 0; ///< Perturbed pivots of the last full factorization.
 };
 #endif
+
+// ---------------------------------------------------------------- fallback chain
+/**
+ * @brief Tries the factorizations of a chain (e.g. Cholesky -> LDL^T -> LU) until one succeeds
+ *        and keeps using it: a later factorize() or refactorize() starts from the current one
+ *        and moves further down the chain only if it fails.
+ */
+class ChainSolver final : public LocalSolver {
+public:
+    using Maker = std::function<std::unique_ptr<LocalSolver>(Factorization)>;
+    ChainSolver(std::vector<Factorization> chain, Maker make) : chain_(std::move(chain)), make_(std::move(make)) {}
+
+    bool factorize(const core::SpMat& A) override
+    {
+        for (; level_ < chain_.size(); ++level_) {
+            cur_ = make_(chain_[level_]);
+            if (cur_->factorize(A)) return true;
+            error_ = cur_->lastError();
+        }
+        level_ = chain_.size() - 1; // every candidate failed: report the last one
+        return false;
+    }
+    bool refactorize(const core::SpMat& A) override
+    {
+        fell_back_ = false;
+        if (!cur_) return factorize(A);
+        if (cur_->refactorize(A)) {
+            fell_back_ = cur_->refactorizationFellBack();
+            return true;
+        }
+        fell_back_ = true; // the current type failed even with a full factorization: next one
+        if (level_ + 1 >= chain_.size()) {
+            error_ = cur_->lastError();
+            return false;
+        }
+        ++level_;
+        return factorize(A);
+    }
+    void solve(const core::Vec& b, core::Vec& x) const override { cur_->solve(b, x); }
+    void solve(const core::Mat& B, core::Mat& X) const override { cur_->solve(B, X); }
+    bool hasTransposeSolve() const override { return cur_ && cur_->hasTransposeSolve(); }
+    void solveTranspose(const core::Vec& b, core::Vec& x) const override { cur_->solveTranspose(b, x); }
+    void solveTranspose(const core::Mat& B, core::Mat& X) const override { cur_->solveTranspose(B, X); }
+    long perturbedPivots() const override { return cur_ ? cur_->perturbedPivots() : -1; }
+    std::string name() const override
+    {
+        if (!cur_) return "chain";
+        return cur_->name() + (level_ > 0 ? std::string(" (fallback from ") + toString(chain_.front()) + ")" : "");
+    }
+    Factorization factorization() const override { return chain_[level_]; }
+    int chainLevel() const override { return static_cast<int>(level_); }
+
+private:
+    std::vector<Factorization> chain_;
+    Maker make_;
+    std::size_t level_ = 0;
+    std::unique_ptr<LocalSolver> cur_;
+};
 
 std::vector<std::string> availableLocalSolvers()
 {
@@ -241,17 +384,63 @@ std::vector<std::string> availableLocalSolvers()
     return v;
 }
 
-std::unique_ptr<LocalSolver> makeLocalSolver(const std::string& name)
+namespace {
+
+/// @brief One backend with one factorization type and precision.
+std::unique_ptr<LocalSolver> makeSingle(const std::string& backend, Factorization f, bool single)
 {
-    const std::string n = (name == "auto") ? availableLocalSolvers().front() : name;
-    if (n == "sparselu") return std::make_unique<SparseLuSolver>();
+    using Fa = Factorization;
+    if (backend == "sparselu") {
+        if (single) {
+            if (f == Fa::Cholesky) return std::make_unique<EigenSolver<Eigen::SimplicialLLT<SpMatT<float>>, float>>(f);
+            if (f == Fa::LDLT) return std::make_unique<EigenSolver<Eigen::SimplicialLDLT<SpMatT<float>>, float>>(f);
+            return std::make_unique<EigenSolver<Eigen::SparseLU<SpMatT<float>, Eigen::COLAMDOrdering<core::LocalIndex>>, float>>(f);
+        }
+        if (f == Fa::Cholesky) return std::make_unique<EigenSolver<Eigen::SimplicialLLT<SpMatT<double>>, double>>(f);
+        if (f == Fa::LDLT) return std::make_unique<EigenSolver<Eigen::SimplicialLDLT<SpMatT<double>>, double>>(f);
+        return std::make_unique<EigenSolver<Eigen::SparseLU<SpMatT<double>, Eigen::COLAMDOrdering<core::LocalIndex>>, double>>(f);
+    }
 #ifdef USE_UMFPACK
-    if (n == "umfpack") return std::make_unique<UmfpackSolver>();
+    if (backend == "umfpack") return std::make_unique<UmfpackSolver>(); // LU, double only
 #endif
 #ifdef USE_PARDISO
-    if (n == "pardiso") return std::make_unique<PardisoSolver>();
+    if (backend == "pardiso") {
+        if (single) {
+            if (f == Fa::Cholesky) return std::make_unique<PardisoSolver<Eigen::PardisoLLT<SpMatT<float>>, float>>(f);
+            if (f == Fa::LDLT) return std::make_unique<PardisoSolver<Eigen::PardisoLDLT<SpMatT<float>>, float>>(f);
+            return std::make_unique<PardisoSolver<Eigen::PardisoLU<SpMatT<float>>, float>>(f);
+        }
+        if (f == Fa::Cholesky) return std::make_unique<PardisoSolver<Eigen::PardisoLLT<SpMatT<double>>, double>>(f);
+        if (f == Fa::LDLT) return std::make_unique<PardisoSolver<Eigen::PardisoLDLT<SpMatT<double>>, double>>(f);
+        return std::make_unique<PardisoSolver<Eigen::PardisoLU<SpMatT<double>>, double>>(f);
+    }
 #endif
-    throw std::invalid_argument("local solver '" + n + "' is unknown or not compiled in");
+    throw std::invalid_argument("local solver '" + backend + "' is unknown or not compiled in");
+}
+
+} // namespace
+
+std::unique_ptr<LocalSolver> makeLocalSolver(const LocalSolverSpec& spec)
+{
+    const std::string backend = (spec.backend == "auto") ? availableLocalSolvers().front() : spec.backend;
+    const std::string& req = spec.factorization;
+    if (req != "auto" && req != "lu" && req != "cholesky" && req != "ldlt")
+        throw std::invalid_argument("unknown local factorization '" + req + "' (auto|lu|cholesky|ldlt)");
+    using Fa = Factorization;
+    std::vector<Fa> chain;
+    if (!spec.symmetric || req == "lu" || backend == "umfpack") chain = {Fa::LU}; // umfpack: LU only
+    else if (req == "ldlt") chain = {Fa::LDLT, Fa::LU};
+    else chain = {Fa::Cholesky, Fa::LDLT, Fa::LU};                                // auto, cholesky
+    const bool single = spec.single && backend != "umfpack";                       // umfpack: double only
+    if (chain.size() == 1) return makeSingle(backend, chain.front(), single);
+    return std::make_unique<ChainSolver>(chain, [backend, single](Fa f) { return makeSingle(backend, f, single); });
+}
+
+std::unique_ptr<LocalSolver> makeLocalSolver(const std::string& name)
+{
+    LocalSolverSpec s;
+    s.backend = name;
+    return makeLocalSolver(s);
 }
 
 } // namespace schwarz2lvl

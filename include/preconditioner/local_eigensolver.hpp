@@ -26,6 +26,7 @@ struct LocalEigensolverOptions {
     int kernel_probe = 8;               ///< Initial block size of the kernel detection.
     int dense_threshold = 400;          ///< n_i <= threshold: dense (reference) path.
     std::string local_solver = "auto";  ///< Backend used to factorize Atilda_ii + sigma I.
+    std::string factorization = "lu";   ///< Factorization request for Atilda_ii + sigma I (see linalg::LocalSolverSpec).
     bool symmetric = false;             ///< A (hence Atilda_ii) is symmetric: the left kernel equals the right kernel.
 };
 
@@ -44,6 +45,7 @@ struct LocalEigensolverResult {
     int attempts = 1;                               ///< Arnoldi runs (> 1: retried after a Schur failure).
     int nev_used = 0;                               ///< Eigenpairs computed by the last Arnoldi run (sparse path).
     std::string backend;                            ///< Factorization backend (sparse path).
+    int chain_level = 0;                            ///< Position of the factorization in its fallback chain.
     long perturbed_pivots = -1;                     ///< Perturbed pivots of A~ + sigma I (-1 = not reported / dense path).
 };
 

@@ -66,7 +66,10 @@ SolverConfig SolverConfig::fromCommandLine(int argc, char** argv){
         {"dense-threshold", [&](const std::string& v) { c.dense_threshold = std::stoi(v); }},
         {"orth-tol", [&](const std::string& v) { c.orth_tol = std::stod(v); }},
         {"local-solver", [&](const std::string& v) { c.local_solver = v; }},
+        {"local-factorization", [&](const std::string& v) { c.local_factorization = v; }},
+        {"local-precision", [&](const std::string& v) { c.local_precision = v; }},
         {"coarse-solver", [&](const std::string& v) { c.coarse_solver = v; }},
+        {"coarse-factorization", [&](const std::string& v) { c.coarse_factorization = v; }},
         {"coarse-procs", [&](const std::string& v) { c.coarse_procs = std::stoi(v); }},
         {"coarse-root-below", [&](const std::string& v) { c.coarse_root_below = std::stoll(v); }},
         {"restart", [&](const std::string& v) { c.restart = std::stoi(v); }},
@@ -121,6 +124,14 @@ void SolverConfig::validate() const
     if (coarse_root_below < 0) throw std::invalid_argument("--coarse-root-below must be >= 0");
     if (metis_objective != "cut" && metis_objective != "vol")
         throw std::invalid_argument("--metis-objective must be cut|vol");
+    if (local_factorization != "auto" && local_factorization != "lu" && local_factorization != "cholesky" &&
+        local_factorization != "ldlt")
+        throw std::invalid_argument("--local-factorization must be auto|lu|cholesky|ldlt");
+    if (coarse_factorization != "auto" && coarse_factorization != "lu" && coarse_factorization != "cholesky" &&
+        coarse_factorization != "ldlt")
+        throw std::invalid_argument("--coarse-factorization must be auto|lu|cholesky|ldlt");
+    if (local_precision != "double" && local_precision != "single")
+        throw std::invalid_argument("--local-precision must be double|single");
     if (steps < 0) throw std::invalid_argument("--steps must be >= 0");
     if (correctors < 1) throw std::invalid_argument("--correctors must be >= 1");
     if (reuse != "off" && reuse != "refactor" && reuse != "auto")
@@ -154,8 +165,9 @@ void SolverConfig::print(std::ostream& os) const
     line("tau", tau);
     line("nev", nev);
     line("nev start", nev_start == 0 ? std::string("nev (fixed)") : std::to_string(nev_start));
-    line("local solver", local_solver);
-    line("coarse solver", coarse_solver);
+    line("local solver", local_solver + ", factorization " + local_factorization +
+                             (local_precision == "single" ? ", A_ii in single precision" : ""));
+    line("coarse solver", coarse_solver + ", factorization " + coarse_factorization);
     line("coarse procs", coarse_procs == 0 ? std::string("all") : std::to_string(coarse_procs));
     if (coarse_root_below > 0) line("coarse root below n0", coarse_root_below);
     line("GMRES restart", restart);
@@ -207,7 +219,12 @@ std::string SolverConfig::help()
   --dense-threshold N      n_i <= N uses dense eigensolvers                           [400]
   --orth-tol T             rank threshold of the local coarse basis                   [1e-13]
   --local-solver auto|sparselu|umfpack|pardiso                                       [auto]
+  --local-factorization auto|lu|cholesky|ldlt   symmetric A: auto = Cholesky, then LDL^T,
+                           then LU if a factorization fails; nonsymmetric A: always LU  [auto]
+  --local-precision double|single   factors of A_ii (one-level part) in float          [double]
   --coarse-solver auto|mumps|cpardiso|root  distributed MUMPS / MKL PARDISO, or rank 0 [auto]
+  --coarse-factorization auto|lu|cholesky|ldlt   A_00 with root/cpardiso (symmetric A:
+                           auto = Cholesky, then LDL^T if it fails; mumps: SYM=2)      [auto]
   --coarse-procs N         processes of the distributed coarse factorization         [all]
   --coarse-root-below N    use the root coarse solver when n0 < N (0 = never)        [0]
  Krylov:

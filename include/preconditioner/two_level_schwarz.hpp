@@ -33,6 +33,10 @@ struct CoarseStats {
     long matvecs_max = 0;        ///< Max applications of the projected operator.
     long perturbed_aii_max = -1;     ///< Max perturbed pivots in the LU of A_ii (-1 = not reported).
     long perturbed_atilde_max = -1;  ///< Max perturbed pivots in the LU of A~_ii + sigma I (-1 = not reported).
+    std::string local_factorization;  ///< Solver of A_ii on rank 0 (backend, factorization, precision).
+    std::string atilde_factorization; ///< Solver of A~_ii + sigma I on rank 0 ("dense" for the dense path).
+    int local_chain_fallbacks = 0;    ///< Ranks whose A_ii factorization fell back in its chain (e.g. Cholesky -> LDL^T).
+    int atilde_chain_fallbacks = 0;   ///< Same for A~_ii + sigma I.
 };
 
 /**

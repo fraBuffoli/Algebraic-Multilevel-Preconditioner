@@ -1,0 +1,14 @@
+bub128_lu 240 ok 79 0
+bub128_chol 240 ok 70 0
+bub128_cholsp 240 ok 69 0
+bub128_chol_cp 240 ok 87 0
+bub192_lu 240 ok 295 0
+bub192_chol 240 ok 273 0
+bub192_cholsp 240 ok 256 0
+bub192_chol_root 240 ok 300 0
+G3_circuit_lu 240 ok 21 0
+G3_circuit_chol 240 ok 20 0
+thermal2_lu 240 ok 11 0
+thermal2_chol 240 ok 11 0
+ecology2_lu 240 ok 8 0
+ecology2_chol 240 ok 8 0

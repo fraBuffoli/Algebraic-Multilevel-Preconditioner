@@ -71,7 +71,7 @@ CoarseSpace::CoarseSpace(const part::Subdomain& sd, const core::Mat& Z, double o
 }
 
 void CoarseSpace::assemble(const std::string& coarse_solver, int coarse_procs, const std::string& local_solver,
-                           bool symmetric, core::GlobalIndex root_below)
+                           const std::string& factorization, bool symmetric, core::GlobalIndex root_below)
 {
     std::vector<core::GlobalTriplet> entries;
     {
@@ -84,7 +84,7 @@ void CoarseSpace::assemble(const std::string& coarse_solver, int coarse_procs, c
     // n0 = offsets_.back() is the same on every rank (Allgather): the choice is collective.
     solver_kind_ = (root_below > 0 && dimension() < root_below) ? std::string("root")
                  : (coarse_solver == "auto" ? availableCoarseSolvers().front() : coarse_solver);
-    solver_ = makeCoarseSolver(solver_kind_, coarse_procs, local_solver);
+    solver_ = makeCoarseSolver(solver_kind_, coarse_procs, local_solver, factorization);
     solver_->setup(sd_.comm(), offsets_, entries, symmetric);
 }
 

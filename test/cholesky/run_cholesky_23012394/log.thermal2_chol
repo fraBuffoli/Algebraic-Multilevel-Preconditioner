@@ -1,0 +1,77 @@
+schwarz2lvl: two-level algebraic Schwarz (Al Daas, Jolivet, Rees, SISC 2023), 240 MPI processes
+Configuration
+  matrix                /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/matrices/thermal2.mtx
+  rhs                   random
+  block size            auto
+  partition of unity    boolean
+  one-level             ras
+  coarse correction     deflated
+  tau                   0.6
+  nev                   300
+  nev start             32
+  local solver          auto, factorization auto
+  coarse solver         cpardiso, factorization auto
+  coarse procs          48
+  GMRES restart         30
+  rtol                  1e-08
+Problem
+  /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/matrices/thermal2.mtx (n=1228045, nnz=8580313)
+  block size 1, symmetric
+Subdomains (min / avg / max)
+  owned unknowns n_I         4974 / 5116.9 / 5270
+  overlap unknowns n_Gamma   131 / 270.1 / 362
+  neighbours                 2 / 5.3 / 8
+  nnz(A_ii)                  35254 / 37096.7 / 38317
+Coarse space
+  n0                         16251
+  m_i min/avg/max            33 / 67.7 / 93
+  subdomains with ker(A~)    208 (max dim 1)
+  sum dim (L∩K)^⊥_K          208
+  dense eigensolves          0
+  Arnoldi not converged      0
+  Arnoldi retried            0
+  Arnoldi nev avg/max        79.2 / 126
+  max operator applications  337
+  perturbed pivots A_ii / A~ 0 / 0 (max over ranks)
+  A_ii factorization         pardiso cholesky (rank 0; chain fallbacks on 0 ranks)
+  A~_ii factorization        pardiso cholesky (rank 0; chain fallbacks on 18 ranks)
+  coarse solver              cpardiso(48 procs, mtype 2 cholesky, nnz(L) 543572, perturbed pivots 0)
+Preconditioner RAS,deflated, setup 2 s
+GMRES(30)
+  converged in 7 iterations
+  relative residual (GMRES)  6.227e-09
+  relative residual (true)   6.227e-09
+  solve time 0.142 s, total (setup+solve) 2.38 s
+Timings [s] over 240 ranks
+  phase                                          min         avg         max
+  decomposition.read                          0.0000      0.0062      1.4841
+  decomposition.metis                         0.0000      0.0045      1.0780
+  decomposition.scatter                       0.0009      0.3760      2.3809
+  decomposition                               2.5140      2.9519      5.0777
+  setup.subdomain                             0.0077      0.0094      0.0100
+  setup.local_factorization                   0.0451      0.0463      0.0465
+  setup.block_splitting                       0.0002      0.0008      0.0011
+  setup.eigensolver.factorization             0.0247      0.0279      0.0515
+  setup.eigensolver.kernel                    0.0125      0.0199      0.0217
+  setup.eigensolver.arnoldi.operator          0.1355      0.1789      0.2531
+  setup.eigensolver.arnoldi                   0.4303      0.6103      0.9147
+  setup.eigensolver                           0.4774      0.6603      0.9636
+  setup.coarse_basis                          0.0409      0.0412      0.0416
+  setup.coarse_assembly                       0.0551      0.1341      0.1888
+  setup.coarse_factorization.exchange         0.0026      0.0031      0.0061
+  setup.coarse_factorization.analysis         0.0000      0.1343      0.6728
+  setup.coarse_factorization.numeric          0.0000      0.0574      0.2872
+  setup.coarse_factorization.probe            0.0145      0.0146      0.0146
+  setup.coarse_factorization                  0.9804      1.0350      1.1139
+  setup                                       2.2208      2.2219      2.2222
+  solve.preconditioner.coarse.restrict        0.0020      0.0039      0.0048
+  solve.preconditioner.coarse.solve           0.1164      0.1173      0.1198
+  solve.preconditioner.coarse.prolong         0.0007      0.0041      0.0055
+  solve.preconditioner.coarse                 0.1215      0.1254      0.1270
+  solve.preconditioner.spmv                   0.0011      0.0020      0.0045
+  solve.preconditioner.local.halo             0.0002      0.0007      0.0020
+  solve.preconditioner.local.lu               0.0044      0.0047      0.0050
+  solve.preconditioner.local                  0.0048      0.0056      0.0069
+  solve.preconditioner                        0.1312      0.1331      0.1347
+  solve.spmv                                  0.0010      0.0014      0.0021
+  solve                                       0.1409      0.1411      0.1415

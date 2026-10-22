@@ -104,13 +104,15 @@ std::vector<SolveRecord> runTimeLoop(const core::SolverConfig& cfg, MPI_Comm com
                     if (cfg.coarse == "none") {
                         M = std::make_unique<prec::OneLevelSchwarz>(
                             sd, cfg.one_level == "asm" ? prec::OneLevelSchwarz::Variant::ASM : prec::OneLevelSchwarz::Variant::RAS,
-                            cfg.local_solver);
+                            prec::localSolverSpec(cfg, sys.symmetric));
                     } else {
                         auto p = std::make_unique<prec::TwoLevelSchwarz>(sd, A, cfg);
                         two = p.get();
                         M = std::move(p);
                     }
                     r.level = prec::UpdateLevel::Rebuild;
+                    if (const auto* one = dynamic_cast<const prec::OneLevelSchwarz*>(M.get()))
+                        out << "Local solver (rank 0): " << one->localSolver().name() << "\n";
                 } else {
                     sd.updateValues(); // the operator A follows the new values in any case
                     r.level = M->update(policy.decide(!M->upToDate()));

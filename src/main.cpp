@@ -100,7 +100,7 @@ int run(int argc, char** argv)
         utils::ScopedTimer t("setup");
         M = std::make_unique<prec::OneLevelSchwarz>(
             sd, cfg.one_level == "asm" ? prec::OneLevelSchwarz::Variant::ASM : prec::OneLevelSchwarz::Variant::RAS,
-            cfg.local_solver);
+            prec::localSolverSpec(cfg, sys.symmetric));
     } else {
         auto p = std::make_unique<prec::TwoLevelSchwarz>(sd, A, cfg);
         two = p.get();
@@ -109,6 +109,8 @@ int run(int argc, char** argv)
     MPI_Barrier(comm);
     const double t_setup = MPI_Wtime() - t_setup0;
     if (two) two->printStats(out);
+    else if (const auto* one = dynamic_cast<const prec::OneLevelSchwarz*>(M.get()))
+        out << "Local solver (rank 0): " << one->localSolver().name() << "\n";
     out << "Preconditioner " << M->name() << ", setup " << t_setup << " s\n";
 
     // ---------------------------------------------------------------- solve

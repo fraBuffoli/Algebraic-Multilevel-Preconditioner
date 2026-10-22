@@ -2,13 +2,35 @@
  * @file local_solver.hpp
  * @brief Sequential sparse direct solvers for the subdomain matrices.
  *
- * The paper computes *exact* LU factorizations of the local matrices A_ii
+ * The paper computes *exact* factorizations of the local matrices A_ii
  * (Section 4). Three interchangeable backends are provided behind one
  * interface, selected at run time with `--local-solver`:
- *  - `sparselu` : Eigen::SparseLU (always available, supernodal LU, COLAMD ordering);
- *  - `umfpack`  : SuiteSparse UMFPACK called directly (compile with USE_UMFPACK=1);
- *  - `pardiso`  : Intel MKL PARDISO through Eigen::PardisoLU (compile with USE_PARDISO=1,
- *                 the natural choice on CINECA G100).
+ *  - `sparselu` : Eigen built-in solvers (always available): SparseLU (supernodal LU, COLAMD)
+ *                 for LU, SimplicialLLT / SimplicialLDLT (AMD) for the symmetric factorizations;
+ *  - `umfpack`  : SuiteSparse UMFPACK called directly (compile with USE_UMFPACK=1), LU only;
+ *  - `pardiso`  : Intel MKL PARDISO through Eigen (compile with USE_PARDISO=1, the natural choice
+ *                 on CINECA G100): PardisoLU (mtype 11), PardisoLLT (mtype 2, symmetric positive
+ *                 definite), PardisoLDLT (mtype -2, symmetric indefinite, Bunch-Kaufman pivoting).
+ *
+ * **Factorization type** (`--local-factorization`). For a symmetric matrix a symmetric
+ * factorization stores one triangular factor instead of two (A = L L^T or L D L^T instead of
+ * A = L U): half the memory and about half the work of the (re)factorization. A solve still
+ * reads the factor twice (forward with L, backward with L^T), as many bytes as L and U: it
+ * gains only from the smaller footprint (~20% measured on a 32^3 subdomain with PARDISO).
+ * LDL^T with Bunch-Kaufman pivoting is not faster than LU in PARDISO: it is only a fallback.
+ * Cholesky needs a positive definite matrix (A_ii of an SPD A is SPD; A~_ii + sigma I is PSD +
+ * shift; A_00 = V^T A V is SPD); LDL^T accepts symmetric indefinite matrices. The request
+ * `auto` builds a chain Cholesky -> LDL^T -> LU: each candidate is tried until one factorizes
+ * successfully, and the chain stays on the one that worked. A symmetric factorization only
+ * reads one triangle, so it would be silently wrong on a nonsymmetric matrix: for a matrix
+ * not known to be symmetric every request becomes LU.
+ *
+ * **Precision** (`--local-precision`). `single` stores the factors in float (PARDISO
+ * iparm[27] = 1, Eigen solvers on float matrices): this halves the bytes read by every solve
+ * (~45% faster solves than Cholesky in double on a 32^3 subdomain). The right-hand
+ * side is rounded to float, solved, and converted back: the result has a relative error of
+ * about 1e-7 times the condition number of the matrix. Meant for the one-level part of the
+ * preconditioner (GMRES in double precision corrects it), not for the eigensolver.
  */
 #ifndef SCHWARZ2LVL_LINALG_LOCAL_SOLVER_HPP
 #define SCHWARZ2LVL_LINALG_LOCAL_SOLVER_HPP
@@ -21,6 +43,12 @@
 
 namespace schwarz2lvl::linalg {
 
+/// @brief Type of a sparse factorization.
+enum class Factorization { LU, Cholesky, LDLT };
+
+/// @brief Short name of a factorization type ("lu", "cholesky", "ldlt").
+const char* toString(Factorization f);
+
 /**
  * @class LocalSolver
  * @brief Abstract sequential sparse direct solver (one factorization, many solves).
@@ -30,9 +58,10 @@ public:
     virtual ~LocalSolver() = default;
 
     /**
-     * @brief Computes the LU factorization of @p A (square, column-major).
+     * @brief Computes the factorization of @p A (square, column-major, full storage also when symmetric).
      * @param A Matrix to factorize (the backend may keep a copy).
-     * @return false if the factorization failed (e.g. numerically singular matrix).
+     * @return false if the factorization failed (e.g. numerically singular matrix, or a
+     *         Cholesky factorization of a matrix that is not positive definite).
      */
     virtual bool factorize(const core::SpMat& A) = 0;
 
@@ -86,8 +115,14 @@ public:
     ///        PARDISO refines every solve of such a factorization (2 steps).
     virtual long perturbedPivots() const { return -1; }
 
-    /// @brief Backend name.
+    /// @brief Name: backend, factorization, precision (e.g. "pardiso cholesky", "pardiso lu single").
     virtual std::string name() const = 0;
+
+    /// @brief Factorization type in use.
+    virtual Factorization factorization() const { return Factorization::LU; }
+
+    /// @brief Position of the factorization in use in its fallback chain (0 = first choice).
+    virtual int chainLevel() const { return 0; }
 
     /// @brief Description of the last failure.
     const std::string& lastError() const { return error_; }
@@ -97,8 +132,27 @@ protected:
     bool fell_back_ = false; ///< The last refactorize() performed a full factorization.
 };
 
+/// @brief What to build: backend, factorization request, symmetry of the matrix, precision.
+struct LocalSolverSpec {
+    std::string backend = "auto";     ///< "auto" (pardiso > umfpack > sparselu), "sparselu", "umfpack", "pardiso".
+    std::string factorization = "lu"; ///< "auto", "lu", "cholesky", "ldlt".
+    bool symmetric = false;           ///< The matrix is known to be symmetric (otherwise always LU).
+    bool single = false;              ///< Single-precision factors.
+};
+
 /**
- * @brief Creates a solver backend.
+ * @brief Creates a solver from a specification.
+ *
+ * Symmetric matrix: "auto" and "cholesky" give the chain Cholesky -> LDL^T -> LU, "ldlt" gives
+ * LDL^T -> LU, "lu" gives LU. Nonsymmetric matrix: LU whatever the request. Backends without a
+ * symmetric factorization (umfpack) or without single precision (umfpack) use what they have
+ * (LU, double), as their name() reports.
+ * @throws std::invalid_argument if the backend or the request is unknown, or the backend is not compiled in.
+ */
+std::unique_ptr<LocalSolver> makeLocalSolver(const LocalSolverSpec& spec);
+
+/**
+ * @brief Creates a solver backend with an LU factorization in double precision.
  * @param name "auto" (pardiso > umfpack > sparselu, depending on the build), "sparselu", "umfpack" or "pardiso".
  * @return The solver.
  * @throws std::invalid_argument if the backend is unknown or not compiled in.

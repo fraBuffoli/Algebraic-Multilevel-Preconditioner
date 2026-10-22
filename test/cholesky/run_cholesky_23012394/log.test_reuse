@@ -1,0 +1,111 @@
+  [ OK ] policy: iterations per decade
+  [ OK ] policy auto: break-even rule (rebuild when the time lost reaches the rebuild premium)
+  [ OK ] policy auto: safety nets (--rebuild-growth, --rebuild-every, non-convergence)
+  [ OK ] policy off: rebuild before every solve
+  [ OK ] policy refactor: never rebuild
+  [ OK ] bubbles2d: pardiso refactorize vs factorize (diff 1.37e-14, residual 1.01e-13)
+  [ OK ] bubbles2d: sparselu refactorize vs factorize (diff 0.00e+00, residual 1.18e-13)
+  [ OK ] convdiff2d: pardiso refactorize vs factorize (diff 7.58e-16, residual 1.52e-14)
+  [ OK ] convdiff2d: sparselu refactorize vs factorize (diff 0.00e+00, residual 1.41e-14)
+  [ OK ] coupled2d: pardiso refactorize vs factorize (diff 7.52e-16, residual 5.22e-15)
+  [ OK ] coupled2d: sparselu refactorize vs factorize (diff 0.00e+00, residual 4.60e-15)
+case bubbles2d 32, np=16
+  [ OK ] bubbles2d/boolean/root: unchanged matrix -> reuse, identical application
+  [ OK ] bubbles2d/boolean/root: updateValues = generated matrix of the step, permuted
+  [ OK ] bubbles2d/boolean/root: updateValues sends every rank its rows
+  [ OK ] bubbles2d/boolean/root: Subdomain::updateValues = fresh subdomain (A_ii, A(Omega_I,Omega_i), lumping sums)
+  [ OK ] bubbles2d/boolean/root: refactorize -> R_0 (r - A Q r) = 0 for the new A (3.17e-14, before 8.53e+00)
+  [ OK ] bubbles2d/boolean/root: refactorize -> apply vs reference with the new matrix (rel. err 3.02e-14)
+  [ OK ] bubbles2d/boolean/root: refactorize -> GMRES converged in 17 it.
+  [ OK ] bubbles2d/boolean/root: second refactorize request -> reuse
+  [ OK ] bubbles2d/boolean/root: rebuild = new preconditioner (n0 39, rel. diff 0.00e+00)
+  [ OK ] bubbles2d/multiplicity/auto: unchanged matrix -> reuse, identical application
+  [ OK ] bubbles2d/multiplicity/auto: updateValues = generated matrix of the step, permuted
+  [ OK ] bubbles2d/multiplicity/auto: updateValues sends every rank its rows
+  [ OK ] bubbles2d/multiplicity/auto: Subdomain::updateValues = fresh subdomain (A_ii, A(Omega_I,Omega_i), lumping sums)
+  [ OK ] bubbles2d/multiplicity/auto: refactorize -> R_0 (r - A Q r) = 0 for the new A (6.99e-14, before 4.74e+00)
+  [ OK ] bubbles2d/multiplicity/auto: refactorize -> apply vs reference with the new matrix (rel. err 4.92e-14)
+  [ OK ] bubbles2d/multiplicity/auto: refactorize -> GMRES converged in 19 it.
+  [ OK ] bubbles2d/multiplicity/auto: second refactorize request -> reuse
+  [ OK ] bubbles2d/multiplicity/auto: rebuild = new preconditioner (n0 27, rel. diff 0.00e+00)
+  [ OK ] bubbles2d/boolean/cpardiso: unchanged matrix -> reuse, identical application
+  [ OK ] bubbles2d/boolean/cpardiso: Subdomain::updateValues = fresh subdomain (A_ii, A(Omega_I,Omega_i), lumping sums)
+  [ OK ] bubbles2d/boolean/cpardiso: refactorize -> R_0 (r - A Q r) = 0 for the new A (4.03e-14, before 8.53e+00)
+  [ OK ] bubbles2d/boolean/cpardiso: refactorize -> apply vs reference with the new matrix (rel. err 2.86e-14)
+  [ OK ] bubbles2d/boolean/cpardiso: refactorize -> GMRES converged in 17 it.
+  [ OK ] bubbles2d/boolean/cpardiso: second refactorize request -> reuse
+  [ OK ] bubbles2d/boolean/cpardiso:2: unchanged matrix -> reuse, identical application
+  [ OK ] bubbles2d/boolean/cpardiso:2: Subdomain::updateValues = fresh subdomain (A_ii, A(Omega_I,Omega_i), lumping sums)
+  [ OK ] bubbles2d/boolean/cpardiso:2: refactorize -> R_0 (r - A Q r) = 0 for the new A (4.53e-14, before 8.53e+00)
+  [ OK ] bubbles2d/boolean/cpardiso:2: refactorize -> apply vs reference with the new matrix (rel. err 3.35e-14)
+  [ OK ] bubbles2d/boolean/cpardiso:2: refactorize -> GMRES converged in 17 it.
+  [ OK ] bubbles2d/boolean/cpardiso:2: second refactorize request -> reuse
+case convdiff2d 24, np=16
+  [ OK ] convdiff2d/boolean/root: unchanged matrix -> reuse, identical application
+  [ OK ] convdiff2d/boolean/root: updateValues = generated matrix of the step, permuted
+  [ OK ] convdiff2d/boolean/root: updateValues sends every rank its rows
+  [ OK ] convdiff2d/boolean/root: Subdomain::updateValues = fresh subdomain (A_ii, A(Omega_I,Omega_i), lumping sums)
+  [ OK ] convdiff2d/boolean/root: refactorize -> R_0 (r - A Q r) = 0 for the new A (1.25e-15, before 2.60e-01)
+  [ OK ] convdiff2d/boolean/root: refactorize -> apply vs reference with the new matrix (rel. err 4.53e-16)
+  [ OK ] convdiff2d/boolean/root: refactorize -> GMRES converged in 13 it.
+  [ OK ] convdiff2d/boolean/root: second refactorize request -> reuse
+  [ OK ] convdiff2d/boolean/root: rebuild = new preconditioner (n0 22, rel. diff 0.00e+00)
+  [ OK ] convdiff2d/multiplicity/auto: unchanged matrix -> reuse, identical application
+  [ OK ] convdiff2d/multiplicity/auto: updateValues = generated matrix of the step, permuted
+  [ OK ] convdiff2d/multiplicity/auto: updateValues sends every rank its rows
+  [ OK ] convdiff2d/multiplicity/auto: Subdomain::updateValues = fresh subdomain (A_ii, A(Omega_I,Omega_i), lumping sums)
+  [ OK ] convdiff2d/multiplicity/auto: refactorize -> R_0 (r - A Q r) = 0 for the new A (7.10e-16, before 2.83e-01)
+  [ OK ] convdiff2d/multiplicity/auto: refactorize -> apply vs reference with the new matrix (rel. err 6.28e-16)
+  [ OK ] convdiff2d/multiplicity/auto: refactorize -> GMRES converged in 14 it.
+  [ OK ] convdiff2d/multiplicity/auto: second refactorize request -> reuse
+  [ OK ] convdiff2d/multiplicity/auto: rebuild = new preconditioner (n0 17, rel. diff 0.00e+00)
+  [ OK ] convdiff2d/boolean/cpardiso: unchanged matrix -> reuse, identical application
+  [ OK ] convdiff2d/boolean/cpardiso: Subdomain::updateValues = fresh subdomain (A_ii, A(Omega_I,Omega_i), lumping sums)
+  [ OK ] convdiff2d/boolean/cpardiso: refactorize -> R_0 (r - A Q r) = 0 for the new A (1.04e-15, before 2.60e-01)
+  [ OK ] convdiff2d/boolean/cpardiso: refactorize -> apply vs reference with the new matrix (rel. err 3.62e-16)
+  [ OK ] convdiff2d/boolean/cpardiso: refactorize -> GMRES converged in 13 it.
+  [ OK ] convdiff2d/boolean/cpardiso: second refactorize request -> reuse
+  [ OK ] convdiff2d/boolean/cpardiso:2: unchanged matrix -> reuse, identical application
+  [ OK ] convdiff2d/boolean/cpardiso:2: Subdomain::updateValues = fresh subdomain (A_ii, A(Omega_I,Omega_i), lumping sums)
+  [ OK ] convdiff2d/boolean/cpardiso:2: refactorize -> R_0 (r - A Q r) = 0 for the new A (8.03e-16, before 2.60e-01)
+  [ OK ] convdiff2d/boolean/cpardiso:2: refactorize -> apply vs reference with the new matrix (rel. err 3.03e-16)
+  [ OK ] convdiff2d/boolean/cpardiso:2: refactorize -> GMRES converged in 13 it.
+  [ OK ] convdiff2d/boolean/cpardiso:2: second refactorize request -> reuse
+case coupled2d 12, np=16
+  [ OK ] coupled2d/boolean/root: unchanged matrix -> reuse, identical application
+  [ OK ] coupled2d/boolean/root: updateValues = generated matrix of the step, permuted
+  [ OK ] coupled2d/boolean/root: updateValues sends every rank its rows
+  [ OK ] coupled2d/boolean/root: Subdomain::updateValues = fresh subdomain (A_ii, A(Omega_I,Omega_i), lumping sums)
+  [ OK ] coupled2d/boolean/root: refactorize -> R_0 (r - A Q r) = 0 for the new A (4.16e-16, before 1.80e-01)
+  [ OK ] coupled2d/boolean/root: refactorize -> apply vs reference with the new matrix (rel. err 2.46e-16)
+  [ OK ] coupled2d/boolean/root: refactorize -> GMRES converged in 14 it.
+  [ OK ] coupled2d/boolean/root: second refactorize request -> reuse
+  [ OK ] coupled2d/boolean/root: rebuild = new preconditioner (n0 14, rel. diff 0.00e+00)
+  [ OK ] coupled2d/multiplicity/auto: unchanged matrix -> reuse, identical application
+  [ OK ] coupled2d/multiplicity/auto: updateValues = generated matrix of the step, permuted
+  [ OK ] coupled2d/multiplicity/auto: updateValues sends every rank its rows
+  [ OK ] coupled2d/multiplicity/auto: Subdomain::updateValues = fresh subdomain (A_ii, A(Omega_I,Omega_i), lumping sums)
+  [ OK ] coupled2d/multiplicity/auto: refactorize -> R_0 (r - A Q r) = 0 for the new A (2.65e-16, before 2.39e-01)
+  [ OK ] coupled2d/multiplicity/auto: refactorize -> apply vs reference with the new matrix (rel. err 3.75e-16)
+  [ OK ] coupled2d/multiplicity/auto: refactorize -> GMRES converged in 16 it.
+  [ OK ] coupled2d/multiplicity/auto: second refactorize request -> reuse
+  [ OK ] coupled2d/multiplicity/auto: rebuild = new preconditioner (n0 12, rel. diff 0.00e+00)
+  [ OK ] coupled2d/boolean/cpardiso: unchanged matrix -> reuse, identical application
+  [ OK ] coupled2d/boolean/cpardiso: Subdomain::updateValues = fresh subdomain (A_ii, A(Omega_I,Omega_i), lumping sums)
+  [ OK ] coupled2d/boolean/cpardiso: refactorize -> R_0 (r - A Q r) = 0 for the new A (3.95e-16, before 1.80e-01)
+  [ OK ] coupled2d/boolean/cpardiso: refactorize -> apply vs reference with the new matrix (rel. err 2.79e-16)
+  [ OK ] coupled2d/boolean/cpardiso: refactorize -> GMRES converged in 14 it.
+  [ OK ] coupled2d/boolean/cpardiso: second refactorize request -> reuse
+  [ OK ] coupled2d/boolean/cpardiso:2: unchanged matrix -> reuse, identical application
+  [ OK ] coupled2d/boolean/cpardiso:2: Subdomain::updateValues = fresh subdomain (A_ii, A(Omega_I,Omega_i), lumping sums)
+  [ OK ] coupled2d/boolean/cpardiso:2: refactorize -> R_0 (r - A Q r) = 0 for the new A (3.86e-16, before 1.80e-01)
+  [ OK ] coupled2d/boolean/cpardiso:2: refactorize -> apply vs reference with the new matrix (rel. err 2.43e-16)
+  [ OK ] coupled2d/boolean/cpardiso:2: refactorize -> GMRES converged in 14 it.
+  [ OK ] coupled2d/boolean/cpardiso:2: second refactorize request -> reuse
+  [ OK ] time loop refactor: levels 201010 (expected 201010), all converged
+  [ OK ] time loop off: levels 222222 (expected 222222), all converged
+  [ OK ] time loop: refactor and off identical on the first step
+  [ OK ] time loop auto: levels 201010, all converged
+  [ OK ] time loop one-level auto: levels 20101010 (expected 20101010, no rebuild)
+  [ OK ] time loop from files (--matrix test_reuse_seq_%02d.mtx): same levels and iterations as the generator
+ALL PASSED
