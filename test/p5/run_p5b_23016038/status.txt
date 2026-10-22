@@ -1,0 +1,16 @@
+bub192_ref 960 ok 207 0
+bub192_n16 960 ok 160 0
+bub192_n16sp 960 ok 177 0
+bub192_n16e4 960 ok 166 0
+bub192_n16spe4 960 ok 173 0
+bub192_n8 960 ok 119 0
+bub192_n8sp 960 ok 118 0
+bub192_n8spe4 960 ok 118 0
+bub256_ref 960 ok 401 0
+bub256_n16 960 ok 258 0
+bub256_n16sp 960 ok 263 0
+bub256_n16e4 960 ok 254 0
+bub256_n16spe4 960 ok 254 0
+bub256_n8 960 ok 211 0
+bub256_n8sp 960 ok 206 0
+bub256_n8spe4 960 ok 207 0

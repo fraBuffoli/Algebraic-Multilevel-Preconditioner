@@ -1,0 +1,14 @@
+bub192_ref 240 ok 270 0
+bub192_t010 240 ok 222 0
+bub192_t003 240 ok 276 0
+bub192_n32 240 ok 198 0
+bub192_n16 240 ok 169 0
+bub192_n8 240 ok 169 0
+bub192_cs_root 240 ok 51 0
+bub192_cs_cp5 240 ok 48 0
+bub192_cs_cp20 240 ok 48 0
+bub192_cs_cp48 240 ok 49 0
+bub128_ref 240 ok 71 0
+bub128_t010 240 ok 55 0
+bub128_n16 240 ok 48 0
+bub128_n8 240 ok 45 0

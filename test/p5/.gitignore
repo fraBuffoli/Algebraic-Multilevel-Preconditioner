@@ -1,0 +1,7 @@
+run_p5_local/
+run_p5b_local/
+allrun_p5.out
+allrun_p5.err
+allrun_p5b.out
+allrun_p5b.err
+__pycache__/

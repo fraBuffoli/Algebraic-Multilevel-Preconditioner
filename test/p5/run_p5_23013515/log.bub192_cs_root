@@ -1,0 +1,90 @@
+schwarz2lvl: two-level algebraic Schwarz (Al Daas, Jolivet, Rees, SISC 2023), 240 MPI processes
+Configuration
+  generator             bubbles3d (nx=192, ny=192, nz=192, nu=1, ncomp=4, rho_ratio=1000, nbubbles=150, radius=0.04, cfl=0.5)
+  rhs                   random
+  block size            auto
+  partition of unity    boolean
+  one-level             ras
+  coarse correction     deflated
+  tau                   0.3
+  nev                   60
+  nev start             32
+  local solver          auto, factorization auto
+  coarse solver         root, factorization auto
+  coarse procs          all
+  GMRES restart         30
+  rtol                  1e-08
+  steps x correctors    4 x 3
+  setup reuse           refactor
+Problem
+  bubbles3d 192x192x192 rho_ratio=1000 nb=150 R=0.04 cfl=0.5 t=0 (n=7077888, nnz=49324032)
+  block size 1, symmetric
+Time loop: 4 steps x 3 correctors, reuse refactor
+   step corr  level         update[s]  solve[s]  its  it/decade      n0  wasted[s]
+      0    0  rebuild        13.3657    0.7905   13       1.56   12589     0.0000
+      0    1  reuse           0.0009    0.7860   13       1.58   12589     0.0094
+      0    2  reuse           0.0011    0.7902   13       1.57   12589     0.0145
+      1    0  refactorize     1.8462    0.7877   13       1.57   12589     0.0217
+      1    1  reuse           0.0009    0.7863   13       1.56   12589     0.0249
+      1    2  reuse           0.0011    0.7867   13       1.58   12589     0.0343
+      2    0  refactorize     1.8477    0.9256   14       1.70   12589     0.1141
+      2    1  reuse           0.0012    0.8424   14       1.67   12589     0.1699
+      2    2  reuse           0.0009    0.8436   14       1.69   12589     0.2386
+      3    0  refactorize     1.8476    0.9619   16       1.95   12589     0.4339
+      3    1  reuse           0.0010    1.0117   16       1.94   12589     0.6332
+      3    2  reuse           0.0009    0.9613   16       1.94   12589     0.8224
+Refactorizations falling back to a full factorization: local 0 (on 0 ranks), coarse 0
+Coarse space
+  n0                         12589
+  m_i min/avg/max            29 / 52.5 / 60
+  subdomains with ker(A~)    195 (max dim 1)
+  sum dim (L∩K)^⊥_K          195
+  dense eigensolves          0
+  Arnoldi not converged      0
+  Arnoldi retried            0
+  Arnoldi nev avg/max        59.2 / 60
+  max operator applications  184
+  perturbed pivots A_ii / A~ 0 / 0 (max over ranks)
+  A_ii factorization         pardiso cholesky (rank 0; chain fallbacks on 0 ranks)
+  A~_ii factorization        pardiso cholesky (rank 0; chain fallbacks on 0 ranks)
+  coarse solver              root(pardiso cholesky)
+Time loop summary (reuse refactor, 12 solves, 12 converged)
+  initial setup              13.366 s
+  updates                    5.549 s   (reuse 8 x, refactorize 3 x 1.847 s, rebuild 0 x 0.000 s)
+  solves                     10.274 s   (iterations avg 14.0, max 16)
+  total setup + updates + solves 29.189 s
+Timings [s] over 240 ranks
+  phase                                          min         avg         max
+  decomposition.generate                      0.0000      0.0085      2.0493
+  decomposition.metis                         0.0000      0.0323      7.7487
+  decomposition.scatter                       0.0050      0.5547      1.1111
+  decomposition                               9.0763      9.5928     10.2442
+  setup.subdomain                             0.0333      0.5975      1.1495
+  setup.local_factorization                   0.4568      0.4572      0.4574
+  setup.block_splitting                       0.0028      0.0044      0.0051
+  setup.eigensolver.factorization             0.3214      0.3717      0.4578
+  setup.eigensolver.kernel                    0.1753      0.1924      0.2305
+  setup.eigensolver.arnoldi.operator          2.8366      3.5126      3.8903
+  setup.eigensolver.arnoldi                   6.5030      8.5431      9.1159
+  setup.eigensolver                           7.0321      9.1197      9.7209
+  setup.coarse_basis                          0.4138      0.4141      0.4144
+  setup.coarse_assembly                       0.3171      0.7386      0.9268
+  setup.coarse_factorization                  1.8378      2.0259      2.4473
+  setup                                      13.3650     13.3653     13.3656
+  solve.preconditioner.coarse.restrict        0.2933      0.4718      0.5435
+  solve.preconditioner.coarse.solve           4.7680      4.8389      5.0169
+  solve.preconditioner.coarse.prolong         0.1631      0.5110      0.6567
+  solve.preconditioner.coarse                 5.4756      5.8231      5.9679
+  solve.preconditioner.spmv                   0.1006      0.2066      0.5087
+  solve.preconditioner.local.halo             0.0146      0.0568      0.1513
+  solve.preconditioner.local.lu               3.0612      3.3626      3.6357
+  solve.preconditioner.local                  3.1507      3.4570      3.7699
+  solve.preconditioner                        9.1608      9.5038      9.8016
+  solve.spmv                                  0.0840      0.2673      0.5694
+  solve                                      10.2724     10.2726     10.2729
+  update.subdomain                            0.0161      0.0203      0.0213
+  decomposition.update                        3.6122      4.3933      5.2236
+  update.local_refactorization                0.4369      0.5451      0.7553
+  update.coarse_assembly                      0.5116      1.2812      1.5866
+  update.coarse_factorization                 3.1832      3.4886      4.2583
+  update                                      5.5251      5.5252      5.5272

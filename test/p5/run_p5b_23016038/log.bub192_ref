@@ -1,0 +1,174 @@
+schwarz2lvl: two-level algebraic Schwarz (Al Daas, Jolivet, Rees, SISC 2023), 960 MPI processes
+Configuration
+  generator             bubbles3d (nx=192, ny=192, nz=192, nu=1, ncomp=4, rho_ratio=1000, nbubbles=150, radius=0.04, cfl=0.5)
+  rhs                   random
+  block size            auto
+  partition of unity    boolean
+  one-level             ras
+  coarse correction     deflated
+  tau                   0.3
+  nev                   60
+  nev start             32
+  local solver          auto, factorization auto
+  coarse solver         cpardiso, factorization auto
+  coarse procs          48
+  coarse root below n0  10000
+  GMRES restart         30
+  rtol                  1e-08
+  steps x correctors    30 x 3
+  setup reuse           auto (rebuild at break-even)
+Problem
+  bubbles3d 192x192x192 rho_ratio=1000 nb=150 R=0.04 cfl=0.5 t=0 (n=7077888, nnz=49324032)
+  block size 1, symmetric
+Time loop: 30 steps x 3 correctors, reuse auto
+   step corr  level         update[s]  solve[s]  its  it/decade      n0  wasted[s]
+      0    0  rebuild         5.5870    0.5987   14       1.64   23485     0.0000
+      0    1  reuse           0.0125    0.6520   14       1.66   23485     0.0075
+      0    2  reuse           0.0008    0.6640   13       1.60   23485     0.0075
+      1    0  refactorize     0.8741    0.5503   14       1.65   23485     0.0123
+      1    1  reuse           0.0010    0.5487   13       1.62   23485     0.0123
+      1    2  reuse           0.0016    0.5711   14       1.64   23485     0.0123
+      2    0  refactorize     0.8343    0.6205   15       1.77   23485     0.0602
+      2    1  reuse           0.0014    0.6151   15       1.77   23485     0.1083
+      2    2  reuse           0.0007    0.6452   15       1.76   23485     0.1554
+      3    0  refactorize     0.9199    0.8099   19       2.30   23485     0.3901
+      3    1  reuse           0.0004    0.7939   19       2.29   23485     0.6179
+      3    2  reuse           0.0010    0.8161   19       2.24   23485     0.8366
+      4    0  refactorize     0.8846    0.9875   24       2.95   23485     1.2762
+      4    1  reuse           0.0014    1.0731   24       2.94   23485     1.7524
+      4    2  reuse           0.0010    0.9721   23       2.85   23485     2.1673
+      5    0  refactorize     0.8583    1.2309   30       3.72   23485     2.8568
+      5    1  reuse           0.0008    1.2271   30       3.72   23485     3.5444
+      5    2  reuse           0.0131    1.4530   29       3.62   23485     4.3398
+      6    0  refactorize     0.8983    1.5099   38       4.65   23485     5.3187
+      6    1  reuse           0.0006    1.5039   39       4.84   23485     6.3138
+      6    2  reuse           0.0007    1.8443   39       4.82   23485     7.5316
+      7    0  rebuild         3.8769    0.5131   13       1.62   23464     0.0000
+      7    1  reuse           0.0003    0.5388   14       1.64   23464     0.0084
+      7    2  reuse           0.0009    0.5849   14       1.64   23464     0.0170
+      8    0  refactorize     0.8995    0.5777   14       1.66   23464     0.0329
+      8    1  reuse           0.0003    0.5549   13       1.62   23464     0.0352
+      8    2  reuse           0.0006    0.6206   14       1.65   23464     0.0474
+      9    0  refactorize     0.8327    0.6781   15       1.79   23464     0.1150
+      9    1  reuse           0.0003    0.7045   15       1.78   23464     0.1798
+      9    2  reuse           0.0005    0.5854   15       1.77   23464     0.2312
+     10    0  refactorize     0.8611    0.7902   17       2.04   23464     0.3953
+     10    1  reuse           0.0318    0.9263   18       2.14   23464     0.6234
+     10    2  reuse           0.0016    0.8004   18       2.12   23464     0.8137
+     11    0  refactorize     0.8895    0.9096   20       2.49   23464     1.1324
+     11    1  reuse           0.0010    1.0534   21       2.55   23464     1.5173
+     11    2  reuse           0.0010    0.9731   21       2.55   23464     1.8736
+     12    0  refactorize     0.8531    1.1569   25       3.04   23464     2.4157
+     12    1  reuse           0.0025    1.1595   25       3.04   23464     2.9598
+     12    2  reuse           0.0010    1.0620   25       3.05   23464     3.4589
+     13    0  rebuild         3.7633    1.1790   14       1.65   23453     0.0000
+     13    1  reuse           0.0007    0.5708   13       1.62   23453     0.0000
+     13    2  reuse           0.0022    0.7108   14       1.64   23453     0.0000
+     14    0  refactorize     0.8398    0.6217   14       1.67   23453     0.0056
+     14    1  reuse           0.0012    0.6373   14       1.67   23453     0.0119
+     14    2  reuse           0.0004    0.6482   14       1.66   23453     0.0161
+     15    0  refactorize     0.8907    0.7565   17       2.04   23453     0.1591
+     15    1  reuse           0.0013    0.7770   17       2.06   23453     0.3108
+     15    2  reuse           0.0009    0.8408   17       2.03   23453     0.4679
+     16    0  refactorize     0.9112    1.1004   21       2.62   23453     0.8735
+     16    1  reuse           0.0003    0.9628   21       2.62   23453     1.2279
+     16    2  reuse           0.0014    0.9917   22       2.61   23453     1.5918
+     17    0  refactorize     0.8764    1.0134   25       3.00   23453     2.0457
+     17    1  reuse           0.0008    1.0514   25       3.07   23453     2.5299
+     17    2  reuse           0.0017    1.0242   25       3.03   23453     2.9951
+     18    0  rebuild         3.6770    0.6313   14       1.64   23474     0.0000
+     18    1  reuse           0.0004    0.6067   14       1.64   23474     0.0009
+     18    2  reuse           0.0007    0.4974   13       1.62   23474     0.0009
+     19    0  refactorize     0.7365    0.5567   14       1.65   23474     0.0024
+     19    1  reuse           0.0005    0.5518   14       1.65   23474     0.0046
+     19    2  reuse           0.0028    0.6248   14       1.64   23474     0.0046
+     20    0  refactorize     0.8380    0.6549   16       1.91   23474     0.0959
+     20    1  reuse           0.0003    0.7771   16       1.91   23474     0.2041
+     20    2  reuse           0.0011    0.7737   16       1.91   23474     0.3121
+     21    0  refactorize     0.7642    0.8500   22       2.65   23474     0.6346
+     21    1  reuse           0.0025    0.8591   21       2.62   23474     0.9562
+     21    2  reuse           0.0024    0.9429   22       2.62   23474     1.3080
+     22    0  refactorize     0.7572    1.0951   27       3.31   23474     1.8589
+     22    1  reuse           0.0009    1.0766   25       3.07   23474     2.3592
+     22    2  reuse           0.0010    1.1864   27       3.35   23474     2.9644
+     23    0  rebuild         3.9268    0.6525   13       1.62   23512     0.0000
+     23    1  reuse           0.0046    0.7223   13       1.58   23512     0.0000
+     23    2  reuse           0.0018    0.6359   13       1.61   23512     0.0000
+     24    0  refactorize     0.8850    0.5401   13       1.62   23512     0.0026
+     24    1  reuse           0.0050    0.5767   13       1.61   23512     0.0026
+     24    2  reuse           0.0018    0.5448   14       1.63   23512     0.0078
+     25    0  refactorize     0.8532    0.6295   15       1.77   23512     0.0614
+     25    1  reuse           0.0033    0.6936   15       1.77   23512     0.1198
+     25    2  reuse           0.0091    0.6730   15       1.76   23512     0.1761
+     26    0  refactorize     0.8708    0.7665   18       2.11   23512     0.3566
+     26    1  reuse           0.0005    0.7361   18       2.16   23512     0.5416
+     26    2  reuse           0.0008    0.8493   18       2.16   23512     0.7559
+     27    0  refactorize     0.8583    0.9128   22       2.65   23512     1.1118
+     27    1  reuse           0.0007    1.0216   22       2.63   23512     1.5049
+     27    2  reuse           0.0009    0.9703   22       2.63   23512     1.8793
+     28    0  refactorize     0.8885    1.1113   26       3.21   23512     2.4312
+     28    1  reuse           0.0129    1.2791   27       3.26   23512     3.0769
+     28    2  reuse           0.0012    1.0883   26       3.21   23512     3.6165
+     29    0  rebuild         3.7551    0.6526   14       1.69   23501     0.0000
+     29    1  reuse           0.0015    0.6240   13       1.60   23501     0.0000
+     29    2  reuse           0.0019    0.7381   14       1.66   23501     0.0000
+Refactorizations falling back to a full factorization: local 0 (on 0 ranks), coarse 0
+Coarse space
+  n0                         23501
+  m_i min/avg/max            10 / 24.5 / 38
+  subdomains with ker(A~)    849 (max dim 2)
+  sum dim (L∩K)^⊥_K          850
+  dense eigensolves          0
+  Arnoldi not converged      0
+  Arnoldi retried            0
+  Arnoldi nev avg/max        59.1 / 60
+  max operator applications  184
+  perturbed pivots A_ii / A~ 0 / 0 (max over ranks)
+  A_ii factorization         pardiso cholesky (rank 0; chain fallbacks on 0 ranks)
+  A~_ii factorization        pardiso cholesky (rank 0; chain fallbacks on 0 ranks)
+  coarse solver              cpardiso(48 procs, mtype 2 cholesky, nnz(L) 3137673, perturbed pivots 0)
+Time loop summary (reuse auto, 90 solves, 90 converged)
+  initial setup              5.587 s
+  updates                    39.723 s   (reuse 60 x, refactorize 24 x 0.857 s, rebuild 5 x 3.800 s)
+  solves                     74.865 s   (iterations avg 18.8, max 39)
+  total setup + updates + solves 120.175 s
+Timings [s] over 960 ranks
+  phase                                          min         avg         max
+  decomposition.generate                      0.0000      0.0160     15.3583
+  decomposition.metis                         0.0000      0.0104      9.9751
+  decomposition.scatter                       0.0016      1.6861      3.4821
+  decomposition                              11.2898     12.9428     14.7698
+  setup.subdomain                             0.0198      1.8185      3.5067
+  setup.local_factorization                   2.0342      2.0347      2.0354
+  setup.block_splitting                       0.0029      0.0047      0.0053
+  setup.eigensolver.factorization             0.3219      0.3819      0.4399
+  setup.eigensolver.kernel                    0.4064      0.4259      0.4487
+  setup.eigensolver.arnoldi.operator          2.4501      3.3910      4.1197
+  setup.eigensolver.arnoldi                   6.4678      9.3648     10.9280
+  setup.eigensolver                           7.2086     10.1847     11.7723
+  setup.coarse_basis                          0.1391      0.1459      0.1472
+  setup.coarse_assembly                       0.1303      0.3540      0.6001
+  setup.coarse_factorization.exchange         0.0299      0.0312      0.0517
+  setup.coarse_factorization.analysis         0.0000      0.2610      5.2260
+  setup.coarse_factorization.numeric          0.0000      0.2196      4.3916
+  setup.coarse_factorization.probe            0.1961      0.1978      0.2002
+  setup.coarse_factorization                  9.9122     10.1587     10.3824
+  setup                                      24.5729     24.5758     24.5765
+  solve.preconditioner.coarse.restrict        0.2735      0.5393      0.7137
+  solve.preconditioner.coarse.solve          62.2728     62.5643     62.9342
+  solve.preconditioner.coarse.prolong         0.0908      0.3396      0.5764
+  solve.preconditioner.coarse                63.1205     63.4495     63.7329
+  solve.preconditioner.spmv                   0.2783      0.4810      0.8254
+  solve.preconditioner.local.halo             0.0866      0.2833      0.5616
+  solve.preconditioner.local.lu               4.4058      5.2735      6.0903
+  solve.preconditioner.local                  4.6147      5.6493      6.5680
+  solve.preconditioner                       68.4565     69.6188     70.7292
+  solve.spmv                                  0.2990      0.7832      1.5452
+  solve                                      74.8133     74.8188     74.8259
+  update.subdomain                            0.1252      0.1436      0.1652
+  decomposition.update                       35.0865     43.9048     53.1980
+  update.local_refactorization                0.4407      0.5387      0.7312
+  update.coarse_assembly                      0.1382      0.5323      1.0093
+  update.coarse_factorization.probe           0.6742      0.6757      0.6829
+  update.coarse_factorization                18.5751     19.0519     19.4462
+  update                                     20.4325     20.4358     20.4427

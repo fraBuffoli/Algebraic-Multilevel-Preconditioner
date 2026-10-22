@@ -1,0 +1,8 @@
+ref --tau 0.3 --nev 60
+n16 --tau 0.3 --nev 16
+n16sp --tau 0.3 --nev 16 --local-precision single
+n16e4 --tau 0.3 --nev 16 --eig-tol 1e-4
+n16spe4 --tau 0.3 --nev 16 --local-precision single --eig-tol 1e-4
+n8 --tau 0.3 --nev 8
+n8sp --tau 0.3 --nev 8 --local-precision single
+n8spe4 --tau 0.3 --nev 8 --local-precision single --eig-tol 1e-4
