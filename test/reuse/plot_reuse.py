@@ -167,6 +167,9 @@ def main():
             reb = [i for i, r in enumerate(rows) if r["level"] == "rebuild" and i > 0 and mode != "off"]
             if reb:
                 ax[0].plot(reb, [rows[i]["iterations"] for i in reb], "o", ms=4, color=ax[0].lines[-1].get_color())
+        its_all = [r["iterations"] for name in modes.values() for r in data[name] if r["iterations"] > 0]
+        if its_all and max(its_all) > 10 * min(its_all):  # e.g. one-level RAS next to two-level runs
+            ax[0].set_yscale("log")
         ax[0].set_xlabel("solve")
         ax[0].set_ylabel("GMRES iterations")
         ax[0].set_title("%s: iterations (dots: rebuilds)" % g)

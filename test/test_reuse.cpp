@@ -421,6 +421,15 @@ void checkTimeLoop()
         levels_ok = (k == 0) ? rb[k].level == UpdateLevel::Rebuild
                            : ((k % 2 == 1) ? rb[k].level == UpdateLevel::Reuse : rb[k].level != UpdateLevel::Reuse);
     test::check(levels_ok, "time loop auto: levels " + levels(rb) + ", all converged", comm);
+    {
+        core::SolverConfig c1 = cfg; // one-level: auto never rebuilds (nothing ages)
+        c1.coarse = "none";
+        c1.reuse = "auto";
+        c1.steps = 4;
+        const auto r1 = solv::runTimeLoop(c1, comm, utils::Log::nullStream());
+        test::check(levels(r1) == "20101010" && converged(r1),
+                    "time loop one-level auto: levels " + levels(r1) + " (expected 20101010, no rebuild)", comm);
+    }
 
     // Same sequence read from Matrix Market files: --matrix with a %d pattern.
     const std::string pattern = "test_reuse_seq_%02d.mtx";

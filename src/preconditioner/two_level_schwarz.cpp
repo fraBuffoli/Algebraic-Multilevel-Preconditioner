@@ -50,6 +50,7 @@ void TwoLevelSchwarz::buildCoarse()
 {
     const core::SolverConfig& cfg = cfg_;
     MPI_Comm comm = sd_.comm();
+    if (coarse_) coarse_fallbacks_ += coarse_->fallbacks();
     coarse_.reset(); // release the old coarse factorization first (Rebuild): lower memory peak
 
     // Local block splitting and local eigenproblem (no communication).

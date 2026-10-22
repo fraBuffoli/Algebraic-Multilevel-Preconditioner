@@ -43,6 +43,7 @@ UpdateLevel OneLevelSchwarz::update(UpdateLevel requested)
     {
         utils::ScopedTimer timer("update.local_refactorization");
         ok = solver_->refactorize(sd_.Aii()); // falls back to a full LU by itself if needed
+        if (solver_->refactorizationFellBack()) ++fallbacks_;
     }
     const int all_ok = core::allreduceMin(ok ? 1 : 0, sd_.comm());
     if (!all_ok)

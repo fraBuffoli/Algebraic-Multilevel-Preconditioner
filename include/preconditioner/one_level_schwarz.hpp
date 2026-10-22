@@ -54,6 +54,7 @@ public:
      */
     UpdateLevel update(UpdateLevel requested) override;
     bool upToDate() const override { return version_ == sd_.valuesVersion(); }
+    long localFallbacks() const override { return fallbacks_; }
 
     /// @brief Local factorization backend.
     const linalg::LocalSolver& localSolver() const { return *solver_; }
@@ -65,6 +66,7 @@ private:
     Variant variant_;                               ///< RAS or ASM.
     std::unique_ptr<linalg::LocalSolver> solver_;   ///< LU of A_ii.
     long version_ = 0;                              ///< Subdomain::valuesVersion() of the current LU.
+    long fallbacks_ = 0;                            ///< Refactorizations that fell back to a full LU.
     mutable core::Vec rloc_, yloc_;                 ///< Work vectors on Omega_i.
 
     /// @brief Full factorization of A_ii, collective failure check.

@@ -59,6 +59,9 @@ public:
 
     /// @brief Backend name.
     virtual std::string name() const = 0;
+
+    /// @brief update() calls that needed a full factorization instead of a numerical one.
+    virtual long fallbacks() const { return 0; }
 };
 
 /**

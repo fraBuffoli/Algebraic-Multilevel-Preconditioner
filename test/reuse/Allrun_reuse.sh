@@ -27,7 +27,7 @@
 ## what to run (1 = on), in this order                                     (estimates on 5 nodes)
 RUN_CHECK=${RUN_CHECK:-1}        # build + unit tests on 16 processes (incl. test_reuse)          ~ 6 min
 RUN_SEQ=${RUN_SEQ:-1}            # bubbles3d 128^3 (~9k cells/process), rho 1000: off/refactor/auto ~ 8 min
-RUN_CONTRAST=${RUN_CONTRAST:-1}  # same at rho 10 (refactor, auto) + one-level RAS at rho 1000     ~ 6 min
+RUN_CONTRAST=${RUN_CONTRAST:-1}  # same at rho 10 (refactor, auto) + one-level RAS at rho 1000     ~ 7 min
 RUN_LARGE=${RUN_LARGE:-1}        # bubbles3d 192^3 (~30k cells/process): off / auto                ~ 15 min
 RUN_NONSYM=${RUN_NONSYM:-1}      # convdiff3d 100^3, pulsating convection (nonsymmetric): off/auto ~ 5 min
 
@@ -38,6 +38,7 @@ STEPS=${STEPS:-60}               # time steps of the refactor/auto runs
 STEPS_OFF=${STEPS_OFF:-15}       # off: every solve costs a full setup, a few steps give its mean cost
 STEPS_LARGE=${STEPS_LARGE:-30}   # 192^3 runs
 STEPS_LARGE_OFF=${STEPS_LARGE_OFF:-5}
+STEPS_RAS=${STEPS_RAS:-10}       # one-level RAS: ~750 iterations per solve at rho 1000, a few steps suffice
 CORR=${CORR:-3}                  # correctors per step (PISO-like)
 N_SEQ=${N_SEQ:-128}; N_LARGE=${N_LARGE:-192}; N_NONSYM=${N_NONSYM:-100}
 # Bubbles: radius 0.04 = 5 cells at 128^3, ~4% gas; subdomains of ~20 cells: bubbles cross the interfaces.
@@ -47,7 +48,7 @@ CD="--generate convdiff3d --nx $N_NONSYM --nu 1e-2 --pulse 0.3 --pulse-period 20
 # -------------------------------------------------------------------------------- #
 if [ "${SMOKE:-0}" = 1 ]; then        # local check of the script: tiny problems, no modules
     module() { :; }
-    N_SEQ=24; N_LARGE=28; N_NONSYM=20; STEPS=6; STEPS_OFF=2; STEPS_LARGE=4; STEPS_LARGE_OFF=2
+    N_SEQ=24; N_LARGE=28; N_NONSYM=20; STEPS=6; STEPS_OFF=2; STEPS_LARGE=4; STEPS_LARGE_OFF=2; STEPS_RAS=3
     BUB="--generate bubbles3d --nbubbles 20 --radius 0.1 --cfl 1 --tau 0.3 --nev 20"
     CD="--generate convdiff3d --nx $N_NONSYM --nu 1e-2 --pulse 0.3 --pulse-period 20 --tau 0.3 --nev 20"
     MPIRUN_OPTS=${MPIRUN_OPTS:-"--oversubscribe"}; NCHECK=${NCHECK:-4}
@@ -66,8 +67,15 @@ OUT=$PWD/run_reuse_${SLURM_JOB_ID:-local}
 BIN=$OUT/bin/schwarz2lvl
 mkdir -p $OUT/csv
 module list > $OUT/log.modules 2>&1
-git -C $REPO log -1 --format='%h %s' > $OUT/log.git 2>&1
-git -C $REPO status --short -- src include test > $OUT/git_status.txt 2>&1
+if git -C $REPO rev-parse --git-dir > /dev/null 2>&1; then
+    git -C $REPO log -1 --format='%h %s' > $OUT/log.git 2>&1
+    git -C $REPO status --short -- src include test > $OUT/git_status.txt 2>&1
+else
+    echo "not a git checkout: see src_hash.txt" > $OUT/log.git
+fi
+# Fingerprint of the sources actually compiled (works also outside a git checkout).
+( cd $REPO && find src include test -type f \( -name '*.cpp' -o -name '*.hpp' \) | sort | xargs md5sum ) > $OUT/src_hash.txt
+echo "sources md5: $(md5sum < $OUT/src_hash.txt | cut -c1-12)" >> $OUT/log.git
 echo "NP=$NP COARSE='$COARSE' STEPS=$STEPS STEPS_OFF=$STEPS_OFF CORR=$CORR N_SEQ=$N_SEQ N_LARGE=$N_LARGE" > $OUT/config.txt
 
 # run NAME NP <schwarz2lvl options>  ->  log.NAME, csv/NAME.csv (one line per solve), status.txt
@@ -127,7 +135,7 @@ fi
 if [ $RUN_CONTRAST = 1 ]; then
     run bub${N_SEQ}_r10_refactor   $NP $BUB --nx $N_SEQ --rho-ratio 10   --steps $STEPS --reuse refactor $COARSE
     run bub${N_SEQ}_r10_auto       $NP $BUB --nx $N_SEQ --rho-ratio 10   --steps $STEPS --reuse auto     $COARSE
-    run bub${N_SEQ}_r1000_ras      $NP $BUB --nx $N_SEQ --rho-ratio 1000 --steps $STEPS --reuse auto --coarse none --maxit 2000
+    run bub${N_SEQ}_r1000_ras      $NP $BUB --nx $N_SEQ --rho-ratio 1000 --steps $STEPS_RAS --reuse auto --coarse none --maxit 2000
 fi
 
 # LARGE - subdomains of ~30k cells (as fig4 at N = 240, setup ~16 s): where the full setup at

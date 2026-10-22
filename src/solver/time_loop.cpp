@@ -63,7 +63,13 @@ std::vector<SolveRecord> runTimeLoop(const core::SolverConfig& cfg, MPI_Comm com
 
     part::Subdomain sd(sys, cfg.pou);
     linalg::DistributedMatrix A(sd);
-    prec::ReusePolicy policy(prec::ReusePolicy::parseMode(cfg.reuse), cfg.rebuild_growth, cfg.rebuild_every);
+    // A one-level preconditioner has nothing that ages (no coarse basis): a Rebuild would only redo the
+    // symbolic analysis, so "auto" behaves as "refactor" (otherwise noise in the iteration counts of
+    // one-level methods triggers useless rebuilds).
+    prec::ReusePolicy::Mode mode = prec::ReusePolicy::parseMode(cfg.reuse);
+    const bool one_level = (cfg.coarse == "none");
+    if (one_level && mode == prec::ReusePolicy::Mode::Auto) mode = prec::ReusePolicy::Mode::Refactor;
+    prec::ReusePolicy policy(mode, cfg.rebuild_growth, cfg.rebuild_every);
     const Gmres gmres(cfg.restart, cfg.rtol, cfg.maxit);
     std::unique_ptr<prec::Preconditioner> M;
     const prec::TwoLevelSchwarz* two = nullptr;
@@ -79,7 +85,8 @@ std::vector<SolveRecord> runTimeLoop(const core::SolverConfig& cfg, MPI_Comm com
                    "per_decade,converged,true_rel_res,n0,wasted\n";
     }
 
-    out << "Time loop: " << cfg.steps << " steps x " << cfg.correctors << " correctors, reuse " << cfg.reuse << "\n"
+    out << "Time loop: " << cfg.steps << " steps x " << cfg.correctors << " correctors, reuse " << cfg.reuse
+        << (one_level && cfg.reuse == "auto" ? " (one-level: no coarse basis to rebuild, as refactor)" : "") << "\n"
         << "   step corr  level         update[s]  solve[s]  its  it/decade      n0  wasted[s]\n";
     std::vector<SolveRecord> recs;
     for (int step = 0; step < cfg.steps; ++step) {
@@ -135,6 +142,16 @@ std::vector<SolveRecord> runTimeLoop(const core::SolverConfig& cfg, MPI_Comm com
                     << r.t_update << ',' << r.t_solve << ',' << r.iterations << ',' << r.per_decade << ','
                     << (r.converged ? 1 : 0) << ',' << r.true_rel_residual << ',' << r.n0 << ',' << r.wasted << "\n";
         }
+    }
+    // Numerical refactorizations that had to fall back to a full factorization (e.g. PARDISO with
+    // more perturbed pivots than the full factorization): local = summed over the ranks.
+    {
+        const long loc = M ? M->localFallbacks() : 0, crs = M ? M->coarseFallbacks() : 0;
+        const long loc_sum = core::allreduceSum(static_cast<core::GlobalIndex>(loc), comm);
+        const int loc_ranks = core::allreduceSum(loc > 0 ? 1 : 0, comm);
+        const long crs_max = core::allreduceMax(static_cast<core::GlobalIndex>(crs), comm);
+        out << "Refactorizations falling back to a full factorization: local " << loc_sum << " (on " << loc_ranks
+            << " ranks), coarse " << crs_max << "\n";
     }
     if (two) two->printStats(out);
     return recs;

@@ -137,10 +137,13 @@ public:
             for (std::size_t k = 0; k < v.size(); ++k) e[pos_[k]] += v[k];
             ok = solver_->refactorize(E_) ? 1 : 0;
             if (!ok) err = solver_->lastError();
+            if (solver_->refactorizationFellBack()) ++fallbacks_;
         }
         MPI_Bcast(&ok, 1, MPI_INT, 0, comm_);
         if (!ok) throw std::runtime_error("coarse matrix refactorization failed (root solver) " + err);
     }
+
+    long fallbacks() const override { return fallbacks_; } // rank 0 only (max over ranks when reported)
 
     void solve(const core::Vec& c, core::Vec& y) const override
     {
@@ -167,6 +170,7 @@ private:
     std::unique_ptr<linalg::LocalSolver> solver_;
     core::SpMat E_;                     ///< Rank 0: assembled A_00 (kept for update()).
     std::vector<core::LocalIndex> pos_; ///< Rank 0: gathered coefficient k -> position in E_.valuePtr().
+    long fallbacks_ = 0;                ///< Rank 0: refactorizations that fell back to a full LU.
     mutable core::Vec buf_, sol_;
 };
 
@@ -547,6 +551,8 @@ public:
         MPI_Scatterv(sol_.data(), gcnt_.data(), gdsp_.data(), MPI_DOUBLE, y.data(), static_cast<int>(y.size()),
                      MPI_DOUBLE, 0, group_comm_);
     }
+
+    long fallbacks() const override { return full_refactorizations_; }
 
     std::string name() const override
     {

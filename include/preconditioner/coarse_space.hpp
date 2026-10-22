@@ -94,6 +94,8 @@ public:
     const CoarseSolver& solver() const { return *solver_; }
     /// @brief Coarse solver actually used ("root", "mumps" or "cpardiso"; empty before assemble()).
     const std::string& solverKind() const { return solver_kind_; }
+    /// @brief Coarse refactorizations that fell back to a full factorization (0 before assemble()).
+    long fallbacks() const { return solver_ ? solver_->fallbacks() : 0; }
     /// @brief Number of nonzeros of A_00 contributed by this process.
     std::size_t localEntries() const { return local_entries_; }
 

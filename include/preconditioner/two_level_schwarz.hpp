@@ -78,6 +78,8 @@ public:
     /// @brief See the class description and Preconditioner::update() (collective).
     UpdateLevel update(UpdateLevel requested) override;
     bool upToDate() const override { return version_ == sd_.valuesVersion(); }
+    long localFallbacks() const override { return one_->localFallbacks(); }
+    long coarseFallbacks() const override { return coarse_fallbacks_ + (coarse_ ? coarse_->fallbacks() : 0); }
 
     /// @brief Coarse space statistics.
     const CoarseStats& stats() const { return stats_; }
@@ -95,6 +97,7 @@ private:
     const linalg::DistributedMatrix& A_;            ///< Global operator.
     core::SolverConfig cfg_;                        ///< Configuration (kept for Rebuild).
     long version_ = 0;                              ///< Subdomain::valuesVersion() of the current setup.
+    long coarse_fallbacks_ = 0;                     ///< Coarse fallbacks of the coarse spaces replaced by a Rebuild.
     Correction correction_;                         ///< Deflated or additive.
     std::unique_ptr<OneLevelSchwarz> one_;          ///< One-level preconditioner.
     std::unique_ptr<CoarseSpace> coarse_;           ///< Coarse space.

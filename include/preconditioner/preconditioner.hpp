@@ -88,6 +88,11 @@ public:
 
     /// @brief True if the preconditioner was built for the current matrix values.
     virtual bool upToDate() const { return true; }
+
+    /// @brief Local numerical refactorizations of this rank that fell back to a full factorization.
+    virtual long localFallbacks() const { return 0; }
+    /// @brief Coarse numerical refactorizations that fell back to a full factorization.
+    virtual long coarseFallbacks() const { return 0; }
 };
 
 /**

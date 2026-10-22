@@ -27,9 +27,14 @@ python3 plot_reuse.py run_reuse_<jobid>   # report.md + plots/<group>.png
 |---|---|---|
 | `RUN_CHECK` | `test_subdomain`, `test_preconditioner`, `test_reuse` on 16 processes | the reuse is exact (refactorization = fresh setup, coarse operator of the new matrix); if `test_reuse` fails the job stops |
 | `RUN_SEQ` | `bubbles3d` 128^3 (~9k cells/process), density ratio 1000: `off` (15 steps), `refactor`, `auto` (60 steps) x 3 correctors | cost per solve with and without reuse, aging of the coarse basis, rebuilds chosen by `auto` |
-| `RUN_CONTRAST` | same at density ratio 10 (`refactor`, `auto`); one-level RAS at 1000 | the basis ages faster with a high contrast; what the coarse space is worth |
+| `RUN_CONTRAST` | same at density ratio 10 (`refactor`, `auto`); one-level RAS at 1000 (10 steps) | the basis ages faster with a high contrast; what the coarse space is worth |
 | `RUN_LARGE` | `bubbles3d` 192^3 (~30k cells/process, as fig4 at N = 240): `off` (5 steps), `auto` (30) | gain when the setup is expensive |
 | `RUN_NONSYM` | `convdiff3d` 100^3 with pulsating convection: `off`, `auto` | nonsymmetric numerical refactorization (PARDISO LU with scaling/matching from the first analysis) |
+
+With `--coarse none` (one-level), `--reuse auto` behaves as `refactor`: there is no coarse basis that
+ages, so a rebuild would only repeat the symbolic analysis. Every log reports the numerical
+refactorizations that fell back to a full factorization (line `Refactorizations falling back ...`).
+`log.git` and `src_hash.txt` identify the sources that were compiled (also outside a git checkout).
 
 Every run leaves `log.<run>` (one line per solve, summary, timers) and `csv/<run>.csv` (one line per
 solve: step, corrector, level, update and solve time, iterations, iterations per decade, n0, time
