@@ -1,0 +1,81 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  10
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Solver variants, selected with bubblyPressureFoam -solver <name>. Every solve starts from p = 0;
+// the stopping test of OpenFOAM is then sum|b - A x| / sum|b| <= relTol (normalised L1 residual).
+// relTol 1e-9: the true 2-norm residual ||b - A x||_2 / ||b||_2 is then ~1e-8, the tolerance of
+// schwarz2lvl (with relTol 1e-8 GAMG stopped at up to 1.2e-7 in the 2-norm on the bubbles cases).
+// GAMG defaults of OpenFOAM-10: nPreSweeps 0, nPostSweeps 2, nFinestSweeps 2, mergeLevels 1,
+// nCellsInCoarsestLevel 10 (per process), agglomeration cached (fixed mesh), coarsest level solved
+// iteratively.
+solvers
+{
+    GAMG_GS     // the usual choice for p / p_rgh
+    {
+        solver          GAMG;
+        smoother        GaussSeidel;
+        agglomerator    faceAreaPair;   // default: pairs cells by face area (geometry only)
+        tolerance       0;
+        relTol          1e-9;
+        maxIter         1000;
+    }
+
+    GAMG_DIC
+    {
+        $GAMG_GS;
+        smoother        DIC;
+    }
+
+    GAMG_ALG    // pairs cells by matrix coefficients: the agglomeration sees the density jumps
+    {
+        $GAMG_GS;
+        agglomerator    algebraicPair;
+    }
+
+    PCG_GAMG    // GAMG V-cycles as preconditioner of CG
+    {
+        solver          PCG;
+        preconditioner
+        {
+            preconditioner  GAMG;
+            smoother        DICGaussSeidel;
+            agglomerator    faceAreaPair;
+            nVcycles        2;
+            tolerance       0;
+            relTol          0;
+        }
+        tolerance       0;
+        relTol          1e-9;
+        maxIter         1000;
+    }
+
+    PCG_DIC     // incomplete Cholesky (local to each process) + CG: single-level reference
+    {
+        solver          PCG;
+        preconditioner  DIC;
+        tolerance       0;
+        relTol          1e-9;
+        maxIter         5000;
+    }
+
+    p
+    {
+        $GAMG_GS;
+    }
+}
+
+// ************************************************************************* //

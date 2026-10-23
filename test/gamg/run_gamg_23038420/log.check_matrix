@@ -1,0 +1,3 @@
+/g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/run_gamg_23038420/check_of: 13824x13824, 93312 nonzeros; /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/run_gamg_23038420/check_s2l: 13824x13824, 93312 nonzeros
+pattern: 0 entries only in the first, 0 only in the second
+OK: matrices equal to 3.6e-15, right-hand sides to 1.0e-14 (relative to the largest entry; tolerance 1e-12)

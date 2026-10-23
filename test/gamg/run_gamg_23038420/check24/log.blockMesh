@@ -1,0 +1,74 @@
+/*---------------------------------------------------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  10
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+Build  : 10-8213cb4a3f81
+Exec   : blockMesh -case /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/run_gamg_23038420/check24
+Date   : Oct 23 2026
+Time   : 20:35:30
+Host   : "r520c01n01"
+PID    : 41564
+I/O    : uncollated
+Case   : /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/run_gamg_23038420/check24
+nProcs : 1
+sigFpe : Enabling floating point exception trapping (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 10)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Reading "blockMeshDict"
+
+Creating block mesh from
+    "system/blockMeshDict"
+No non-linear block edges defined
+No non-planar block faces defined
+Creating topology blocks
+Creating topology patches
+
+Creating block mesh topology
+
+Check topology
+
+	Basic statistics
+		Number of internal faces : 0
+		Number of boundary faces : 6
+		Number of defined boundary faces : 6
+		Number of undefined boundary faces : 0
+	Checking patch -> block consistency
+
+Creating block offsets
+Creating merge list .
+
+Creating polyMesh from blockMesh
+Creating points with scale 1
+    Block 0 cell size :
+        i : 0.0416666666667 .. 0.0416666666667
+        j : 0.0416666666667 .. 0.0416666666667
+        k : 0.0416666666667 .. 0.0416666666667
+Creating cells
+Creating patches
+
+There are no merge patch pairs edges
+
+Writing polyMesh
+----------------
+Mesh Information
+----------------
+  boundingBox: (0 0 0) (1 1 1)
+  nPoints: 15625
+  nCells: 13824
+  nFaces: 43200
+  nInternalFaces: 39744
+----------------
+Patches
+----------------
+  patch 0 (start: 39744 size: 576) name: top
+  patch 1 (start: 40320 size: 2880) name: walls
+
+End
+

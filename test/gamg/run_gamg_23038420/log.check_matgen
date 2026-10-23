@@ -1,0 +1,1 @@
+bubbles3d 24x24x24 rho_ratio=1000 nb=150 R=0.04 cfl=0.5 t=3 (n=13824, nnz=93312) -> /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/run_gamg_23038420/check_s2l.mtx, /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/run_gamg_23038420/check_s2l_rhs.mtx (block size 1)

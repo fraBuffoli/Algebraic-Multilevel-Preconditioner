@@ -1,0 +1,19 @@
+Making dependency list for source file bubblyPressureFoam.C
+icpx -std=c++14 -fp-model precise -Dlinux64 -DWM_ARCH_OPTION=64 -DWM_DP -DWM_LABEL_SIZE=32 -Wall -Wextra -Wold-style-cast -Wnon-virtual-dtor -Wno-unused-parameter -Wno-invalid-offsetof -Wno-undefined-var-template -O3 -fp-speculation=safe -xCORE-AVX512  -DNoRepository -ftemplate-depth-100 -I/cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/src/finiteVolume/lnInclude -I/cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/src/meshTools/lnInclude -IlnInclude -I. -I/cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/src/OpenFOAM/lnInclude -I/cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/src/OSspecific/POSIX/lnInclude   -fPIC -c bubblyPressureFoam.C -o Make/linux64IcxDPInt32OptCSL/bubblyPressureFoam.o
+In file included from bubblyPressureFoam.C:38:
+In file included from /cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/src/finiteVolume/lnInclude/fvCFD.H:4:
+In file included from /cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/src/OpenFOAM/lnInclude/parRun.H:35:
+In file included from /cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/src/OpenFOAM/lnInclude/Pstream.H:42:
+In file included from /cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/src/OpenFOAM/lnInclude/UPstream.H:42:
+In file included from /cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/src/OpenFOAM/lnInclude/labelList.H:48:
+In file included from /cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/src/OpenFOAM/lnInclude/List.H:43:
+/cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/src/OpenFOAM/lnInclude/UList.H:95:14: warning: definition of implicit copy constructor for 'UList<int>' is deprecated because it has a user-declared copy assignment operator [-Wdeprecated-copy]
+        void operator=(const UList<T>&) = delete;
+             ^
+/cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/src/OpenFOAM/lnInclude/UCompactListListI.H:46:5: note: in implicit copy constructor for 'Foam::UList<int>' first required here
+    offsets_(offsets),
+    ^
+1 warning generated.
+icpx -std=c++14 -fp-model precise -Dlinux64 -DWM_ARCH_OPTION=64 -DWM_DP -DWM_LABEL_SIZE=32 -Wall -Wextra -Wold-style-cast -Wnon-virtual-dtor -Wno-unused-parameter -Wno-invalid-offsetof -Wno-undefined-var-template -O3 -fp-speculation=safe -xCORE-AVX512  -DNoRepository -ftemplate-depth-100 -I/cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/src/finiteVolume/lnInclude -I/cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/src/meshTools/lnInclude -IlnInclude -I. -I/cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/src/OpenFOAM/lnInclude -I/cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/src/OSspecific/POSIX/lnInclude   -fPIC -Xlinker --add-needed Make/linux64IcxDPInt32OptCSL/bubblyPressureFoam.o -L/cineca/prod/opt/applications/openfoam/10/intelmpi--oneapi-2021--binary/OpenFOAM-10/platforms/linux64IcxDPInt32OptCSL/lib \
+    -lfiniteVolume -lmeshTools /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/run_gamg_23038420/app/bubbleFieldCapi.o -lOpenFOAM -ldl  \
+     -lm -o /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/run_gamg_23038420/bin/bubblyPressureFoam

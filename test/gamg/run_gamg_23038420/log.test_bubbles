@@ -1,0 +1,7 @@
+  [ OK ] BubbleField 3D, 15 bubbles, t = 0: alpha(i,j,k) = fill (max diff 0.00e+00), max alpha 9.64e-01, cellOf of the centres
+  [ OK ] BubbleField 3D, 15 bubbles, t = 17: alpha(i,j,k) = fill (max diff 0.00e+00), max alpha 9.66e-01, cellOf of the centres
+  [ OK ] BubbleField 3D, 1 bubbles, t = 5: alpha(i,j,k) = fill (max diff 0.00e+00), max alpha 9.99e-01, cellOf of the centres
+  [ OK ] BubbleField 2D, 10 bubbles, t = 9: alpha(i,j,k) = fill (max diff 0.00e+00), max alpha 9.97e-01, cellOf of the centres
+  [ OK ] bubbles3d 16^3, t = 0: rhs = vol alpha (err 0.00e+00), coefficients = mean beta area/distance (rel. err 1.64e-16), symmetric, zero row sums below the top layer
+  [ OK ] bubbles3d 16^3, t = 11: rhs = vol alpha (err 0.00e+00), coefficients = mean beta area/distance (rel. err 2.17e-16), symmetric, zero row sums below the top layer
+ALL PASSED

@@ -1,0 +1,53 @@
+/*---------------------------------------------------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  10
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+Build  : 10-8213cb4a3f81
+Exec   : /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/run_gamg_23038420/bin/bubblyPressureFoam -case /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/run_gamg_23038420/check24 -solver GAMG_GS -steps 4 -correctors 1 -writeMatrix /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/run_gamg_23038420/check_of -csv /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/run_gamg_23038420/check_of.csv
+Date   : Oct 23 2026
+Time   : 20:35:30
+Host   : "r520c01n01"
+PID    : 41579
+I/O    : uncollated
+Case   : /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/run_gamg_23038420/check24
+nProcs : 1
+sigFpe : Enabling floating point exception trapping (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 10)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+bubblyPressureFoam: 24x24x24 cells, 150 bubbles, radius 0.04, rho ratio 1000, cfl 0.5, seed 2024, 4 steps x 1 correctors, solver GAMG_GS 
+{
+    solver          GAMG;
+    smoother        GaussSeidel;
+    agglomerator    faceAreaPair;
+    tolerance       0;
+    relTol          1e-09;
+    maxIter         1000;
+}
+
+
+step 0: sum of alpha 1523.25442805
+GAMG:  Solving for p, Initial residual = 1, Final residual = 5.11147686141e-10, No Iterations 31
+step 0 corrector 0: 31 iterations, 0.042124 s, true relative residual 3.43674272015e-10, ||p||_2 4.09877638872
+step 1: sum of alpha 1522.5818811
+GAMG:  Solving for p, Initial residual = 1, Final residual = 5.26572548993e-10, No Iterations 31
+step 1 corrector 0: 31 iterations, 0.037927 s, true relative residual 3.56056495268e-10, ||p||_2 4.07490584697
+step 2: sum of alpha 1521.8135723
+GAMG:  Solving for p, Initial residual = 1, Final residual = 5.24273497379e-10, No Iterations 31
+step 2 corrector 0: 31 iterations, 0.038238 s, true relative residual 3.52956587276e-10, ||p||_2 4.03416382952
+step 3: sum of alpha 1520.98006492
+GAMG:  Solving for p, Initial residual = 1, Final residual = 5.0683509842e-10, No Iterations 31
+step 3 corrector 0: 31 iterations, 0.037919 s, true relative residual 3.39013213308e-10, ||p||_2 3.98881228673
+
+Summary (GAMG_GS): 4 solves, total 0.156208 s, median 0.038238 s per solve, iterations 31 on average, first solve 0.042124 s
+
+End
+

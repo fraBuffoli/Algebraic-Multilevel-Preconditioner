@@ -1,0 +1,4 @@
+// Cells per direction of the unit cube: read by blockMeshDict and bubblesDict (set by the scripts).
+nx      24;
+ny      24;
+nz      24;
