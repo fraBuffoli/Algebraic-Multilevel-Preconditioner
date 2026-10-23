@@ -4,6 +4,8 @@
  */
 #include "local_solver.hpp"
 
+#include "inexact_solver.hpp"
+
 #include <Eigen/SparseCholesky>
 #include <Eigen/SparseLU>
 
@@ -384,6 +386,13 @@ std::vector<std::string> availableLocalSolvers()
     return v;
 }
 
+std::vector<std::string> availableLocalApprox()
+{
+    std::vector<std::string> v{"none"};
+    if (amgAvailable()) v.push_back("amg");
+    return v;
+}
+
 namespace {
 
 /// @brief One backend with one factorization type and precision.
@@ -422,6 +431,7 @@ std::unique_ptr<LocalSolver> makeSingle(const std::string& backend, Factorizatio
 
 std::unique_ptr<LocalSolver> makeLocalSolver(const LocalSolverSpec& spec)
 {
+    if (spec.approx != "none") return makeInexactSolver(spec); // P7: approximate inverse
     const std::string backend = (spec.backend == "auto") ? availableLocalSolvers().front() : spec.backend;
     const std::string& req = spec.factorization;
     if (req != "auto" && req != "lu" && req != "cholesky" && req != "ldlt")

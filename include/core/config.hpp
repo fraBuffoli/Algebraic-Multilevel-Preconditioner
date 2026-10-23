@@ -39,7 +39,7 @@ struct SolverConfig{
     int steps = 0;                          ///< Steps of the time loop (0 = a single solve, as in the paper).
     int correctors = 3;                     ///< Solves per step with the same matrix and a new right-hand side.
     std::string reuse = "auto";             ///< Setup reuse between solves: "off" (rebuild every solve), "refactor" (never rebuild) or "auto" (break-even).
-    double rebuild_growth = 0.0;            ///< auto: also rebuild when iterations per decade exceed this factor times the reference (0 = off).
+    double rebuild_growth = 4.0;            ///< auto: also rebuild when iterations per decade exceed this factor times the reference (0 = off).
     int rebuild_every = 0;                  ///< auto: also rebuild after this many refactorizations (0 = off).
     std::string steps_csv;                  ///< Append one line per solve to this CSV file (rank 0).
 
@@ -65,6 +65,11 @@ struct SolverConfig{
     std::string local_solver = "auto";      ///< Local backend: "auto", "sparselu", "umfpack", "pardiso".
     std::string local_factorization = "auto"; ///< "auto" (symmetric A: Cholesky -> LDL^T -> LU), "lu", "cholesky", "ldlt".
     std::string local_precision = "double"; ///< Precision of the factors of A_ii (one-level part): "double" or "single".
+    std::string local_approx = "none";      ///< A_ii^{-1} of the one-level part (P7): "none" (exact factors) or "amg".
+    std::string amg_coarsening = "sa";      ///< --local-approx amg: "sa" (smoothed aggregation) or "rs" (Ruge-Stuben).
+    int amg_sweeps = 1;                     ///< --local-approx amg: Gauss-Seidel steps before/after the coarse correction.
+    int amg_coarse_enough = 500;            ///< --local-approx amg: maximum size of the coarsest level (skyline LU).
+    bool amg_reuse = false;                 ///< --local-approx amg: refactorization keeps the transfer operators.
     std::string coarse_solver = "auto";     ///< Coarse solver: "auto", "mumps", "cpardiso" (distributed) or "root".
     std::string coarse_factorization = "auto"; ///< A_00 (root, cpardiso): "auto" (symmetric A: Cholesky -> LDL^T [-> LU]), "lu", "cholesky", "ldlt".
     int coarse_procs = 0;                   ///< Processes used for the distributed coarse factorization (0 = all).

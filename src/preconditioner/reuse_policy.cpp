@@ -24,9 +24,18 @@ double ReusePolicy::perDecade(int iterations, double reduction)
     return iterations / std::log10(1.0 / reduction);
 }
 
+double ReusePolicy::lowerMedian(std::vector<double> v)
+{
+    if (v.empty()) return 0.0;
+    const auto mid = v.begin() + static_cast<std::ptrdiff_t>((v.size() - 1) / 2);
+    std::nth_element(v.begin(), mid, v.end());
+    return *mid;
+}
+
 double ReusePolicy::rebuildPremium() const
 {
-    return (t_rebuild_ > 0.0) ? std::max(0.0, t_rebuild_ - t_refactor_) : 0.0;
+    const double reb = lowerMedian(t_rebuild_);
+    return (reb > 0.0) ? std::max(0.0, reb - lowerMedian(t_refactor_)) : 0.0;
 }
 
 UpdateLevel ReusePolicy::decide(bool matrix_changed) const
@@ -49,10 +58,10 @@ void ReusePolicy::record(UpdateLevel done, int iterations, double reduction, boo
         age_ = 0;
         need_ref_ = true;
         wasted_ = 0.0;
-        if (t_update > 0.0) t_rebuild_ = t_update;
+        if (t_update > 0.0) t_rebuild_.push_back(t_update);
     } else if (done == UpdateLevel::Refactorize) {
         ++age_;
-        if (t_update > 0.0) t_refactor_ = t_update;
+        if (t_update > 0.0) t_refactor_.push_back(t_update);
     }
     converged_ = converged;
     const double q = perDecade(iterations, reduction);

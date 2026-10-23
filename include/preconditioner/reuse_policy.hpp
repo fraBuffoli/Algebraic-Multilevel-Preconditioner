@@ -8,6 +8,7 @@
 #include "preconditioner.hpp"
 
 #include <string>
+#include <vector>
 
 namespace schwarz2lvl::prec {
 
@@ -31,13 +32,23 @@ namespace schwarz2lvl::prec {
  *   (iterations - q_ref * decades) * (time per iteration)
  * seconds because of the old basis. A Rebuild is requested when the time wasted since the last
  * Rebuild reaches the extra cost of a Rebuild over a Refactorize (both measured on the run).
+ *
+ * **Robust costs.** The cost of a Rebuild (Refactorize) is the *lower median* of all the Rebuild
+ * (Refactorize) times measured so far, not the last one: a single stall (G100, P7 campaign: a
+ * PARDISO factorization taking ~30 s on one rank while the others waited) would otherwise raise
+ * the break-even point so much that the coarse basis aged for the rest of the run (73 iterations
+ * per solve instead of ~22). With two measurements the lower median is the smaller one, so one
+ * outlier is ignored as soon as a second Rebuild has been timed. An outlier in the *initial* setup
+ * (one measurement only) is caught by the safety net on the convergence below, on by default.
  * This is the classical rent-or-buy decision: keep paying the small recurring cost until it
  * adds up to the one-time cost, then pay that. It never spends more than twice what the best
  * choice in hindsight would have spent, and it adapts by itself to the machine, the size of the
  * subdomains and the contrast of the problem, with no threshold to tune.
  *
- * Optional safety nets (Auto, off by default): Rebuild when q > growth * q_ref, or after
- * `max_age` refactorizations. A solve that did not converge always triggers a Rebuild.
+ * Safety nets (Auto): Rebuild when q > growth * q_ref (`--rebuild-growth`, default 4: in the
+ * P5, P5b and P7 campaigns the break-even rule alone let q reach at most 3.6 q_ref, while the two
+ * runs spoiled by a stall reached 5.5-6 q_ref), or after `max_age` refactorizations (off by
+ * default). A solve that did not converge always triggers a Rebuild.
  *
  * The decisions are local and purely arithmetic; Preconditioner::update() makes them
  * collective with agree() (times differ slightly between ranks).
@@ -85,8 +96,11 @@ public:
     int age() const { return age_; }
     /// @brief Time wasted by the old coarse basis since the last Rebuild [s].
     double wasted() const { return wasted_; }
-    /// @brief Extra cost of a Rebuild over a Refactorize, from the last measurements [s] (0 = unknown).
+    /// @brief Extra cost of a Rebuild over a Refactorize, from the lower medians of the measured
+    ///        times [s] (0 = unknown).
     double rebuildPremium() const;
+    /// @brief Lower median of @p v (the element of rank floor((n-1)/2) in increasing order; 0 if empty).
+    static double lowerMedian(std::vector<double> v);
     /// @brief Mode.
     Mode mode() const { return mode_; }
 
@@ -100,8 +114,8 @@ private:
     bool need_ref_ = true;     ///< The next valid q becomes the reference.
     bool converged_ = true;    ///< The last solve converged.
     double wasted_ = 0.0;      ///< Seconds lost to the old basis since the last Rebuild.
-    double t_rebuild_ = 0.0;   ///< Last measured Rebuild time.
-    double t_refactor_ = 0.0;  ///< Last measured Refactorize time.
+    std::vector<double> t_rebuild_;  ///< Measured Rebuild times (initial setup included).
+    std::vector<double> t_refactor_; ///< Measured Refactorize times.
 };
 
 } // namespace schwarz2lvl::prec

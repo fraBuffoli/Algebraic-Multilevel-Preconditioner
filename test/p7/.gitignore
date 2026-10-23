@@ -1,0 +1,4 @@
+run_p7*_local*/
+allrun_p7*.out
+allrun_p7*.err
+__pycache__/

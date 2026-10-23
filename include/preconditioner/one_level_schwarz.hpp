@@ -17,7 +17,8 @@ namespace schwarz2lvl::prec {
 
 /**
  * @brief Solver specification of the local matrices A_ii from the configuration:
- *        `--local-solver`, `--local-factorization`, `--local-precision`, and the symmetry of A.
+ *        `--local-solver`, `--local-factorization`, `--local-precision`, the approximate inverse
+ *        `--local-approx` with the `--amg-*` options (P7), and the symmetry of A.
  */
 linalg::LocalSolverSpec localSolverSpec(const core::SolverConfig& cfg, bool symmetric);
 
@@ -28,7 +29,8 @@ linalg::LocalSolverSpec localSolverSpec(const core::SolverConfig& cfg, bool symm
  *
  * Application on process i (one subdomain per process):
  *  1. \f$ r_i = R_i r \f$: owned entries + HaloExchange::forward() for the ghosts;
- *  2. \f$ y_i = A_{ii}^{-1} r_i \f$ with the exact LU factorization (LocalSolver);
+ *  2. \f$ y_i = A_{ii}^{-1} r_i \f$ with the exact factorization (LocalSolver), or
+ *     \f$ y_i = B_i r_i \f$ with an approximate inverse B_i (`--local-approx amg`, P7);
  *  3. RAS: \f$ y_i \leftarrow D_i y_i \f$;
  *  4. \f$ z = \sum_j R_j^T y_j \f$: HaloExchange::reverseAdd() of the ghost part.
  *     With the Boolean partition of unity (D_i = 0 on the ghosts) step 4 is

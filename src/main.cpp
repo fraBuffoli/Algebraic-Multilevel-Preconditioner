@@ -155,7 +155,8 @@ int run(int argc, char** argv)
                      "iterations,converged,true_rel_res,t_setup,t_eig,t_coarse_asm,t_coarse_fact,t_solve\n";
             c << '"' << info.description << '"' << ',' << sys.n_global << ',' << info.nnz << ',' << np << ','
               << cfg.pou << ',' << cfg.one_level << ',' << cfg.coarse << ',' << cfg.tau << ',' << cfg.nev << ','
-              << cfg.local_solver << ','
+              << (cfg.local_approx == "none" ? cfg.local_solver : "amg:" + cfg.amg_coarsening + "+gs")
+              << ','
               << (two && two->stats().n0 > 0 ? two->coarse().solverKind() : cfg.coarse_solver) << ','
               << (two ? two->stats().n0 : 0) << ','
               << (two ? two->stats().m_min : 0) << ',' << (two ? two->stats().m_max : 0) << ',' << res.iterations

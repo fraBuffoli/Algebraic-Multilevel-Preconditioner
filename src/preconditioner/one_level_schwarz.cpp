@@ -18,6 +18,13 @@ linalg::LocalSolverSpec localSolverSpec(const core::SolverConfig& cfg, bool symm
     s.factorization = cfg.local_factorization;
     s.symmetric = symmetric;
     s.single = (cfg.local_precision == "single");
+    // P7: approximate inverse of A_ii (only here: the eigensolver and the coarse solver build
+    // their own specifications and stay exact).
+    s.approx = cfg.local_approx;
+    s.amg.coarsening = cfg.amg_coarsening;
+    s.amg.sweeps = cfg.amg_sweeps;
+    s.amg.coarse_enough = cfg.amg_coarse_enough;
+    s.amg.reuse = cfg.amg_reuse;
     return s;
 }
 

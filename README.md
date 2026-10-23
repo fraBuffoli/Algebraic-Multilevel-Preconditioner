@@ -22,6 +22,7 @@ inside a right-preconditioned restarted GMRES. Real arithmetic only.
 | SuiteSparse UMFPACK | optional, `USE_UMFPACK=1` (default) | local LU backend |
 | Intel MKL PARDISO | optional, `USE_PARDISO=0` (default) | local LU backend |
 | Intel MKL cluster_sparse_solver | optional, `USE_CPARDISO=0` (default) | distributed coarse solver (needs the MKL BLACS of your MPI, `MKL_BLACS_LIB`) |
+| AMGCL (commit 1fbc24e, MIT) | optional, `USE_AMGCL=1` (default), bundled | `external/amgcl` (header-only, no Boost): AMG V-cycles as approximate local solvers (`--local-approx amg`) |
 | Doxygen | optional | `make doc` |
 
 Ubuntu 24.04 (everything, including the optional MUMPS/UMFPACK backends):
@@ -99,6 +100,7 @@ Options are given as `--key value` or `--key=value`. Defaults reproduce the setu
 | Preconditioner | `--one-level ras\|asm`, `--coarse deflated\|additive\|none`, `--pou boolean\|multiplicity`, `--tau`, `--nev`, `--nev-start` |
 | Local eigensolver | `--eig-tol --eig-maxit --eig-ncv`, `--shift-rel`, `--kernel-tol`, `--kernel-probe`, `--dense-threshold`, `--orth-tol` |
 | Direct solvers | `--local-solver auto\|sparselu\|umfpack\|pardiso`, `--local-factorization auto\|lu\|cholesky\|ldlt`, `--local-precision double\|single`, `--coarse-solver auto\|mumps\|cpardiso\|root`, `--coarse-factorization auto\|lu\|cholesky\|ldlt`, `--coarse-procs N`, `--coarse-root-below N` |
+| Approximate local solvers | `--local-approx none\|amg` (A_ii of the one-level part only), `--amg-coarsening sa\|rs`, `--amg-sweeps N`, `--amg-coarse-enough N`, `--amg-reuse 0\|1` |
 | GMRES | `--restart`, `--rtol`, `--maxit` |
 | Sequence | `--steps N` (time loop; 0 = single solve), `--correctors N`, `--reuse off\|refactor\|auto`, `--rebuild-growth G`, `--rebuild-every N`, `--steps-csv FILE`; `--matrix 'p_%04d.mtx'` reads one file per step |
 | Output | `--verbose 0\|1\|2`, `--csv FILE`, `--history FILE`, `--write-solution FILE` |
@@ -130,6 +132,7 @@ mpirun -np 4 ./bin/test_subdomain        # overlap, halo, A_ii, lumping sums, pa
 mpirun -np 4 ./bin/test_preconditioner   # sparse vs dense eigensolver, RAS/ASM x deflated/additive, GMRES
 mpirun -np 4 ./bin/test_reuse            # setup reuse: refactorizations vs fresh setups, policy, time loop
 mpirun -np 4 ./bin/test_factorization    # Cholesky / LDLT / LU chains, single precision, coarse solvers
+mpirun -np 4 ./bin/test_inexact          # AMG as approximate local solver: linearity, quality, two-level GMRES
 ```
 
 `matrices/` contains small SuiteSparse test matrices (sherman4, nos5, e05r0400, fidapm05/10, garon1, graham1,
@@ -141,12 +144,13 @@ lns_3937, cage7/10, windtunnel_evap2d).
 include/<module>/*.hpp, src/<module>/*.cpp      one class per header/source pair, namespace schwarz2lvl::<ns>
 ├── core/            (core)    Scalar, LocalIndex (32-bit), GlobalIndex (64-bit); SolverConfig (CLI); LocalSystem; MPI helpers
 ├── partition/       (part)    CsrMatrix, MatrixMarketIO, GraphPartitioner (METIS), DomainDecomposer, Subdomain
-├── linalg/          (linalg)  HaloExchange, DistributedMatrix (SpMV), LocalSolver (SparseLU/UMFPACK/PARDISO), global dot/norm
+├── linalg/          (linalg)  HaloExchange, DistributedMatrix (SpMV), LocalSolver (SparseLU/UMFPACK/PARDISO; IC/AMG
+│                              approximate inverses in inexact_solver), global dot/norm
 ├── preconditioner/  (prec)    Preconditioner (+ UpdateLevel), OneLevelSchwarz, local block splitting, LocalEigensolver,
 │                              CoarseSpace, CoarseSolver (MUMPS/cpardiso/root), TwoLevelSchwarz, ReusePolicy
 ├── solver/          (solv)    Gmres, runTimeLoop (sequence of solves with setup reuse)
 └── utils/           (utils)   MatrixGenerator, TimerRegistry/ScopedTimer, Log
-src/main.cpp, src/matgen.cpp   drivers;   test/   MPI test programs;   external/   Eigen, Spectra
+src/main.cpp, src/matgen.cpp   drivers;   test/   MPI test programs;   external/   Eigen, Spectra, AMGCL
 ```
 
 Flow of `main.cpp`:
@@ -154,7 +158,7 @@ Flow of `main.cpp`:
 1. **Decomposition** — `DomainDecomposer::decompose`: rank 0 reads or generates the system, partitions G(A + Aᵀ)
    with METIS, renumbers the unknowns and sends each rank its owned rows → `LocalSystem`.
 2. **Subdomain** — overlap Ω_i = [Ω_I | Ω_Γ], halo pattern, A_ii, A(Ω_I, Ω_i), lumping sums, partition of unity D_i.
-3. **One level** — `OneLevelSchwarz`: exact LU of A_ii; RAS (2.3) or ASM (2.1).
+3. **One level** — `OneLevelSchwarz`: exact factorization of A_ii (or an approximate inverse, `--local-approx`); RAS (2.3) or ASM (2.1).
 4. **Two level** — `TwoLevelSchwarz`: Ã_ii (Def. 3.1) → `LocalEigensolver` gives Z_i (3.1)–(3.2) → `CoarseSpace`
    builds V_i = orth(D_i Z_i) and A_00 = R_0 A R_0ᵀ → `CoarseSolver` factorizes A_00.
    Deflated (2.4): z = x_0 + M₁⁻¹(r − A x_0), x_0 = R_0ᵀ A_00⁻¹ R_0 r; additive (2.2): z = R_0ᵀ A_00⁻¹ R_0 r + M₁⁻¹ r.
@@ -272,10 +276,14 @@ depends on, and `Preconditioner::update(UpdateLevel)` redoes only what is needed
   (iterations − q_ref · decades) × (time per iteration) because of the old basis, q_ref being the
   iterations per decade of residual reduction right after the last rebuild; when the time wasted
   since the last rebuild reaches the measured extra cost of a rebuild over a refactorization, the
-  basis is rebuilt (the rent-or-buy rule: at most twice the cost of the best choice in hindsight,
-  no threshold to tune). `--rebuild-growth G` (rebuild when q > G q_ref) and `--rebuild-every N` are
-  optional safety nets; a solve that does not converge always triggers a rebuild. Decisions are made
-  collective (`agree()`: maximum over the ranks).
+  basis is rebuilt (the rent-or-buy rule, no threshold to tune; the "at most twice the best choice"
+  bound of the textbook problem assumes a constant rent, which aging is not). The costs are the
+  **lower medians** of all the rebuild / refactorization times measured in the run, so a single
+  stall (P7 campaign: one PARDISO factorization taking ~30 s on one rank) does not freeze the
+  rebuilds. Safety nets: `--rebuild-growth G` (rebuild when q > G q_ref, default 4: never reached
+  by the break-even rule in the P5/P7 campaigns, it catches an outlier in the initial setup) and
+  `--rebuild-every N` (off); a solve that does not converge always triggers a rebuild. Decisions
+  are made collective (`agree()`: maximum over the ranks).
 - **Driver** (`runTimeLoop`): steps × correctors; the matrix values of a step come from the
   generator at pseudo-time = step or from one Matrix Market file per step (`--matrix 'p_%04d.mtx'`,
   e.g. matrices written by OpenFOAM), sent by rank 0 without repartitioning
@@ -336,10 +344,66 @@ says so in its name). PARDISO and the Eigen built-in solvers (SimplicialLLT / Si
   bubbles at ρ = 1000): it pays off only when the local solves dominate the iteration. Ã_ii (the
   eigenvectors must be accurate) and A_00 stay in double. GMRES works in double precision and the
   true-residual check guarantees the requested tolerance.
-- `test/p2/Allrun_p2.sh` (G100, 5 nodes, < 1 h) compares the P1 configuration (LU) with Cholesky,
+- `test/cholesky/Allrun_p2.sh` (G100, 5 nodes, < 1 h) compares the P1 configuration (LU) with Cholesky,
   Cholesky + single precision, and root vs distributed A_00, on the bubbles problems of P1 and on
   SPD SuiteSparse matrices; `report_p2.py` writes the report (cost per solve and cost of every
   operation).
+
+## Inexact local solvers (P7)
+
+Every GMRES iteration applies A_ii⁻¹ once per subdomain. With exact factors this is the largest
+cost of an iteration on large subdomains (P5, bubbles at 240 processes: 60-70% at ~30k cells per
+process), and a refactorization at every time step costs a numerical Cholesky factorization. The
+factor of a 3D subdomain is 50-100 times larger than A_ii itself (fill-in grows like n^(4/3)), and
+every solve reads it twice. `--local-approx amg` replaces A_ii⁻¹ **in the one-level part only**
+with one AMG V-cycle B_i ≈ A_ii⁻¹:
+
+M⁻¹ = Σ_i R_iᵀ D_i **B_i** R_i  (instead of Σ_i R_iᵀ D_i A_ii⁻¹ R_i),
+
+while the coarse space (eigenproblems with Ã_ii, factorized exactly) and A_00 do not change.
+Schwarz theory allows it: if B_i is spectrally equivalent to A_ii⁻¹ with constants independent of
+the subdomain size, the method converges asymptotically like the one with exact local solves, with
+a condition number larger by a factor of the order of those constants (Toselli-Widlund, Ch. 2;
+Dolean-Jolivet-Nataf, end of Sect. 6.3). A V-cycle is spectrally equivalent for Laplace-like
+operators; on the bubbles problem (ρ ratio 1000) the first solve after every rebuild needed the
+same iterations as with exact factors.
+
+| option | meaning | default |
+|---|---|---|
+| `--local-approx none\|amg` | exact factors of A_ii, or one AMG V-cycle (AMGCL, builtin backend, x = 0 at every application) | `none` |
+| `--amg-coarsening sa\|rs` | smoothed aggregation (cheap setup, operator complexity ~1.5) or Ruge-Stuben (iterations closest to the exact solves, operator complexity ~2.7, heavier setup) | `sa` |
+| `--amg-sweeps N` | Gauss-Seidel steps before (forward) and after (backward) the coarse correction: the cycle is symmetric | 1 |
+| `--amg-coarse-enough N` | the coarsest level has at most N unknowns and is solved with a skyline LU | 500 |
+| `--amg-reuse 0\|1` | refactorization: full AMG setup (0) or keep P and R and recompute only R A P and the smoothers (1) | 0 |
+| `--local-precision single` | the whole hierarchy in float (GMRES stays in double) | double |
+
+- **Linear and fixed.** Every application starts from zero and performs the same operations, so
+  B_i is a fixed linear operator and plain GMRES remains valid (no flexible GMRES needed);
+  `test_inexact` checks linearity and determinism.
+- **First G100 campaign** (`test/p7/run_p7_23018578`, 240 processes, `--nev 8 --eig-tol 1e-4`):
+  with `sa` + Gauss-Seidel the cost per solve was -47% at ~30k cells per process and -54% at ~70k
+  (-33% / -39% against exact factors in single precision); the local solves were 3.4x / 4.3x
+  cheaper, the refactorizations of A_ii 5x / 10x. At 960 processes the coarse solve dominates and the gain
+  is small. What was learnt there is now in the defaults:
+  - incomplete Cholesky (not spectrally equivalent: 2.4x the iterations at 7k cells per subdomain,
+    8.7x at 70k), the spai0 and Chebyshev smoothers (equal or worse than Gauss-Seidel), the ILU(0)
+    smoother and the options for several V-cycles and for the strength threshold (only tested
+    locally, or not at all) were removed;
+  - `--amg-coarse-enough 500` instead of AMGCL's 3000: a coarsest level of 1000-3000 unknowns has a
+    nearly dense skyline profile, and with 17k cells per subdomain (2 levels) the AMG setup cost
+    more than the exact Cholesky factorization (0.55 s against 0.23 s) and every V-cycle paid the
+    dense solve;
+  - `--amg-reuse 0`: with the reused hierarchy the iterations grew faster between two rebuilds of the
+    coarse space (P was built where the bubbles were), while with full setups they followed the
+    exact solves step by step, at the same total cost.
+- **Reuse policy.** `--reuse auto` works unchanged: it measures what a refactorization and a rebuild
+  cost (now with lower medians, see above), so with AMG it decides by itself. A rebuild still
+  factorizes Ã_ii exactly for the eigensolver: with AMG this is the largest setup cost.
+- **Build.** AMGCL is header-only and bundled; `USE_AMGCL=0` builds without it (`--local-approx amg`
+  then stops with a message).
+- `test/p7/Allrun_p7b.sh` (G100, 5 nodes, ~35 min) and `Allrun_p7b_960.sh` (20 nodes, ~12 min)
+  compare exact factors (double, single) and AMG `sa` / `rs` with the new defaults on the bubbles
+  problem at 7k-70k cells per process; `report_p7.py` writes the report and the plots.
 
 **Limitations.** Real matrices only; one subdomain per MPI process; the global matrix lives on rank 0 during the
 decomposition; local indices are 32-bit and the MUMPS / MKL interfaces require n0 < 2^31.

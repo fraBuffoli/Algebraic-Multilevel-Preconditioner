@@ -31,6 +31,11 @@
  * side is rounded to float, solved, and converted back: the result has a relative error of
  * about 1e-7 times the condition number of the matrix. Meant for the one-level part of the
  * preconditioner (GMRES in double precision corrects it), not for the eigensolver.
+ *
+ * **Approximate inverse** (`--local-approx amg`, P7): instead of factorizing A_ii exactly, the
+ * one-level part can apply one AMG V-cycle (see inexact_solver.hpp). The same LocalSolver
+ * interface is used: factorize() = setup, refactorize() = setup with new values, solve() = one
+ * application.
  */
 #ifndef SCHWARZ2LVL_LINALG_LOCAL_SOLVER_HPP
 #define SCHWARZ2LVL_LINALG_LOCAL_SOLVER_HPP
@@ -132,12 +137,30 @@ protected:
     bool fell_back_ = false; ///< The last refactorize() performed a full factorization.
 };
 
+/**
+ * @brief Options of the algebraic multigrid approximation of A_ii^{-1} (`--local-approx amg`, P7).
+ *
+ * One application = one V-cycle from a zero initial guess with `sweeps` Gauss-Seidel steps before
+ * and after the coarse correction: a fixed linear operator (same result for the same right-hand
+ * side), as the Schwarz preconditioner inside GMRES requires.
+ */
+struct AmgOptions {
+    std::string coarsening = "sa"; ///< "sa" (smoothed aggregation) or "rs" (classical Ruge-Stuben).
+    int sweeps = 1;                ///< Gauss-Seidel steps before and after the coarse correction, per level.
+    int coarse_enough = 500;       ///< Coarsest level: at most this many unknowns (skyline LU).
+    bool reuse = false;            ///< refactorize(): keep the transfer operators, recompute only R A P.
+};
+
 /// @brief What to build: backend, factorization request, symmetry of the matrix, precision.
 struct LocalSolverSpec {
     std::string backend = "auto";     ///< "auto" (pardiso > umfpack > sparselu), "sparselu", "umfpack", "pardiso".
     std::string factorization = "lu"; ///< "auto", "lu", "cholesky", "ldlt".
     bool symmetric = false;           ///< The matrix is known to be symmetric (otherwise always LU).
     bool single = false;              ///< Single-precision factors.
+    /// Approximation of the inverse instead of an exact factorization (P7): "none" or "amg"
+    /// (AMGCL V-cycle, build with USE_AMGCL=1). With "amg", backend and factorization are ignored.
+    std::string approx = "none";
+    AmgOptions amg;                   ///< Used with approx = "amg".
 };
 
 /**
@@ -146,7 +169,8 @@ struct LocalSolverSpec {
  * Symmetric matrix: "auto" and "cholesky" give the chain Cholesky -> LDL^T -> LU, "ldlt" gives
  * LDL^T -> LU, "lu" gives LU. Nonsymmetric matrix: LU whatever the request. Backends without a
  * symmetric factorization (umfpack) or without single precision (umfpack) use what they have
- * (LU, double), as their name() reports.
+ * (LU, double), as their name() reports. With `spec.approx` = "amg" the solver is an
+ * approximate inverse (see inexact_solver.hpp): solve() is then *not* exact.
  * @throws std::invalid_argument if the backend or the request is unknown, or the backend is not compiled in.
  */
 std::unique_ptr<LocalSolver> makeLocalSolver(const LocalSolverSpec& spec);
@@ -161,6 +185,9 @@ std::unique_ptr<LocalSolver> makeLocalSolver(const std::string& name);
 
 /// @brief Names of the backends compiled into this build.
 std::vector<std::string> availableLocalSolvers();
+
+/// @brief Approximations of A_ii^{-1} compiled into this build ("none", and "amg" with USE_AMGCL=1).
+std::vector<std::string> availableLocalApprox();
 
 } // namespace schwarz2lvl::linalg
 

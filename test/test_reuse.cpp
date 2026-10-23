@@ -2,7 +2,7 @@
  * @file test_reuse.cpp
  * @brief Tests of the setup reuse between solves with the same sparsity pattern (P1).
  *
- *  1. ReusePolicy: decisions for given iteration counts (pure logic).
+ *  1. ReusePolicy: decisions for given iteration counts (pure logic), robust cost estimates.
  *  2. LocalSolver::refactorize(): same solution as a fresh factorize() on new values, every backend.
  *  3. On time-dependent problems (bubbles2d: SPD; convdiff2d / coupled2d with pulsating convection:
  *     nonsymmetric), for both partitions of unity and every coarse solver of the build:
@@ -85,6 +85,19 @@ void checkPolicy()
     b.record(UpdateLevel::Refactorize, 10, 1e-8, true, 0.1, 1.0);
     ok = ok && b.decide(true) == UpdateLevel::Rebuild;
     test::check(ok, "policy auto: safety nets (--rebuild-growth, --rebuild-every, non-convergence)");
+
+    // Robust costs: lower median of all the measured times, so one stalled rebuild or
+    // refactorization (e.g. one rank 30 s late in a factorization) does not move the break-even point.
+    ok = P::lowerMedian({}) == 0.0 && P::lowerMedian({3.0}) == 3.0 && P::lowerMedian({5.0, 1.0}) == 1.0 &&
+         P::lowerMedian({4.0, 1.0, 2.0}) == 2.0 && P::lowerMedian({4.0, 1.0, 2.0, 3.0}) == 2.0;
+    P s(P::Mode::Auto, 0.0, 0);
+    s.record(UpdateLevel::Rebuild, 10, 1e-8, true, 2.0, 1.0);
+    s.record(UpdateLevel::Refactorize, 10, 1e-8, true, 0.2, 1.0);
+    s.record(UpdateLevel::Rebuild, 10, 1e-8, true, 30.0, 1.0);    // stalled rebuild
+    ok = ok && std::abs(s.rebuildPremium() - 1.8) < 1e-12;        // still 2.0 - 0.2
+    s.record(UpdateLevel::Refactorize, 10, 1e-8, true, 9.0, 1.0); // stalled refactorization
+    ok = ok && std::abs(s.rebuildPremium() - 1.8) < 1e-12;        // lower median of {0.2, 9.0} = 0.2
+    test::check(ok, "policy auto: robust costs (lower median of the measured times: one stall is ignored)");
 
     P c(P::Mode::Off, 0.0, 0);
     test::check(c.decide(false) == UpdateLevel::Rebuild && c.decide(true) == UpdateLevel::Rebuild,

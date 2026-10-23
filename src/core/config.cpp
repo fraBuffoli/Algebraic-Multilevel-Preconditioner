@@ -68,6 +68,11 @@ SolverConfig SolverConfig::fromCommandLine(int argc, char** argv){
         {"local-solver", [&](const std::string& v) { c.local_solver = v; }},
         {"local-factorization", [&](const std::string& v) { c.local_factorization = v; }},
         {"local-precision", [&](const std::string& v) { c.local_precision = v; }},
+        {"local-approx", [&](const std::string& v) { c.local_approx = v; }},
+        {"amg-coarsening", [&](const std::string& v) { c.amg_coarsening = v; }},
+        {"amg-sweeps", [&](const std::string& v) { c.amg_sweeps = std::stoi(v); }},
+        {"amg-coarse-enough", [&](const std::string& v) { c.amg_coarse_enough = std::stoi(v); }},
+        {"amg-reuse", [&](const std::string& v) { c.amg_reuse = parseBool(v); }},
         {"coarse-solver", [&](const std::string& v) { c.coarse_solver = v; }},
         {"coarse-factorization", [&](const std::string& v) { c.coarse_factorization = v; }},
         {"coarse-procs", [&](const std::string& v) { c.coarse_procs = std::stoi(v); }},
@@ -132,6 +137,11 @@ void SolverConfig::validate() const
         throw std::invalid_argument("--coarse-factorization must be auto|lu|cholesky|ldlt");
     if (local_precision != "double" && local_precision != "single")
         throw std::invalid_argument("--local-precision must be double|single");
+    if (local_approx != "none" && local_approx != "amg") throw std::invalid_argument("--local-approx must be none|amg");
+    if (amg_coarsening != "sa" && amg_coarsening != "rs") throw std::invalid_argument("--amg-coarsening must be sa|rs");
+    if (amg_sweeps < 1) throw std::invalid_argument("--amg-sweeps must be >= 1");
+    if (amg_coarse_enough < 1) throw std::invalid_argument("--amg-coarse-enough must be >= 1");
+    if (rebuild_growth < 0.0) throw std::invalid_argument("--rebuild-growth must be >= 0");
     if (steps < 0) throw std::invalid_argument("--steps must be >= 0");
     if (correctors < 1) throw std::invalid_argument("--correctors must be >= 1");
     if (reuse != "off" && reuse != "refactor" && reuse != "auto")
@@ -165,8 +175,16 @@ void SolverConfig::print(std::ostream& os) const
     line("tau", tau);
     line("nev", nev);
     line("nev start", nev_start == 0 ? std::string("nev (fixed)") : std::to_string(nev_start));
-    line("local solver", local_solver + ", factorization " + local_factorization +
-                             (local_precision == "single" ? ", A_ii in single precision" : ""));
+    if (local_approx == "none") {
+        line("local solver", local_solver + ", factorization " + local_factorization +
+                                 (local_precision == "single" ? ", A_ii in single precision" : ""));
+    } else {
+        std::ostringstream a;
+        a << local_approx << " " << amg_coarsening << "+gs V(" << amg_sweeps << "," << amg_sweeps << "), coarsest <= "
+          << amg_coarse_enough << (amg_reuse ? ", hierarchy reused" : ", full setup at every refactorization");
+        if (local_precision == "single") a << ", single precision";
+        line("local solver A_ii", a.str() + " (approximate; A~_ii: " + local_solver + " " + local_factorization + ")");
+    }
     line("coarse solver", coarse_solver + ", factorization " + coarse_factorization);
     line("coarse procs", coarse_procs == 0 ? std::string("all") : std::to_string(coarse_procs));
     if (coarse_root_below > 0) line("coarse root below n0", coarse_root_below);
@@ -222,6 +240,13 @@ std::string SolverConfig::help()
   --local-factorization auto|lu|cholesky|ldlt   symmetric A: auto = Cholesky, then LDL^T,
                            then LU if a factorization fails; nonsymmetric A: always LU  [auto]
   --local-precision double|single   factors of A_ii (one-level part) in float          [double]
+  --local-approx none|amg  one-level part: exact factors of A_ii (none) or one AMG
+                           V-cycle with Gauss-Seidel (amg, build USE_AMGCL=1);
+                           A~_ii and A_00 stay exact                                  [none]
+  --amg-coarsening sa|rs   smoothed aggregation | Ruge-Stuben                         [sa]
+  --amg-sweeps N           Gauss-Seidel steps before/after the coarse correction      [1]
+  --amg-coarse-enough N    maximum size of the coarsest level (skyline LU)            [500]
+  --amg-reuse 0|1          refactorization keeps P, R (only R A P recomputed)          [0]
   --coarse-solver auto|mumps|cpardiso|root  distributed MUMPS / MKL PARDISO, or rank 0 [auto]
   --coarse-factorization auto|lu|cholesky|ldlt   A_00 with root/cpardiso (symmetric A:
                            auto = Cholesky, then LDL^T if it fails; mumps: SYM=2)      [auto]
@@ -237,7 +262,7 @@ std::string SolverConfig::help()
   --reuse off|refactor|auto  off: full setup at every solve; refactor: never rebuild
                            the coarse basis; auto: reuse / refactorize, rebuild when the
                            time lost to the old basis reaches the cost of a rebuild  [auto]
-  --rebuild-growth G       auto: also rebuild when it/decade > G x reference (0 = off) [0]
+  --rebuild-growth G       auto: also rebuild when it/decade > G x reference (0 = off) [4]
   --rebuild-every N        auto: also rebuild after N refactorizations (0 = off)       [0]
   --steps-csv FILE         one line per solve (step, level, times, iterations)
  Output:
