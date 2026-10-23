@@ -1,0 +1,12 @@
+# bubbleFieldCapi.o: the bubble field of schwarz2lvl compiled with the schwarz2lvl compiler (see
+# bubbleFieldCapi.cpp); the scripts of test/gamg build it and set S2L_BUBBLE_OBJ.
+S2L_BUBBLE_OBJ ?= bubbleFieldCapi.o
+
+EXE_INC = \
+    -I$(LIB_SRC)/finiteVolume/lnInclude \
+    -I$(LIB_SRC)/meshTools/lnInclude
+
+EXE_LIBS = \
+    -lfiniteVolume \
+    -lmeshTools \
+    $(S2L_BUBBLE_OBJ)

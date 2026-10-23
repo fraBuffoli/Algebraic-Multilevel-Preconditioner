@@ -4,6 +4,8 @@
  */
 #include "matrix_generators.hpp"
 
+#include "bubble_field.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <random>
@@ -196,65 +198,25 @@ GeneratedProblem MatrixGenerator::bubbles(int dim, const GeneratorOptions& opt)
     if (opt.rho_ratio <= 0.0 || opt.radius <= 0.0 || opt.nbubbles < 0)
         throw std::invalid_argument("bubbles: rho_ratio and radius must be > 0, nbubbles >= 0");
     const double hx = 1.0 / nx, hy = 1.0 / ny, hz = (dim == 3) ? 1.0 / nz : 1.0;
-    const int nv = (dim == 3) ? nz : ny;             // cells along the vertical (gravity) direction
-    const double hv = 1.0 / nv;
     const core::GlobalIndex ncell = static_cast<core::GlobalIndex>(nx) * ny * nz;
     auto cid = [&](int i, int j, int k) {
         return static_cast<core::GlobalIndex>(i) + nx * (static_cast<core::GlobalIndex>(j) + static_cast<core::GlobalIndex>(ny) * k);
     };
 
-    // ---- phase fraction alpha (gas = 1): union of smoothed spheres/discs.
-    const double pi = 3.14159265358979323846;
-    const double R = opt.radius;
-    const double w = std::max(hx, std::max(hy, (dim == 3) ? hz : hy)); // interface half-thickness ~ one cell
-    const double reach = R + 4.0 * w;                                  // beyond: alpha = 0 to round-off
-    std::vector<double> alpha(static_cast<std::size_t>(ncell), 0.0);
-    std::mt19937_64 gen(opt.seed);
-    std::uniform_real_distribution<double> u01(0.0, 1.0);
-    const double rise = opt.cfl * hv * opt.time;
-    for (int b = 0; b < opt.nbubbles; ++b) {
-        // Initial centre, wobble phase (drawn in the same order for every time: same bubbles).
-        const double x0 = R + (1.0 - 2.0 * R) * u01(gen), y0 = R + (1.0 - 2.0 * R) * u01(gen), z0 = u01(gen);
-        const double phase = 2.0 * pi * u01(gen);
-        const double wob = 0.5 * R * std::sin(2.0 * pi * opt.time / 40.0 + phase);
-        double c[3];
-        if (dim == 3) {
-            c[0] = std::clamp(x0 + wob, R, 1.0 - R);
-            c[1] = y0;
-            c[2] = z0 + rise;
-        } else {
-            c[0] = std::clamp(x0 + wob, R, 1.0 - R);
-            c[1] = z0 + rise;                       // vertical = y in 2D
-            c[2] = 0.5;
-        }
-        const int vdir = (dim == 3) ? 2 : 1;
-        c[vdir] -= std::floor(c[vdir]);             // periodic in the vertical direction
-        const double h[3] = {hx, hy, hz};
-        const int n[3] = {nx, ny, nz};
-        for (int image = -1; image <= 1; ++image) { // copies above/below for the periodic wrap
-            double cc[3] = {c[0], c[1], c[2]};
-            cc[vdir] += image;
-            int lo[3], hi[3];
-            bool empty = false;
-            for (int d = 0; d < dim; ++d) {
-                lo[d] = std::max(0, static_cast<int>(std::floor((cc[d] - reach) / h[d])));
-                hi[d] = std::min(n[d] - 1, static_cast<int>(std::floor((cc[d] + reach) / h[d])));
-                empty = empty || lo[d] > hi[d];
-            }
-            if (dim == 2) lo[2] = hi[2] = 0;
-            if (empty) continue;
-            for (int k = lo[2]; k <= hi[2]; ++k)
-                for (int j = lo[1]; j <= hi[1]; ++j)
-                    for (int i = lo[0]; i <= hi[0]; ++i) {
-                        const double dx = (i + 0.5) * hx - cc[0], dy = (j + 0.5) * hy - cc[1];
-                        const double dz = (dim == 3) ? (k + 0.5) * hz - cc[2] : 0.0;
-                        const double dist = std::sqrt(dx * dx + dy * dy + dz * dz);
-                        const double a = 0.5 * (1.0 - std::tanh((dist - R) / w));
-                        double& al = alpha[static_cast<std::size_t>(cid(i, j, k))];
-                        al = std::max(al, a);
-                    }
-        }
-    }
+    // ---- phase fraction alpha (gas = 1): union of smoothed spheres/discs (bubble_field.hpp, shared
+    //      with the OpenFOAM application bubblyPressureFoam).
+    BubbleFieldParams bp;
+    bp.dim = dim;
+    bp.nx = nx;
+    bp.ny = ny;
+    bp.nz = nz;
+    bp.nbubbles = opt.nbubbles;
+    bp.radius = opt.radius;
+    bp.cfl = opt.cfl;
+    bp.time = opt.time;
+    bp.seed = opt.seed;
+    std::vector<double> alpha;
+    BubbleField(bp).fill(alpha);
 
     // ---- beta = 1/rho per cell, rho = alpha rho_g + (1 - alpha) rho_l, rho_l = 1.
     const double rho_g = 1.0 / opt.rho_ratio;

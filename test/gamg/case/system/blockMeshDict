@@ -1,0 +1,48 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  10
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      blockMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Unit cube, uniform grid. Cells numbered i + nx (j + ny k) as in the schwarz2lvl generators.
+#include "gridSize"
+
+convertToMeters 1;
+
+vertices
+(
+    (0 0 0) (1 0 0) (1 1 0) (0 1 0)
+    (0 0 1) (1 0 1) (1 1 1) (0 1 1)
+);
+
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) ($nx $ny $nz) simpleGrading (1 1 1)
+);
+
+boundary
+(
+    top     // p = 0 (free surface / outlet)
+    {
+        type patch;
+        faces ((4 5 6 7));
+    }
+    walls   // zero flux
+    {
+        type wall;
+        faces ((0 3 2 1) (0 4 7 3) (2 6 5 1) (1 5 4 0) (3 7 6 2));
+    }
+);
+
+// ************************************************************************* //

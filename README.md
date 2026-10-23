@@ -118,10 +118,12 @@ which is the format intended for strong/weak scaling studies. `--history` writes
 as soon as its local eigensolver ends (time, n_i, n_Γ, kernel, selected vectors, operator applications), to find
 the subdomains that slow down or block the setup. Exit code: 0 converged, 2 not converged, 1 invalid input.
 
-**matgen** writes the built-in problems in Matrix Market format (e.g. to compare with PETSc/PCHPDDM):
+**matgen** writes the built-in problems in Matrix Market format (e.g. to compare with PETSc/PCHPDDM, or
+with OpenFOAM: `openfoam/bubblyPressureFoam -writeMatrix`):
 
 ```bash
 ./bin/matgen convdiff3d 40 nu=0.01 out=cd3d_40      # -> cd3d_40.mtx, cd3d_40_rhs.mtx
+./bin/matgen bubbles3d 64 nb=150 radius=0.04 rho=1000 cfl=0.5 t=7 out=bub64   # bubbles at step 7
 ```
 
 **Tests** compare the distributed implementation with sequential references built from the global matrix;
@@ -133,6 +135,7 @@ mpirun -np 4 ./bin/test_preconditioner   # sparse vs dense eigensolver, RAS/ASM 
 mpirun -np 4 ./bin/test_reuse            # setup reuse: refactorizations vs fresh setups, policy, time loop
 mpirun -np 4 ./bin/test_factorization    # Cholesky / LDLT / LU chains, single precision, coarse solvers
 mpirun -np 4 ./bin/test_inexact          # AMG as approximate local solver: linearity, quality, two-level GMRES
+mpirun -np 1 ./bin/test_bubbles          # bubble field shared with OpenFOAM, bubbles3d matrix structure
 ```
 
 `matrices/` contains small SuiteSparse test matrices (sherman4, nos5, e05r0400, fidapm05/10, garon1, graham1,
@@ -149,8 +152,9 @@ include/<module>/*.hpp, src/<module>/*.cpp      one class per header/source pair
 ├── preconditioner/  (prec)    Preconditioner (+ UpdateLevel), OneLevelSchwarz, local block splitting, LocalEigensolver,
 │                              CoarseSpace, CoarseSolver (MUMPS/cpardiso/root), TwoLevelSchwarz, ReusePolicy
 ├── solver/          (solv)    Gmres, runTimeLoop (sequence of solves with setup reuse)
-└── utils/           (utils)   MatrixGenerator, TimerRegistry/ScopedTimer, Log
+└── utils/           (utils)   MatrixGenerator, BubbleField (header-only, shared with OpenFOAM), TimerRegistry/ScopedTimer, Log
 src/main.cpp, src/matgen.cpp   drivers;   test/   MPI test programs;   external/   Eigen, Spectra, AMGCL
+openfoam/bubblyPressureFoam    OpenFOAM-10 application: the bubbles3d matrices solved by the OpenFOAM solvers (GAMG reference)
 ```
 
 Flow of `main.cpp`:
@@ -354,8 +358,9 @@ says so in its name). PARDISO and the Eigen built-in solvers (SimplicialLLT / Si
 Every GMRES iteration applies A_ii⁻¹ once per subdomain. With exact factors this is the largest
 cost of an iteration on large subdomains (P5, bubbles at 240 processes: 60-70% at ~30k cells per
 process), and a refactorization at every time step costs a numerical Cholesky factorization. The
-factor of a 3D subdomain is 50-100 times larger than A_ii itself (fill-in grows like n^(4/3)), and
-every solve reads it twice. `--local-approx amg` replaces A_ii⁻¹ **in the one-level part only**
+Cholesky factor of a 3D subdomain has 20-35 times the nonzeros of A_ii (PARDISO with METIS
+ordering on a 7-point Laplacian of 30k / 69k unknowns: nnz(L) = 4.3M / 15.8M; fill-in grows like
+n^(4/3)), and every solve reads it twice. `--local-approx amg` replaces A_ii⁻¹ **in the one-level part only**
 with one AMG V-cycle B_i ≈ A_ii⁻¹:
 
 M⁻¹ = Σ_i R_iᵀ D_i **B_i** R_i  (instead of Σ_i R_iᵀ D_i A_ii⁻¹ R_i),
@@ -396,6 +401,10 @@ same iterations as with exact factors.
   - `--amg-reuse 0`: with the reused hierarchy the iterations grew faster between two rebuilds of the
     coarse space (P was built where the bubbles were), while with full setups they followed the
     exact solves step by step, at the same total cost.
+- **Second G100 campaign (P7b, final code; `test/p7/RESULTS.md`)**: AMG `sa` -49% / -56% at 240
+  processes (~30k / ~70k cells per process) and -26% / -30% at 960 processes (~7k / ~17k cells, where
+  the coarse solve dominates) against exact Cholesky; -20% to -40% against exact factors in single
+  precision. The first solve after a rebuild needs the iterations of the exact solves.
 - **Reuse policy.** `--reuse auto` works unchanged: it measures what a refactorization and a rebuild
   cost (now with lower medians, see above), so with AMG it decides by itself. A rebuild still
   factorizes Ã_ii exactly for the eigensolver: with AMG this is the largest setup cost.
@@ -404,6 +413,30 @@ same iterations as with exact factors.
 - `test/p7/Allrun_p7b.sh` (G100, 5 nodes, ~35 min) and `Allrun_p7b_960.sh` (20 nodes, ~12 min)
   compare exact factors (double, single) and AMG `sa` / `rs` with the new defaults on the bubbles
   problem at 7k-70k cells per process; `report_p7.py` writes the report and the plots.
+
+## GAMG reference (OpenFOAM)
+
+The target is a preconditioner competitive with the GAMG of OpenFOAM, so before any porting the
+OpenFOAM solvers are measured on the same systems as `schwarz2lvl`:
+
+- `openfoam/bubblyPressureFoam` (OpenFOAM-10) assembles the pressure equation of `bubbles3d`,
+  −∇·(β_f ∇p) = α with β = 1/ρ, on a uniform blockMesh: α is computed at the cell centres by
+  `include/utils/bubble_field.hpp`, the header-only class the generator itself uses (independent of
+  the mesh decomposition), β_f by linear interpolation, the flux by an orthogonal snGrad, p = 0 on
+  top. The bubble field is compiled with the schwarz2lvl compiler and linked through a C interface
+  (`bubbleFieldCapi.h`): compiled by the OpenFOAM toolchain of G100 (icpx oneAPI 2021, `-O3
+  -xCORE-AVX512`) it moved 2 of 150 bubbles. The result is the generated matrix and right-hand side
+  up to round-off (`-writeMatrix` of a 24³ case against `matgen`: ~1e-15; the G100 jobs stop if not).
+  Every solve starts from 0, is timed between two synchronizations of all processes and is followed
+  by the true residual ||b − Ax||₂/||b||₂; the OpenFOAM stopping test is on the normalised L1
+  residual, `relTol 1e-9` so that the 2-norm reaches ~1e-8 like schwarz2lvl.
+- The generator moved its bubble field to `BubbleField`: the matrices are unchanged (bitwise without
+  FMA contraction; with `-march` FMA the round-off may differ in the last bit).
+- `test/gamg/` (G100): `Allprep_gamg.sh` (meshes, builds and matrix check on part of one node),
+  `Allrun_gamg.sh` (5 nodes): two-level Schwarz with AMG / exact local solves, GAMG with DIC /
+  GaussSeidel smoothers and PCG + GAMG (optionally GAMG with the coefficient-based `algebraicPair`
+  agglomeration and PCG + DIC), on the bubbles problems of P7b (192³ and 256³, 240 processes);
+  `report_gamg.py`.
 
 **Limitations.** Real matrices only; one subdomain per MPI process; the global matrix lives on rank 0 during the
 decomposition; local indices are 32-bit and the MUMPS / MKL interfaces require n0 < 2^31.

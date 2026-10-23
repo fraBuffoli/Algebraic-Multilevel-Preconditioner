@@ -1,0 +1,4 @@
+Make/linux*
+Make/darwin*
+lnInclude
+*.o

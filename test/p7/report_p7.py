@@ -196,7 +196,7 @@ def plot_cost(groups, path, order, labels_of):
     style(plt)
     variants = [v for v in order if any(v in items for items in groups.values())]
     labels = ["%s\n%s" % (v, labels_of(v).replace(", ", "\n")) for v in variants]
-    fig, (ax_c, ax_i) = plt.subplots(2, 1, figsize=(max(9, 1.15 * len(variants) + 2), 8.2), facecolor=SURFACE)
+    fig, (ax_c, ax_i) = plt.subplots(2, 1, figsize=(max(9, 1.15 * len(variants) + 2) + 2.6, 8.2), facecolor=SURFACE)
     names = [g for g in groups if "ref" in groups[g]]
     width = 0.16
     for k, grp in enumerate(names):
@@ -229,7 +229,7 @@ def plot_cost(groups, path, order, labels_of):
         ax.set_xticks(range(len(variants)))
         ax.set_xticklabels(labels, fontsize=8)
         ax.set_xlim(-0.6, len(variants) - 0.4)
-        ax.legend(frameon=False, fontsize=9, loc="best")
+        ax.legend(frameon=False, fontsize=9, loc="upper left", bbox_to_anchor=(1.01, 1.0))  # outside: no overlap
     fig.tight_layout()
     os.makedirs(os.path.dirname(path), exist_ok=True)
     fig.savefig(path, dpi=130, facecolor=SURFACE)

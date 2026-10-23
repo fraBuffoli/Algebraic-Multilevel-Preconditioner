@@ -1,0 +1,31 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  10
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      bubblesDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Bubbles of the schwarz2lvl generator bubbles3d (include/utils/bubble_field.hpp). Same values as
+// schwarz2lvl --generate bubbles3d --nx $nx --nbubbles 150 --radius 0.04 --cfl 0.5 --rho-ratio 1000.
+#include "gridSize"
+
+nBubbles    150;
+radius      0.04;
+rhoRatio    1000;
+cfl         0.5;
+seed        2024;
+
+steps       20;     // pseudo-time = step
+correctors  3;      // solves per step
+
+// ************************************************************************* //

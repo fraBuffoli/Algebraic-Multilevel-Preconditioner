@@ -1,5 +1,7 @@
 # P7 — inexact local solvers (G100 campaigns)
 
+Results of the second campaign (P7b, final code): [`RESULTS.md`](RESULTS.md).
+
 **Idea.** After P5 (`--nev 8`, `--eig-tol 1e-4`) the solves with the exact factors of A_ii are
 the largest cost of a GMRES iteration on large subdomains (240 processes, 192³, ~30k cells per
 process: 60-70% of an iteration), and every refactorization of a time loop is a numerical Cholesky

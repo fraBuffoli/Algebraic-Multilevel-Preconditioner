@@ -1,0 +1,7 @@
+cases/
+run_gamg_local*/
+allrun_gamg.out
+allrun_gamg.err
+allprep_gamg.out
+allprep_gamg.err
+__pycache__/

@@ -4,7 +4,8 @@
  *
  * The paper factorizes every A_ii exactly. With large subdomains the solves with those factors
  * are the largest cost of a GMRES iteration (P5: 60-70% at ~30k cells per process), and the
- * factor of a 3D subdomain is ~50-100 times larger than A_ii itself (fill-in ~ n^(4/3)).
+ * Cholesky factor of a 3D subdomain has 20-35 times the nonzeros of A_ii (PARDISO, METIS ordering,
+ * 7-point Laplacian of 30k / 69k unknowns; fill-in ~ n^(4/3)).
  * Schwarz theory (Toselli-Widlund, Ch. 2, local stability constant omega; Dolean-Jolivet-Nataf,
  * end of Sect. 6.3) allows any local solver B_i ~ A_ii^{-1} that is *spectrally equivalent* to
  * A_ii^{-1} (c1 <= x^T A_ii B_i A_ii x / x^T A_ii x <= c2 with constants independent of the
