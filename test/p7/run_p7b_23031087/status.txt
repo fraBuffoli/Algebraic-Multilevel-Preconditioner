@@ -1,0 +1,5 @@
+bub192_ref 960 ok 86 0
+bub192_sa 960 ok 78 0
+bub256_ref 960 ok 147 0
+bub256_sp 960 ok 143 0
+bub256_sa 960 ok 138 0

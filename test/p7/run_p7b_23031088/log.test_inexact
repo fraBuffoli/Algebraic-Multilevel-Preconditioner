@@ -1,0 +1,23 @@
+  [ OK ] unknown approximations / AMG options are rejected (AMGCL compiled in)
+  [ OK ] configuration: defaults (sa, 1 sweep, coarsest <= 500, no reuse, --rebuild-growth 4), options parsed into the A_ii specification, bad or removed options rejected
+  [ OK ] SPD bubbles3d 20^3: amg sa+gs V(1,1), coarsest <= 500 [3 levels, op. complexity 1.55]: linear (3.92e-16), deterministic, PCG 12 / 12 it. after refactorize (<= 20)
+  [ OK ] SPD bubbles3d 20^3: amg sa+gs V(1,1), coarsest <= 500 single [3 levels, op. complexity 1.55]: linear (4.69e-07), deterministic, PCG 12 / 12 it. after refactorize (<= 25)
+  [ OK ] SPD bubbles3d 20^3: amg sa+gs V(1,1), coarsest <= 500, reused hierarchy [3 levels, op. complexity 1.54]: linear (3.92e-16), deterministic, PCG 12 / 13 it. after refactorize (<= 20)
+  [ OK ] SPD bubbles3d 20^3: amg sa+gs V(1,1), coarsest <= 500, reused hierarchy single [3 levels, op. complexity 1.54]: linear (4.69e-07), deterministic, PCG 12 / 13 it. after refactorize (<= 25)
+  [ OK ] SPD bubbles3d 20^3: amg rs+gs V(1,1), coarsest <= 500 [4 levels, op. complexity 2.73]: linear (9.72e-16), deterministic, PCG 10 / 10 it. after refactorize (<= 20)
+  [ OK ] SPD bubbles3d 20^3: amg rs+gs V(1,1), coarsest <= 500 single [4 levels, op. complexity 2.73]: linear (2.33e-07), deterministic, PCG 10 / 10 it. after refactorize (<= 25)
+  [ OK ] SPD bubbles3d 20^3: amg rs+gs V(1,1), coarsest <= 500, reused hierarchy [4 levels, op. complexity 2.74]: linear (9.72e-16), deterministic, PCG 10 / 12 it. after refactorize (<= 20)
+  [ OK ] SPD bubbles3d 20^3: amg rs+gs V(1,1), coarsest <= 500, reused hierarchy single [4 levels, op. complexity 2.74]: linear (2.33e-07), deterministic, PCG 10 / 12 it. after refactorize (<= 25)
+  [ OK ] coarse_enough 500 -> 3 levels, 3000 -> 2 levels
+  [ OK ] nonsymmetric convdiff3d 16^3: amg sa+gs V(1,1), coarsest <= 500 [3 levels, op. complexity 1.86]: GMRES 11 / 11 it. after refactorize (unpreconditioned 196)
+  [ OK ] nonsymmetric convdiff3d 16^3: amg sa+gs V(1,1), coarsest <= 500 single [3 levels, op. complexity 1.86]: GMRES 11 / 11 it. after refactorize (unpreconditioned 196)
+  [ OK ] nonsymmetric convdiff3d 16^3: amg rs+gs V(1,1), coarsest <= 500 [3 levels, op. complexity 2.52]: GMRES 8 / 9 it. after refactorize (unpreconditioned 196)
+  [ OK ] nonsymmetric convdiff3d 16^3: amg rs+gs V(1,1), coarsest <= 500 single [3 levels, op. complexity 2.52]: GMRES 8 / 9 it. after refactorize (unpreconditioned 196)
+  [ OK ] two-level, A_ii amg sa+gs V(1,1), coarsest <= 500 [2 levels, op. complexity 1.42]: GMRES 13 it. (exact 13, bound 31), true residual 7.17e-09, same n0 = 119, A~_ii pardiso cholesky
+  [ OK ] two-level, A_ii amg sa+gs V(1,1), coarsest <= 500 single [2 levels, op. complexity 1.42]: GMRES 15 it. (exact 13, bound 31), true residual 7.52e-09, same n0 = 119, A~_ii pardiso cholesky
+  [ OK ] two-level, A_ii amg rs+gs V(1,1), coarsest <= 500 [3 levels, op. complexity 2.60]: GMRES 13 it. (exact 13, bound 31), true residual 3.88e-09, same n0 = 119, A~_ii pardiso cholesky
+  [ OK ] two-level, A_ii amg rs+gs V(1,1), coarsest <= 500 single [3 levels, op. complexity 2.60]: GMRES 15 it. (exact 13, bound 31), true residual 5.33e-09, same n0 = 119, A~_ii pardiso cholesky
+  [ OK ] one-level RAS, A_ii amg sa+gs V(1,1), coarsest <= 500 [2 levels, op. complexity 1.42]: GMRES 86 it. (exact 96)
+  [ OK ] time loop, AMG with full setups + refactorizations: levels 201010, all converged
+  [ OK ] time loop, AMG with reused hierarchy + refactorizations: levels 201010, all converged
+ALL PASSED

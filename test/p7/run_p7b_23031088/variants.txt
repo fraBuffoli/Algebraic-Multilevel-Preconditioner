@@ -1,0 +1,6 @@
+ref --tau 0.3 --nev 8 --eig-tol 1e-4 
+sa --tau 0.3 --nev 8 --eig-tol 1e-4 --local-approx amg --amg-coarsening sa
+sp --tau 0.3 --nev 8 --eig-tol 1e-4 --local-precision single
+rs --tau 0.3 --nev 8 --eig-tol 1e-4 --local-approx amg --amg-coarsening rs
+sasp --tau 0.3 --nev 8 --eig-tol 1e-4 --local-approx amg --amg-coarsening sa --local-precision single
+sare --tau 0.3 --nev 8 --eig-tol 1e-4 --local-approx amg --amg-coarsening sa --amg-reuse 1

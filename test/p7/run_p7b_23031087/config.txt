@@ -1,0 +1,1 @@
+NP=960 COARSE='--coarse-solver cpardiso --coarse-procs 48 --coarse-root-below 10000' BASE='--tau 0.3 --nev 8 --eig-tol 1e-4' STEPS_A=20 STEPS_B=16 CORR=3 N_A=192 N_B=256

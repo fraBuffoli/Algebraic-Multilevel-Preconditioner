@@ -1,0 +1,11 @@
+bub192_ref 240 ok 116 0
+bub192_sa 240 ok 87 0
+bub192_sp 240 ok 103 0
+bub192_rs 240 ok 95 0
+bub192_sasp 240 ok 85 0
+bub256_ref 240 ok 281 0
+bub256_sa 240 ok 183 0
+bub256_sp 240 ok 234 0
+bub256_rs 240 ok 197 0
+bub256_sasp 240 ok 182 0
+bub256_sare 240 ok 189 0
