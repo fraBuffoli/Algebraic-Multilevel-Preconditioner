@@ -1,0 +1,595 @@
+/*---------------------------------------------------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  10
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+Build  : 10-8213cb4a3f81
+Exec   : /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/cases/bin_e12f07a96b18/bin/bubblyPressureFoam -case /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/cases/bub256_np432 -parallel -solver GAMG_DIC -steps 16 -correctors 3 -csv /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/run_scaling_np432_23040228/csv/bub256_GAMG_DIC.csv
+Date   : Oct 23 2026
+Time   : 23:59:46
+Host   : "r506c06n01"
+PID    : 41645
+I/O    : uncollated
+Case   : /g100_work/IscrC_EXTA-PMF/Algebraic-Multilevel-Preconditioner/test/gamg/cases/bub256_np432
+nProcs : 432
+Slaves : 
+431
+(
+"r506c06n01.41646"
+"r506c06n01.41647"
+"r506c06n01.41648"
+"r506c06n01.41649"
+"r506c06n01.41650"
+"r506c06n01.41651"
+"r506c06n01.41652"
+"r506c06n01.41653"
+"r506c06n01.41654"
+"r506c06n01.41655"
+"r506c06n01.41656"
+"r506c06n01.41657"
+"r506c06n01.41658"
+"r506c06n01.41659"
+"r506c06n01.41660"
+"r506c06n01.41661"
+"r506c06n01.41662"
+"r506c06n01.41663"
+"r506c06n01.41664"
+"r506c06n01.41665"
+"r506c06n01.41666"
+"r506c06n01.41667"
+"r506c06n01.41668"
+"r506c06n01.41669"
+"r506c06n01.41670"
+"r506c06n01.41671"
+"r506c06n01.41672"
+"r506c06n01.41673"
+"r506c06n01.41674"
+"r506c06n01.41675"
+"r506c06n01.41676"
+"r506c06n01.41677"
+"r506c06n01.41678"
+"r506c06n01.41679"
+"r506c06n01.41680"
+"r506c06n01.41681"
+"r506c06n01.41682"
+"r506c06n01.41683"
+"r506c06n01.41684"
+"r506c06n01.41685"
+"r506c06n01.41686"
+"r506c06n01.41687"
+"r506c06n01.41688"
+"r506c06n01.41689"
+"r506c06n01.41690"
+"r506c06n01.41691"
+"r506c06n01.41692"
+"r507c02n01.46153"
+"r507c02n01.46154"
+"r507c02n01.46155"
+"r507c02n01.46156"
+"r507c02n01.46157"
+"r507c02n01.46158"
+"r507c02n01.46159"
+"r507c02n01.46160"
+"r507c02n01.46161"
+"r507c02n01.46162"
+"r507c02n01.46163"
+"r507c02n01.46164"
+"r507c02n01.46165"
+"r507c02n01.46166"
+"r507c02n01.46167"
+"r507c02n01.46168"
+"r507c02n01.46169"
+"r507c02n01.46170"
+"r507c02n01.46171"
+"r507c02n01.46172"
+"r507c02n01.46173"
+"r507c02n01.46174"
+"r507c02n01.46175"
+"r507c02n01.46176"
+"r507c02n01.46177"
+"r507c02n01.46178"
+"r507c02n01.46179"
+"r507c02n01.46180"
+"r507c02n01.46181"
+"r507c02n01.46182"
+"r507c02n01.46183"
+"r507c02n01.46184"
+"r507c02n01.46185"
+"r507c02n01.46186"
+"r507c02n01.46187"
+"r507c02n01.46188"
+"r507c02n01.46189"
+"r507c02n01.46190"
+"r507c02n01.46191"
+"r507c02n01.46192"
+"r507c02n01.46193"
+"r507c02n01.46194"
+"r507c02n01.46195"
+"r507c02n01.46196"
+"r507c02n01.46197"
+"r507c02n01.46198"
+"r507c02n01.46199"
+"r507c02n01.46200"
+"r512c04n01.40072"
+"r512c04n01.40073"
+"r512c04n01.40074"
+"r512c04n01.40075"
+"r512c04n01.40076"
+"r512c04n01.40077"
+"r512c04n01.40078"
+"r512c04n01.40079"
+"r512c04n01.40080"
+"r512c04n01.40081"
+"r512c04n01.40082"
+"r512c04n01.40083"
+"r512c04n01.40084"
+"r512c04n01.40085"
+"r512c04n01.40086"
+"r512c04n01.40087"
+"r512c04n01.40088"
+"r512c04n01.40089"
+"r512c04n01.40090"
+"r512c04n01.40091"
+"r512c04n01.40092"
+"r512c04n01.40093"
+"r512c04n01.40094"
+"r512c04n01.40095"
+"r512c04n01.40096"
+"r512c04n01.40097"
+"r512c04n01.40098"
+"r512c04n01.40099"
+"r512c04n01.40100"
+"r512c04n01.40101"
+"r512c04n01.40102"
+"r512c04n01.40103"
+"r512c04n01.40104"
+"r512c04n01.40105"
+"r512c04n01.40106"
+"r512c04n01.40107"
+"r512c04n01.40108"
+"r512c04n01.40109"
+"r512c04n01.40110"
+"r512c04n01.40111"
+"r512c04n01.40112"
+"r512c04n01.40113"
+"r512c04n01.40114"
+"r512c04n01.40115"
+"r512c04n01.40116"
+"r512c04n01.40117"
+"r512c04n01.40118"
+"r512c04n01.40119"
+"r513c02n01.35852"
+"r513c02n01.35853"
+"r513c02n01.35854"
+"r513c02n01.35855"
+"r513c02n01.35856"
+"r513c02n01.35857"
+"r513c02n01.35858"
+"r513c02n01.35859"
+"r513c02n01.35860"
+"r513c02n01.35861"
+"r513c02n01.35862"
+"r513c02n01.35863"
+"r513c02n01.35864"
+"r513c02n01.35865"
+"r513c02n01.35866"
+"r513c02n01.35867"
+"r513c02n01.35868"
+"r513c02n01.35869"
+"r513c02n01.35870"
+"r513c02n01.35871"
+"r513c02n01.35872"
+"r513c02n01.35873"
+"r513c02n01.35874"
+"r513c02n01.35875"
+"r513c02n01.35876"
+"r513c02n01.35877"
+"r513c02n01.35878"
+"r513c02n01.35879"
+"r513c02n01.35880"
+"r513c02n01.35881"
+"r513c02n01.35882"
+"r513c02n01.35883"
+"r513c02n01.35884"
+"r513c02n01.35885"
+"r513c02n01.35886"
+"r513c02n01.35887"
+"r513c02n01.35888"
+"r513c02n01.35889"
+"r513c02n01.35890"
+"r513c02n01.35891"
+"r513c02n01.35892"
+"r513c02n01.35893"
+"r513c02n01.35894"
+"r513c02n01.35895"
+"r513c02n01.35896"
+"r513c02n01.35897"
+"r513c02n01.35898"
+"r513c02n01.35899"
+"r513c02n02.33611"
+"r513c02n02.33612"
+"r513c02n02.33613"
+"r513c02n02.33614"
+"r513c02n02.33615"
+"r513c02n02.33616"
+"r513c02n02.33617"
+"r513c02n02.33618"
+"r513c02n02.33619"
+"r513c02n02.33620"
+"r513c02n02.33621"
+"r513c02n02.33622"
+"r513c02n02.33623"
+"r513c02n02.33624"
+"r513c02n02.33625"
+"r513c02n02.33626"
+"r513c02n02.33627"
+"r513c02n02.33628"
+"r513c02n02.33629"
+"r513c02n02.33630"
+"r513c02n02.33631"
+"r513c02n02.33632"
+"r513c02n02.33633"
+"r513c02n02.33634"
+"r513c02n02.33635"
+"r513c02n02.33636"
+"r513c02n02.33637"
+"r513c02n02.33638"
+"r513c02n02.33639"
+"r513c02n02.33640"
+"r513c02n02.33641"
+"r513c02n02.33642"
+"r513c02n02.33643"
+"r513c02n02.33644"
+"r513c02n02.33645"
+"r513c02n02.33646"
+"r513c02n02.33647"
+"r513c02n02.33648"
+"r513c02n02.33649"
+"r513c02n02.33650"
+"r513c02n02.33651"
+"r513c02n02.33652"
+"r513c02n02.33653"
+"r513c02n02.33654"
+"r513c02n02.33655"
+"r513c02n02.33656"
+"r513c02n02.33657"
+"r513c02n02.33658"
+"r514c02n01.17981"
+"r514c02n01.17982"
+"r514c02n01.17983"
+"r514c02n01.17984"
+"r514c02n01.17985"
+"r514c02n01.17986"
+"r514c02n01.17987"
+"r514c02n01.17988"
+"r514c02n01.17989"
+"r514c02n01.17990"
+"r514c02n01.17991"
+"r514c02n01.17992"
+"r514c02n01.17993"
+"r514c02n01.17994"
+"r514c02n01.17995"
+"r514c02n01.17996"
+"r514c02n01.17997"
+"r514c02n01.17998"
+"r514c02n01.17999"
+"r514c02n01.18000"
+"r514c02n01.18001"
+"r514c02n01.18002"
+"r514c02n01.18003"
+"r514c02n01.18004"
+"r514c02n01.18005"
+"r514c02n01.18006"
+"r514c02n01.18007"
+"r514c02n01.18008"
+"r514c02n01.18009"
+"r514c02n01.18010"
+"r514c02n01.18011"
+"r514c02n01.18012"
+"r514c02n01.18013"
+"r514c02n01.18014"
+"r514c02n01.18015"
+"r514c02n01.18016"
+"r514c02n01.18017"
+"r514c02n01.18018"
+"r514c02n01.18019"
+"r514c02n01.18020"
+"r514c02n01.18021"
+"r514c02n01.18022"
+"r514c02n01.18023"
+"r514c02n01.18024"
+"r514c02n01.18025"
+"r514c02n01.18026"
+"r514c02n01.18027"
+"r514c02n01.18028"
+"r515c02n01.34862"
+"r515c02n01.34863"
+"r515c02n01.34864"
+"r515c02n01.34865"
+"r515c02n01.34866"
+"r515c02n01.34867"
+"r515c02n01.34868"
+"r515c02n01.34869"
+"r515c02n01.34870"
+"r515c02n01.34871"
+"r515c02n01.34872"
+"r515c02n01.34873"
+"r515c02n01.34874"
+"r515c02n01.34875"
+"r515c02n01.34876"
+"r515c02n01.34877"
+"r515c02n01.34878"
+"r515c02n01.34879"
+"r515c02n01.34880"
+"r515c02n01.34881"
+"r515c02n01.34882"
+"r515c02n01.34883"
+"r515c02n01.34884"
+"r515c02n01.34885"
+"r515c02n01.34886"
+"r515c02n01.34887"
+"r515c02n01.34888"
+"r515c02n01.34889"
+"r515c02n01.34890"
+"r515c02n01.34891"
+"r515c02n01.34892"
+"r515c02n01.34893"
+"r515c02n01.34894"
+"r515c02n01.34895"
+"r515c02n01.34896"
+"r515c02n01.34897"
+"r515c02n01.34898"
+"r515c02n01.34899"
+"r515c02n01.34900"
+"r515c02n01.34901"
+"r515c02n01.34902"
+"r515c02n01.34903"
+"r515c02n01.34904"
+"r515c02n01.34905"
+"r515c02n01.34906"
+"r515c02n01.34907"
+"r515c02n01.34908"
+"r515c02n01.34909"
+"r519c02n02.30661"
+"r519c02n02.30662"
+"r519c02n02.30663"
+"r519c02n02.30664"
+"r519c02n02.30665"
+"r519c02n02.30666"
+"r519c02n02.30667"
+"r519c02n02.30668"
+"r519c02n02.30669"
+"r519c02n02.30670"
+"r519c02n02.30671"
+"r519c02n02.30672"
+"r519c02n02.30673"
+"r519c02n02.30674"
+"r519c02n02.30675"
+"r519c02n02.30676"
+"r519c02n02.30677"
+"r519c02n02.30678"
+"r519c02n02.30679"
+"r519c02n02.30680"
+"r519c02n02.30681"
+"r519c02n02.30682"
+"r519c02n02.30683"
+"r519c02n02.30684"
+"r519c02n02.30685"
+"r519c02n02.30686"
+"r519c02n02.30687"
+"r519c02n02.30688"
+"r519c02n02.30689"
+"r519c02n02.30690"
+"r519c02n02.30691"
+"r519c02n02.30692"
+"r519c02n02.30693"
+"r519c02n02.30694"
+"r519c02n02.30695"
+"r519c02n02.30696"
+"r519c02n02.30697"
+"r519c02n02.30698"
+"r519c02n02.30699"
+"r519c02n02.30700"
+"r519c02n02.30701"
+"r519c02n02.30702"
+"r519c02n02.30703"
+"r519c02n02.30704"
+"r519c02n02.30705"
+"r519c02n02.30706"
+"r519c02n02.30707"
+"r519c02n02.30708"
+"r520c02n01.51540"
+"r520c02n01.51541"
+"r520c02n01.51542"
+"r520c02n01.51543"
+"r520c02n01.51544"
+"r520c02n01.51545"
+"r520c02n01.51546"
+"r520c02n01.51547"
+"r520c02n01.51548"
+"r520c02n01.51549"
+"r520c02n01.51550"
+"r520c02n01.51551"
+"r520c02n01.51552"
+"r520c02n01.51553"
+"r520c02n01.51554"
+"r520c02n01.51555"
+"r520c02n01.51556"
+"r520c02n01.51557"
+"r520c02n01.51558"
+"r520c02n01.51559"
+"r520c02n01.51560"
+"r520c02n01.51561"
+"r520c02n01.51562"
+"r520c02n01.51563"
+"r520c02n01.51564"
+"r520c02n01.51565"
+"r520c02n01.51566"
+"r520c02n01.51567"
+"r520c02n01.51568"
+"r520c02n01.51569"
+"r520c02n01.51570"
+"r520c02n01.51571"
+"r520c02n01.51572"
+"r520c02n01.51573"
+"r520c02n01.51574"
+"r520c02n01.51575"
+"r520c02n01.51576"
+"r520c02n01.51577"
+"r520c02n01.51578"
+"r520c02n01.51579"
+"r520c02n01.51580"
+"r520c02n01.51581"
+"r520c02n01.51582"
+"r520c02n01.51583"
+"r520c02n01.51584"
+"r520c02n01.51585"
+"r520c02n01.51586"
+"r520c02n01.51587"
+)
+
+Pstream initialised with:
+    floatTransfer      : 0
+    nProcsSimpleSum    : 0
+    commsType          : nonBlocking
+    polling iterations : 0
+sigFpe : Enabling floating point exception trapping (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 10)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+bubblyPressureFoam: 256x256x256 cells, 150 bubbles, radius 0.04, rho ratio 1000, cfl 0.5, seed 2024, 16 steps x 3 correctors, solver GAMG_DIC 
+{
+    solver          GAMG;
+    smoother        DIC;
+    agglomerator    faceAreaPair;
+    tolerance       0;
+    relTol          0.01;
+    maxIter         1000;
+}
+
+
+step 0: sum of alpha 680057.659953
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00796729408059, No Iterations 46
+step 0 corrector 0: 46 iterations, 1.32737 s, true relative residual 0.0522205590117, ||p||_2 53.6121660229
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00796729408059, No Iterations 46
+step 0 corrector 1: 46 iterations, 1.764027 s, true relative residual 0.0522205590117, ||p||_2 53.6121660229
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00796729408059, No Iterations 46
+step 0 corrector 2: 46 iterations, 1.568736 s, true relative residual 0.0522205590117, ||p||_2 53.6121660229
+step 1: sum of alpha 680040.710756
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00890389455609, No Iterations 49
+step 1 corrector 0: 49 iterations, 1.324756 s, true relative residual 0.0785719975232, ||p||_2 53.5725008214
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00890389455609, No Iterations 49
+step 1 corrector 1: 49 iterations, 1.355386 s, true relative residual 0.0785719975232, ||p||_2 53.5725008214
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00890389455609, No Iterations 49
+step 1 corrector 2: 49 iterations, 1.478842 s, true relative residual 0.0785719975232, ||p||_2 53.5725008214
+step 2: sum of alpha 679957.833362
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00976111202754, No Iterations 46
+step 2 corrector 0: 46 iterations, 1.460287 s, true relative residual 0.078517255498, ||p||_2 53.5171064933
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00976111202754, No Iterations 46
+step 2 corrector 1: 46 iterations, 1.532928 s, true relative residual 0.078517255498, ||p||_2 53.5171064933
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00976111202754, No Iterations 46
+step 2 corrector 2: 46 iterations, 3.146176 s, true relative residual 0.078517255498, ||p||_2 53.5171064933
+step 3: sum of alpha 679825.213912
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00940591828986, No Iterations 57
+step 3 corrector 0: 57 iterations, 2.444334 s, true relative residual 0.080046236554, ||p||_2 53.4672316085
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00940591828986, No Iterations 57
+step 3 corrector 1: 57 iterations, 1.682129 s, true relative residual 0.080046236554, ||p||_2 53.4672316085
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00940591828986, No Iterations 57
+step 3 corrector 2: 57 iterations, 1.692398 s, true relative residual 0.080046236554, ||p||_2 53.4672316085
+step 4: sum of alpha 679622.02866
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00960980473674, No Iterations 50
+step 4 corrector 0: 50 iterations, 1.38689 s, true relative residual 0.0884803226906, ||p||_2 53.4031543644
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00960980473674, No Iterations 50
+step 4 corrector 1: 50 iterations, 1.659894 s, true relative residual 0.0884803226906, ||p||_2 53.4031543644
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00960980473674, No Iterations 50
+step 4 corrector 2: 50 iterations, 1.684483 s, true relative residual 0.0884803226906, ||p||_2 53.4031543644
+step 5: sum of alpha 679374.624215
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00989131080746, No Iterations 51
+step 5 corrector 0: 51 iterations, 1.393638 s, true relative residual 0.0881616856693, ||p||_2 53.3286433347
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00989131080746, No Iterations 51
+step 5 corrector 1: 51 iterations, 1.663128 s, true relative residual 0.0881616856693, ||p||_2 53.3286433347
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00989131080746, No Iterations 51
+step 5 corrector 2: 51 iterations, 1.561625 s, true relative residual 0.0881616856693, ||p||_2 53.3286433347
+step 6: sum of alpha 679096.936048
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00961303671951, No Iterations 43
+step 6 corrector 0: 43 iterations, 1.163638 s, true relative residual 0.0611666679788, ||p||_2 53.2661243988
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00961303671951, No Iterations 43
+step 6 corrector 1: 43 iterations, 1.296881 s, true relative residual 0.0611666679788, ||p||_2 53.2661243988
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00961303671951, No Iterations 43
+step 6 corrector 2: 43 iterations, 1.189869 s, true relative residual 0.0611666679788, ||p||_2 53.2661243988
+step 7: sum of alpha 678811.384014
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00703032515062, No Iterations 44
+step 7 corrector 0: 44 iterations, 1.309872 s, true relative residual 0.0503210939372, ||p||_2 53.1723901246
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00703032515062, No Iterations 44
+step 7 corrector 1: 44 iterations, 1.210475 s, true relative residual 0.0503210939372, ||p||_2 53.1723901246
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00703032515062, No Iterations 44
+step 7 corrector 2: 44 iterations, 1.172805 s, true relative residual 0.0503210939372, ||p||_2 53.1723901246
+step 8: sum of alpha 678544.694493
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00774382232495, No Iterations 45
+step 8 corrector 0: 45 iterations, 1.340938 s, true relative residual 0.0460932160295, ||p||_2 53.0667583951
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00774382232495, No Iterations 45
+step 8 corrector 1: 45 iterations, 1.174915 s, true relative residual 0.0460932160295, ||p||_2 53.0667583951
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00774382232495, No Iterations 45
+step 8 corrector 2: 45 iterations, 1.31969 s, true relative residual 0.0460932160295, ||p||_2 53.0667583951
+step 9: sum of alpha 678297.035589
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00976722354528, No Iterations 43
+step 9 corrector 0: 43 iterations, 1.316268 s, true relative residual 0.0749998928388, ||p||_2 52.960609686
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00976722354528, No Iterations 43
+step 9 corrector 1: 43 iterations, 1.188359 s, true relative residual 0.0749998928388, ||p||_2 52.960609686
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00976722354528, No Iterations 43
+step 9 corrector 2: 43 iterations, 1.267701 s, true relative residual 0.0749998928388, ||p||_2 52.960609686
+step 10: sum of alpha 678053.438482
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00969924662736, No Iterations 41
+step 10 corrector 0: 41 iterations, 1.130309 s, true relative residual 0.0762809907775, ||p||_2 52.8610905617
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00969924662736, No Iterations 41
+step 10 corrector 1: 41 iterations, 1.141534 s, true relative residual 0.0762809907775, ||p||_2 52.8610905617
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00969924662736, No Iterations 41
+step 10 corrector 2: 41 iterations, 1.149067 s, true relative residual 0.0762809907775, ||p||_2 52.8610905617
+step 11: sum of alpha 677811.120225
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00854513194146, No Iterations 43
+step 11 corrector 0: 43 iterations, 1.334933 s, true relative residual 0.0640226089839, ||p||_2 52.76059199
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00854513194146, No Iterations 43
+step 11 corrector 1: 43 iterations, 1.355703 s, true relative residual 0.0640226089839, ||p||_2 52.76059199
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00854513194146, No Iterations 43
+step 11 corrector 2: 43 iterations, 1.23844 s, true relative residual 0.0640226089839, ||p||_2 52.76059199
+step 12: sum of alpha 677568.51676
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00902701560257, No Iterations 47
+step 12 corrector 0: 47 iterations, 1.503381 s, true relative residual 0.0606073438581, ||p||_2 52.6524414959
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00902701560257, No Iterations 47
+step 12 corrector 1: 47 iterations, 1.465792 s, true relative residual 0.0606073438581, ||p||_2 52.6524414959
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00902701560257, No Iterations 47
+step 12 corrector 2: 47 iterations, 1.297704 s, true relative residual 0.0606073438581, ||p||_2 52.6524414959
+step 13: sum of alpha 677344.377256
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00817798645262, No Iterations 45
+step 13 corrector 0: 45 iterations, 1.345267 s, true relative residual 0.0510512753981, ||p||_2 52.5456049863
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00817798645262, No Iterations 45
+step 13 corrector 1: 45 iterations, 1.269068 s, true relative residual 0.0510512753981, ||p||_2 52.5456049863
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00817798645262, No Iterations 45
+step 13 corrector 2: 45 iterations, 1.735407 s, true relative residual 0.0510512753981, ||p||_2 52.5456049863
+step 14: sum of alpha 677167.783693
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00983982639485, No Iterations 56
+step 14 corrector 0: 56 iterations, 1.76761 s, true relative residual 0.0469059038092, ||p||_2 52.4087534444
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00983982639485, No Iterations 56
+step 14 corrector 1: 56 iterations, 1.643415 s, true relative residual 0.0469059038092, ||p||_2 52.4087534444
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00983982639485, No Iterations 56
+step 14 corrector 2: 56 iterations, 1.612199 s, true relative residual 0.0469059038092, ||p||_2 52.4087534444
+step 15: sum of alpha 677053.271381
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00942946705321, No Iterations 61
+step 15 corrector 0: 61 iterations, 1.57713 s, true relative residual 0.0361582950717, ||p||_2 52.3088949899
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00942946705321, No Iterations 61
+step 15 corrector 1: 61 iterations, 1.785867 s, true relative residual 0.0361582950717, ||p||_2 52.3088949899
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00942946705321, No Iterations 61
+step 15 corrector 2: 61 iterations, 1.808873 s, true relative residual 0.0361582950717, ||p||_2 52.3088949899
+
+Summary (GAMG_DIC): 48 solves, total 71.240137 s, median 1.38689 s per solve, iterations 47.9375 on average, first solve 1.32737 s
+
+End
+
+Finalising parallel run

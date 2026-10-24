@@ -1,0 +1,6 @@
+bub192_amg 432 ok 50 0
+bub192_GAMG_DIC 432 ok 36 0
+bub256_amg 432 ok 114 0
+bub256_GAMG_DIC 432 ok 76 0
+bub320_amg 432 ok 213 0
+bub320_GAMG_DIC 432 ok 137 0

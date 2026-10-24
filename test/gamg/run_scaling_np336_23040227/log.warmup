@@ -1,0 +1,77 @@
+schwarz2lvl: two-level algebraic Schwarz (Al Daas, Jolivet, Rees, SISC 2023), 336 MPI processes
+Configuration
+  generator             bubbles3d (nx=96, ny=96, nz=96, nu=1, ncomp=4, rho_ratio=1000, nbubbles=150, radius=0.04, cfl=0.5)
+  rhs                   generated
+  block size            auto
+  partition of unity    boolean
+  one-level             ras
+  coarse correction     deflated
+  tau                   0.3
+  nev                   8
+  nev start             32
+  local solver A_ii     amg sa+gs V(1,1), coarsest <= 500, full setup at every refactorization (approximate; A~_ii: auto auto)
+  coarse solver         cpardiso, factorization auto
+  coarse procs          48
+  coarse root below n0  10000
+  GMRES restart         30
+  rtol                  0.01 (OpenFOAM normalised residual: sum|r| <= rtol sum|r0|)
+  steps x correctors    1 x 1
+  setup reuse           auto (rebuild at break-even, or when it/decade > 4 x reference)
+Problem
+  bubbles3d 96x96x96 rho_ratio=1000 nb=150 R=0.04 cfl=0.5 t=0 (n=884736, nnz=6137856)
+  block size 1, symmetric
+Warm-up of the local direct solver (20^3 Laplacian, not in the costs): max 1.160 s
+Time loop: 1 steps x 1 correctors, reuse auto
+   step corr  level         update[s]  solve[s]  its  it/decade      n0  wasted[s]
+      0    0  rebuild         0.1301    0.0351    7       3.00    2682     0.0000
+Refactorizations falling back to a full factorization: local 0 (on 0 ranks), coarse 0
+Coarse space
+  n0                         2682
+  m_i min/avg/max            6 / 8.0 / 8
+  subdomains with ker(A~)    282 (max dim 1)
+  sum dim (L∩K)^⊥_K          282
+  dense eigensolves          0
+  Arnoldi not converged      0
+  Arnoldi retried            0
+  Arnoldi nev avg/max        7.2 / 8
+  max operator applications  42
+  perturbed pivots A_ii / A~ -1 / 0 (max over ranks)
+  A_ii factorization         amg sa+gs V(1,1), coarsest <= 500 [2 levels, op. complexity 1.44] (rank 0; chain fallbacks on 0 ranks)
+  A~_ii factorization        pardiso cholesky (rank 0; chain fallbacks on 0 ranks)
+  coarse solver              root(pardiso cholesky)
+Time loop summary (reuse auto, 1 solves, 1 converged)
+  initial setup              0.130 s
+  updates                    0.000 s   (reuse 0 x, refactorize 0 x 0.000 s, rebuild 0 x 0.000 s)
+  solves                     0.035 s   (iterations avg 7.0, max 7)
+  total setup + updates + solves 0.165 s
+Timings [s] over 336 ranks
+  phase                                          min         avg         max
+  decomposition.generate                      0.0000      0.0002      0.0836
+  decomposition.metis                         0.0000      0.0034      1.1448
+  decomposition.scatter                       0.0013      0.3685      0.8414
+  decomposition                               1.3135      1.6776      2.1538
+  setup.subdomain                             0.0128      0.4863      0.8553
+  setup.local_factorization                   0.0106      0.0110      0.0114
+  setup.block_splitting                       0.0001      0.0002      0.0004
+  setup.eigensolver.factorization             0.0171      0.0208      0.0242
+  setup.eigensolver.kernel                    0.0132      0.0153      0.0171
+  setup.eigensolver.arnoldi.operator          0.0095      0.0123      0.0189
+  setup.eigensolver.arnoldi                   0.0119      0.0149      0.0231
+  setup.eigensolver                           0.0429      0.0515      0.0596
+  setup.coarse_basis                          0.0014      0.0017      0.0021
+  setup.coarse_assembly                       0.0034      0.0046      0.0052
+  setup.coarse_factorization                  0.0497      0.0504      0.0522
+  setup                                       0.1297      0.1298      0.1300
+  solve.preconditioner.coarse.restrict        0.0001      0.0002      0.0003
+  solve.preconditioner.coarse.solve           0.0179      0.0192      0.0212
+  solve.preconditioner.coarse.prolong         0.0000      0.0000      0.0001
+  solve.preconditioner.coarse                 0.0181      0.0194      0.0214
+  solve.preconditioner.spmv                   0.0009      0.0020      0.0039
+  solve.preconditioner.local.halo             0.0006      0.0015      0.0029
+  solve.preconditioner.local.lu               0.0020      0.0026      0.0032
+  solve.preconditioner.local                  0.0029      0.0042      0.0059
+  solve.preconditioner                        0.0227      0.0257      0.0276
+  solve.spmv                                  0.0008      0.0015      0.0028
+  solve.orthogonalization                     0.0026      0.0042      0.0063
+  solve.stopping_test                         0.0005      0.0007      0.0009
+  solve                                       0.0347      0.0349      0.0351

@@ -1,0 +1,3 @@
+N=192 NP=432 method=scotch mesh=0eab01e8 time=110s 2026-10-23 23:39:51
+N=256 NP=432 method=scotch mesh=0eab01e8 time=280s 2026-10-23 23:43:13
+N=320 NP=432 method=scotch mesh=0eab01e8 time=434s 2026-10-23 23:46:47

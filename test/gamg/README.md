@@ -1,5 +1,7 @@
 # GAMG reference — OpenFOAM linear solvers and two-level Schwarz on the same matrices (G100)
 
+Results of the three campaigns (`run_gamg_23036378`, `run_gamg_23038420`, scaling): [`RESULTS.md`](RESULTS.md).
+
 **Idea.** The goal is a preconditioner competitive with the GAMG of OpenFOAM. This campaign measures
 where we stand, before any porting: OpenFOAM solves the pressure matrices of the `bubbles3d` problem
 of the previous campaigns with its own solvers, and `schwarz2lvl` solves the same matrices.
@@ -56,7 +58,50 @@ pending (`scancel` it). Without the prep job `Allrun_gamg.sh` prepares missing m
 Local check of the scripts (OpenFOAM-10 environment sourced, any MPI, tiny sizes):
 `SMOKE=1 NP=4 ./Allprep_gamg.sh` and `SMOKE=1 NP=4 ./Allrun_gamg.sh`.
 
-## What to look at in `report.md`
+## Scaling campaign (`Allrun_scaling.sh`)
+
+Second step, after `run_gamg_23038420` (GAMG_DIC fastest OpenFOAM variant; Schwarz with AMG local solves
+0.51× / 0.23× of its cost per solve at 192³ / 256³, both to 1e-8): one against one, at the accuracy of a
+pressure solve in a real time step, on a larger mesh and on more processes.
+
+- **Solvers**: `GAMG_DIC` (OpenFOAM) against `amg` (two-level Schwarz, P7b setting:
+  `--tau 0.3 --nev 8 --eig-tol 1e-4 --local-approx amg`, reuse policy `auto`).
+- **Same stopping test**: the normalised residual of OpenFOAM, relTol **1e-2** for both (OpenFOAM:
+  `relTol 1e-2`, `tolerance 0`; schwarz2lvl: `--stop-norm openfoam --rtol 1e-2`). From x = 0 both stop
+  at Σ|b − Ax| ≤ 1e-2 Σ|b|. `RTOL=...` changes it for both.
+- **Grid**: 192³, 256³, 320³ (7.1M, 16.8M, 32.8M cells) × 240, 336, 432 processes (one job of 5, 7, 9
+  nodes each), 16 steps × 3 correctors for every size (same amortization of the setup).
+- **Phases** (every solve, between two synchronizations): Schwarz initial setup / updates (rebuild,
+  refactorization, reuse) / GMRES iterations, the iterations split into local solves, coarse correction and
+  Krylov with the timers of the log; GAMG construction of the solver (agglomeration in the first solve,
+  coarse matrices in every solve) / V-cycles. Matrix assembly and generation are not compared.
+- **Anomalies of the previous campaign fixed**: the first factorization of the first schwarz2lvl run of a
+  job took ~15 s (cold start) → warm-up of the direct solver before the time loop of every run, plus one
+  small unmeasured run at the start of every job; the sawtooth of the iterations at 192³ (the policy
+  used the inflated initial setup as rebuild cost) goes with it. The report checks both
+  (*initial setup / median rebuild* ≈ 1).
+
+```bash
+cd test/gamg
+./submit_scaling.sh          # Allprep_scaling.sh (1 node, ~15-20 min) + Allrun_scaling.sh on 5, 7, 9 nodes after it
+                             # (~12-15 min each); ~200-250 core-hours in all
+python3 report_scaling.py .  # every run_scaling_np*_<jobid> here -> scaling_report/report.md, summary.csv, plots/
+```
+
+`Allprep_scaling.sh` makes one serial mesh per size (`cases/base<N>`) and decomposes it for every process
+count (`cases/bub<N>_np<NP>`, linked base mesh; cases already there are kept, including those of
+`Allprep_gamg.sh`), and builds and checks the binaries once (`cases/bin_<sources md5>`: test_bubbles + matrix
+check); `Allrun_scaling.sh` uses them if the sources did not change, otherwise it builds and checks itself.
+Options: `NODES="5 7 9"`, `SERIAL=1` (one job after the other), `PREP=0` (skip the preparation) for
+`submit_scaling.sh`; `SIZES`, `STEPS`, `CORR`, `RTOL`, `OF_SOLVER` for `Allrun_scaling.sh`. A failed
+preparation leaves the run jobs pending (`scancel` them). Delete `cases/` when done (~30 GB).
+Local check: `SMOKE=1 NPS="2 4" ./Allprep_scaling.sh`, then `SMOKE=1 NP=4 ./Allrun_scaling.sh`.
+
+Plots of `report_scaling.py`: `scaling_strong.png` (cost per solve and parallel efficiency vs processes),
+`scaling_size.png` (cost per solve vs cells), `scaling_ratio.png` (GAMG / Schwarz), `scaling_phases.png`
+(seconds per solve by phase), `scaling_iterations.png` (iterations of every solve).
+
+## What to look at in `report.md` (`Allrun_gamg.sh`)
 
 1. **Checks**: `test_bubbles` passed, matrix check `OK`, all runs `ok`, every solve converged with true
    residual ~1e-8 for both codes.

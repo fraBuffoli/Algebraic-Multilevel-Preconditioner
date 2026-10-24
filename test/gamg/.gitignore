@@ -5,3 +5,9 @@ allrun_gamg.err
 allprep_gamg.out
 allprep_gamg.err
 __pycache__/
+cases_smoke/
+run_scaling_np*_local*/
+allrun_scaling*.out
+allrun_scaling*.err
+allprep_scaling.out
+allprep_scaling.err

@@ -1,0 +1,1 @@
+NP=432 SIZES='192 256 320' STEPS=16 CORR=3 RTOL=1e-2 OF_SOLVER=GAMG_DIC BASE='--tau 0.3 --nev 8 --eig-tol 1e-4 --local-approx amg' COARSE='--coarse-solver cpardiso --coarse-procs 48 --coarse-root-below 10000' NBUB=150 RADIUS=0.04 RHO=1000 CFL=0.5 SEED=2024 OpenFOAM=10 nodes=9 job=23040228
