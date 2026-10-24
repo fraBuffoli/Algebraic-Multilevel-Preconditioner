@@ -7,6 +7,7 @@
 #include "distributed_matrix.hpp"
 #include "domain_decomposer.hpp"
 #include "gmres.hpp"
+#include "local_solver.hpp"
 #include "logger.hpp"
 #include "mpi_utils.hpp"
 #include "one_level_schwarz.hpp"
@@ -70,7 +71,8 @@ std::vector<SolveRecord> runTimeLoop(const core::SolverConfig& cfg, MPI_Comm com
     const bool one_level = (cfg.coarse == "none");
     if (one_level && mode == prec::ReusePolicy::Mode::Auto) mode = prec::ReusePolicy::Mode::Refactor;
     prec::ReusePolicy policy(mode, cfg.rebuild_growth, cfg.rebuild_every);
-    const Gmres gmres(cfg.restart, cfg.rtol, cfg.maxit);
+    const Gmres gmres(cfg.restart, cfg.rtol, cfg.maxit, parseStopNorm(cfg.stop_norm));
+    const bool of_stop = (cfg.stop_norm == "openfoam");
     std::unique_ptr<prec::Preconditioner> M;
     const prec::TwoLevelSchwarz* two = nullptr;
 
@@ -82,7 +84,22 @@ std::vector<SolveRecord> runTimeLoop(const core::SolverConfig& cfg, MPI_Comm com
         csv.open(cfg.steps_csv, std::ios::app);
         if (header)
             csv << "problem,np,reuse,rebuild_growth,rebuild_every,step,corrector,level,t_update,t_solve,iterations,"
-                   "per_decade,converged,true_rel_res,n0,wasted\n";
+                   "per_decade,converged,true_rel_res,n0,wasted,initial_res_of,final_res_of\n";
+    }
+
+    // One-time costs of the first factorization in the process (loading of the computational kernels,
+    // first allocations) outside of the timers: on G100 the first PARDISO factorization of a run took
+    // 13-17 s instead of ~1 s and inflated the initial setup, and with it the rebuild cost used by the
+    // reuse policy. Same backend and factorization as A~_ii in the eigensolver.
+    if (cfg.coarse != "none" || cfg.local_approx == "none") {
+        linalg::LocalSolverSpec ws;
+        ws.backend = cfg.local_solver;
+        ws.factorization = cfg.local_factorization;
+        MPI_Barrier(comm);
+        const double tw = linalg::warmUpLocalSolver(ws);
+        const double twmax = core::allreduceMax(tw, comm);
+        out << "Warm-up of the local direct solver (20^3 Laplacian, not in the costs): max " << std::setprecision(3)
+            << std::fixed << twmax << " s\n" << std::defaultfloat;
     }
 
     out << "Time loop: " << cfg.steps << " steps x " << cfg.correctors << " correctors, reuse " << cfg.reuse
@@ -121,8 +138,10 @@ std::vector<SolveRecord> runTimeLoop(const core::SolverConfig& cfg, MPI_Comm com
             core::Vec x = core::Vec::Zero(b.size());
             GmresResult res;
             r.t_solve = timed(comm, [&] { res = gmres.solve(A, *M, b, x); });
-            const double r0 = res.history.empty() ? 1.0 : res.history.front();
-            const double reduction = (r0 > 0.0) ? res.true_rel_residual / r0 : 0.0;
+            // Reduction of the residual in the norm of the stopping test.
+            const double r0 = of_stop ? res.initial_residual_of : (res.history.empty() ? 1.0 : res.history.front());
+            const double r1 = of_stop ? res.final_residual_of : res.true_rel_residual;
+            const double reduction = (r0 > 0.0) ? r1 / r0 : 0.0;
             policy.record(r.level, res.iterations, reduction, res.converged, r.t_update, r.t_solve);
             r.wasted = policy.wasted();
             r.iterations = res.iterations;
@@ -142,7 +161,8 @@ std::vector<SolveRecord> runTimeLoop(const core::SolverConfig& cfg, MPI_Comm com
                 csv << '"' << info.description << '"' << ',' << np << ',' << cfg.reuse << ',' << cfg.rebuild_growth << ','
                     << cfg.rebuild_every << ',' << step << ',' << corr << ',' << prec::toString(r.level) << ','
                     << r.t_update << ',' << r.t_solve << ',' << r.iterations << ',' << r.per_decade << ','
-                    << (r.converged ? 1 : 0) << ',' << r.true_rel_residual << ',' << r.n0 << ',' << r.wasted << "\n";
+                    << (r.converged ? 1 : 0) << ',' << r.true_rel_residual << ',' << r.n0 << ',' << r.wasted << ','
+                    << res.initial_residual_of << ',' << res.final_residual_of << "\n";
         }
     }
     // Numerical refactorizations that had to fall back to a full factorization (e.g. PARDISO with

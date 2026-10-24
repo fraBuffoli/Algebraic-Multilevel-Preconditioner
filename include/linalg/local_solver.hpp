@@ -176,6 +176,18 @@ struct LocalSolverSpec {
 std::unique_ptr<LocalSolver> makeLocalSolver(const LocalSolverSpec& spec);
 
 /**
+ * @brief Factorizes and solves a small SPD system (7-point Laplacian on a 20^3 grid) with the
+ *        solver of @p spec, outside of any timer.
+ *
+ * The first factorization of a process pays one-time costs (loading of the MKL computational
+ * kernels, first allocations): on G100 the first PARDISO factorization of a run took 13-17 s
+ * instead of ~1 s, which inflated the initial setup and with it the rebuild cost estimated by the
+ * reuse policy. Calling this before the timed setup moves those costs out of the measurements.
+ * @return Wall time of this rank [s].
+ */
+double warmUpLocalSolver(const LocalSolverSpec& spec);
+
+/**
  * @brief Creates a solver backend with an LU factorization in double precision.
  * @param name "auto" (pardiso > umfpack > sparselu, depending on the build), "sparselu", "umfpack" or "pardiso".
  * @return The solver.

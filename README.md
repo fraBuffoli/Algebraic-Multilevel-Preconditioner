@@ -101,7 +101,7 @@ Options are given as `--key value` or `--key=value`. Defaults reproduce the setu
 | Local eigensolver | `--eig-tol --eig-maxit --eig-ncv`, `--shift-rel`, `--kernel-tol`, `--kernel-probe`, `--dense-threshold`, `--orth-tol` |
 | Direct solvers | `--local-solver auto\|sparselu\|umfpack\|pardiso`, `--local-factorization auto\|lu\|cholesky\|ldlt`, `--local-precision double\|single`, `--coarse-solver auto\|mumps\|cpardiso\|root`, `--coarse-factorization auto\|lu\|cholesky\|ldlt`, `--coarse-procs N`, `--coarse-root-below N` |
 | Approximate local solvers | `--local-approx none\|amg` (A_ii of the one-level part only), `--amg-coarsening sa\|rs`, `--amg-sweeps N`, `--amg-coarse-enough N`, `--amg-reuse 0\|1` |
-| GMRES | `--restart`, `--rtol`, `--maxit` |
+| GMRES | `--restart`, `--rtol`, `--maxit`, `--stop-norm l2\|openfoam` (stopping test: ‖r‖₂ ≤ rtol ‖b‖₂, or the normalised residual of OpenFOAM, Σ\|r\| ≤ rtol Σ\|r₀\|) |
 | Sequence | `--steps N` (time loop; 0 = single solve), `--correctors N`, `--reuse off\|refactor\|auto`, `--rebuild-growth G`, `--rebuild-every N`, `--steps-csv FILE`; `--matrix 'p_%04d.mtx'` reads one file per step |
 | Output | `--verbose 0\|1\|2`, `--csv FILE`, `--history FILE`, `--write-solution FILE` |
 
@@ -136,6 +136,7 @@ mpirun -np 4 ./bin/test_reuse            # setup reuse: refactorizations vs fres
 mpirun -np 4 ./bin/test_factorization    # Cholesky / LDLT / LU chains, single precision, coarse solvers
 mpirun -np 4 ./bin/test_inexact          # AMG as approximate local solver: linearity, quality, two-level GMRES
 mpirun -np 1 ./bin/test_bubbles          # bubble field shared with OpenFOAM, bubbles3d matrix structure
+mpirun -np 4 ./bin/test_stopping         # OpenFOAM stopping test of GMRES: exact stop, normalisation factor
 ```
 
 `matrices/` contains small SuiteSparse test matrices (sherman4, nos5, e05r0400, fidapm05/10, garon1, graham1,
@@ -436,7 +437,33 @@ OpenFOAM solvers are measured on the same systems as `schwarz2lvl`:
   `Allrun_gamg.sh` (5 nodes): two-level Schwarz with AMG / exact local solves, GAMG with DIC /
   GaussSeidel smoothers and PCG + GAMG (optionally GAMG with the coefficient-based `algebraicPair`
   agglomeration and PCG + DIC), on the bubbles problems of P7b (192³ and 256³, 240 processes);
-  `report_gamg.py`.
+  `report_gamg.py`. Second campaign (run_gamg_23038420, both codes to 1e-8): GAMG with the DIC
+  smoother was the fastest OpenFOAM variant (139 / 271 V-cycles per solve at 192³ / 256³: the
+  geometric `faceAreaPair` agglomeration ignores the density jumps); the two-level Schwarz with AMG
+  local solves needed 51 iterations at both sizes and cost 0.51× / 0.23× of it per solve, setup
+  and rebuilds included.
+- **OpenFOAM stopping test** (`--stop-norm openfoam`): OpenFOAM stops on the normalised residual
+  Σ|b − Ax| / F, F = Σ|Ax₀ − x̄A1| + Σ|b − x̄A1| (x̄ = mean of x₀), at `relTol` times the initial
+  one. GMRES evaluates Σ|r_j| of its own residual r_j = g_{j+1} V_{j+1} Qᵀe_{j+1} at every iteration
+  (one more pass over the basis, timer `solve.stopping_test`), so both codes stop at the same
+  accuracy in the same norm (`test_stopping`). The time loop then also feeds the reuse policy with
+  the reduction in that norm.
+- **Warm-up of the direct solver.** On G100 the first factorization of the first schwarz2lvl run of a
+  job took ~15 s instead of ~1 s on every process (cold shared libraries / kernels; later runs of the
+  same job did not show it). The initial setup of that run was inflated (16.3 s instead of 1.5 s),
+  and with it the rebuild cost of the reuse policy, which then waited too long before rebuilding (the
+  sawtooth of the iterations at 192³). `runTimeLoop` now factorizes a 20³ Laplacian with the local
+  backend before the time loop (`warmUpLocalSolver`, not timed, printed), and the scaling jobs start
+  with an unmeasured small run.
+- **Scaling campaign** (`test/gamg/Allrun_scaling.sh`, `submit_scaling.sh`): GAMG (DIC) against the
+  two-level Schwarz (AMG local solves) at relTol 1e-2 of the OpenFOAM residual for both, 192³ /
+  256³ / 320³ on 240 / 336 / 432 processes, time of every phase; `report_scaling.py` merges the jobs
+  and plots strong and size scaling, the ratio of the costs, the phases and the iterations.
+  Result (`test/gamg/RESULTS.md`): 1.8-2.7× cheaper per solve than GAMG on all 9 points, setup
+  included; a GMRES iteration costs as much as a V-cycle, GAMG needs 2.0-2.9× more of them (32 → 69
+  V-cycles from 192³ to 320³, Schwarz 15 → 25 iterations); parallel efficiency 240 → 432 processes
+  0.85-1.18 against 0.56-0.96. Orthogonalization and stopping test of GMRES are 12-20% of the cost,
+  the setup and the rebuilds of the coarse space ~30%.
 
 **Limitations.** Real matrices only; one subdomain per MPI process; the global matrix lives on rank 0 during the
 decomposition; local indices are 32-bit and the MUMPS / MKL interfaces require n0 < 2^31.

@@ -79,6 +79,7 @@ SolverConfig SolverConfig::fromCommandLine(int argc, char** argv){
         {"coarse-root-below", [&](const std::string& v) { c.coarse_root_below = std::stoll(v); }},
         {"restart", [&](const std::string& v) { c.restart = std::stoi(v); }},
         {"rtol", [&](const std::string& v) { c.rtol = std::stod(v); }},
+        {"stop-norm", [&](const std::string& v) { c.stop_norm = v; }},
         {"maxit", [&](const std::string& v) { c.maxit = std::stoi(v); }},
         {"verbose", [&](const std::string& v) { c.verbose = std::stoi(v); }},
         {"csv", [&](const std::string& v) { c.csv = v; }},
@@ -126,6 +127,7 @@ void SolverConfig::validate() const
     if (nev < 0) throw std::invalid_argument("--nev must be >= 0");
     if (nev_start < 0) throw std::invalid_argument("--nev-start must be >= 0");
     if (restart < 1) throw std::invalid_argument("--restart must be >= 1");
+    if (stop_norm != "l2" && stop_norm != "openfoam") throw std::invalid_argument("--stop-norm must be l2|openfoam");
     if (coarse_root_below < 0) throw std::invalid_argument("--coarse-root-below must be >= 0");
     if (metis_objective != "cut" && metis_objective != "vol")
         throw std::invalid_argument("--metis-objective must be cut|vol");
@@ -189,7 +191,11 @@ void SolverConfig::print(std::ostream& os) const
     line("coarse procs", coarse_procs == 0 ? std::string("all") : std::to_string(coarse_procs));
     if (coarse_root_below > 0) line("coarse root below n0", coarse_root_below);
     line("GMRES restart", restart);
-    line("rtol", rtol);
+    {
+        std::ostringstream t;
+        t << rtol << (stop_norm == "openfoam" ? " (OpenFOAM normalised residual: sum|r| <= rtol sum|r0|)" : " (||r||_2 <= rtol ||b||_2)");
+        line("rtol", t.str());
+    }
     if (steps > 0) {
         line("steps x correctors", std::to_string(steps) + " x " + std::to_string(correctors));
         std::ostringstream r;
@@ -254,6 +260,9 @@ std::string SolverConfig::help()
   --coarse-root-below N    use the root coarse solver when n0 < N (0 = never)        [0]
  Krylov:
   --restart N --rtol T --maxit N                                                     [30, 1e-8, 1000]
+  --stop-norm l2|openfoam  l2: ||b - Ax||_2 <= rtol ||b||_2; openfoam: normalised residual of the
+                           OpenFOAM solvers with relTol semantics, sum|b - Ax| <= rtol sum|b - Ax0|
+                           (as OpenFOAM with tolerance 0, relTol rtol)                 [l2]
  Sequence of solves (same pattern, values changing with the step):
   --steps N                steps of the time loop (0 = one solve)                     [0]
                            --generate: pseudo-time = step; --matrix with a printf pattern

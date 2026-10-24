@@ -84,6 +84,14 @@ int run(int argc, char** argv)
         << (sys.symmetric ? ", symmetric" : ", nonsymmetric") << "\n";
 
     // ---------------------------------------------------------------- setup
+    if (cfg.coarse != "none" || cfg.local_approx == "none") { // one-time costs of the first factorization, untimed
+        linalg::LocalSolverSpec ws;
+        ws.backend = cfg.local_solver;
+        ws.factorization = cfg.local_factorization;
+        MPI_Barrier(comm);
+        const double tw = core::allreduceMax(linalg::warmUpLocalSolver(ws), comm);
+        out << "Warm-up of the local direct solver (20^3 Laplacian, not in the costs): max " << tw << " s\n";
+    }
     MPI_Barrier(comm);
     const double t_setup0 = MPI_Wtime();
     part::Subdomain sd(sys, cfg.pou);
@@ -118,7 +126,8 @@ int run(int argc, char** argv)
     core::Vec x = core::Vec::Zero(b.size()); // zero initial guess (Section 4)
     MPI_Barrier(comm);
     const double t_solve0 = MPI_Wtime();
-    const solv::GmresResult res = solv::Gmres(cfg.restart, cfg.rtol, cfg.maxit).solve(A, *M, b, x);
+    const solv::GmresResult res =
+        solv::Gmres(cfg.restart, cfg.rtol, cfg.maxit, solv::parseStopNorm(cfg.stop_norm)).solve(A, *M, b, x);
     MPI_Barrier(comm);
     const double t_solve = MPI_Wtime() - t_solve0;
 
@@ -126,6 +135,9 @@ int run(int argc, char** argv)
         << "  " << (res.converged ? "converged" : "NOT converged") << " in " << res.iterations << " iterations\n"
         << std::scientific << std::setprecision(3) << "  relative residual (GMRES)  " << res.rel_residual << "\n"
         << "  relative residual (true)   " << res.true_rel_residual << "\n"
+        << (cfg.stop_norm == "openfoam" ? "  OpenFOAM normalised residual: initial " + std::to_string(res.initial_residual_of) +
+                                              ", final " + std::to_string(res.final_residual_of) + "\n"
+                                        : std::string())
         << std::defaultfloat << "  solve time " << t_solve << " s, total (setup+solve) " << t_setup + t_solve
         << " s\n";
     // Collective: every rank must call it, only rank 0 prints.

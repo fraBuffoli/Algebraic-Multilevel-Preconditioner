@@ -78,6 +78,8 @@ struct SolverConfig{
     // KRYLOV SOLVER PARAMETERS
     int restart = 30;                       ///< GMRES restart length.
     double rtol = 1e-8;                     ///< Relative tolerance on the unpreconditioned residual.
+    std::string stop_norm = "l2";           ///< Stopping test: "l2" (||r||_2 <= rtol ||b||_2) or "openfoam"
+                                            ///< (OpenFOAM normalised residual, relTol semantics: sum|r| <= rtol sum|r0|).
     int maxit = 1000;                       ///< Maximum number of GMRES iterations.
 
     // OUTPUT PARAMETERS

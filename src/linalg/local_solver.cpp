@@ -16,6 +16,7 @@
 #include <Eigen/PardisoSupport>
 #endif
 
+#include <chrono>
 #include <functional>
 #include <stdexcept>
 #include <type_traits>
@@ -451,6 +452,39 @@ std::unique_ptr<LocalSolver> makeLocalSolver(const std::string& name)
     LocalSolverSpec s;
     s.backend = name;
     return makeLocalSolver(s);
+}
+
+double warmUpLocalSolver(const LocalSolverSpec& spec)
+{
+    const auto t0 = std::chrono::steady_clock::now();
+    const int m = 20;
+    const auto id = [m](int i, int j, int k) { return static_cast<core::LocalIndex>(i + m * (j + m * k)); };
+    std::vector<core::Triplet> t;
+    t.reserve(static_cast<std::size_t>(7 * m * m * m));
+    for (int k = 0; k < m; ++k)
+        for (int j = 0; j < m; ++j)
+            for (int i = 0; i < m; ++i) {
+                t.emplace_back(id(i, j, k), id(i, j, k), 6.0);
+                if (i > 0) t.emplace_back(id(i, j, k), id(i - 1, j, k), -1.0);
+                if (i + 1 < m) t.emplace_back(id(i, j, k), id(i + 1, j, k), -1.0);
+                if (j > 0) t.emplace_back(id(i, j, k), id(i, j - 1, k), -1.0);
+                if (j + 1 < m) t.emplace_back(id(i, j, k), id(i, j + 1, k), -1.0);
+                if (k > 0) t.emplace_back(id(i, j, k), id(i, j, k - 1), -1.0);
+                if (k + 1 < m) t.emplace_back(id(i, j, k), id(i, j, k + 1), -1.0);
+            }
+    core::SpMat A(m * m * m, m * m * m);
+    A.setFromTriplets(t.begin(), t.end());
+    A.makeCompressed();
+    LocalSolverSpec ws = spec;
+    ws.symmetric = true;
+    auto F = makeLocalSolver(ws);
+    if (F->factorize(A)) {
+        core::Vec x;
+        F->solve(core::Vec::Ones(A.rows()), x);
+        core::Mat X; // block solve, as in the kernel detection of the eigensolver
+        F->solve(core::Mat::Ones(A.rows(), 8), X);
+    }
+    return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
 }
 
 } // namespace schwarz2lvl

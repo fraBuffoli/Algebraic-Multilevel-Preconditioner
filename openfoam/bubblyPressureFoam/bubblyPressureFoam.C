@@ -60,15 +60,14 @@ void synchronize()
     }
 }
 
-// True residual b - A x of the system the linear solvers see (fvScalarMatrix::solveSegregated):
-// diagonal with the boundary contributions, source with those of the uncoupled patches, coupled
-// (processor) patches through the interfaces. fvMatrix::residual() adds the coupled contributions
-// twice in parallel, so it is not used. Returns ||b - A x||_2 / ||b||_2.
-scalar trueRelativeResidual(fvScalarMatrix& eqn)
+// Right-hand side of the system the linear solvers see (fvScalarMatrix::solveSegregated): source
+// with the contributions of the uncoupled patches (the coupled ones go through the interfaces).
+tmp<scalarField> totalSource(fvScalarMatrix& eqn)
 {
     const volScalarField& psi = eqn.psi();
     const fvMesh& mesh = psi.mesh();
-    scalarField b(eqn.source());
+    tmp<scalarField> tb(new scalarField(eqn.source()));
+    scalarField& b = tb.ref();
     forAll(psi.boundaryField(), patchi)
     {
         if (!psi.boundaryField()[patchi].coupled())
@@ -81,6 +80,16 @@ scalar trueRelativeResidual(fvScalarMatrix& eqn)
             }
         }
     }
+    return tb;
+}
+
+// True residual b - A x of the system the linear solvers see: diagonal with the boundary
+// contributions, coupled (processor) patches through the interfaces. fvMatrix::residual() adds the
+// coupled contributions twice in parallel, so it is not used. Returns ||b - A x||_2 / ||b||_2.
+scalar trueRelativeResidual(fvScalarMatrix& eqn)
+{
+    const volScalarField& psi = eqn.psi();
+    const scalarField b(totalSource(eqn));
     const scalarField saveDiag(eqn.diag());
     eqn.diag() = eqn.D();
     scalarField r(psi.size());
@@ -241,8 +250,8 @@ int main(int argc, char *argv[])
     if (Pstream::master())
     {
         csv.reset(new OFstream(csvName));
-        csv() << "solver,np,ncells,step,corrector,t_solve,iterations,initial_res,final_res,true_rel_res,converged"
-              << nl;
+        csv() << "solver,np,ncells,step,corrector,t_solve,iterations,initial_res,final_res,true_rel_res,converged,"
+                 "t_setup,t_cycles,t_assembly" << nl;
     }
 
     Info<< "bubblyPressureFoam: " << nx << "x" << ny << "x" << nz << " cells, " << nBubbles
@@ -254,7 +263,9 @@ int main(int argc, char *argv[])
     labelList iters;
     for (label step = 0; step < steps; ++step)
     {
-        // New gas fraction (outside the timers, as the matrix assembly).
+        // New gas fraction and face coefficients (timed apart, not part of the solver cost).
+        synchronize();
+        const clockTime assemblyTimer;
         void* bubbles = newField(step);
         s2lBubbleFieldAlpha(bubbles, mesh.nCells(), ci.data(), cj.data(), ck.data(), alphaCells.data());
         s2lBubbleFieldDelete(bubbles);
@@ -267,11 +278,16 @@ int main(int argc, char *argv[])
         Info<< "step " << step << ": sum of alpha " << gSum(alpha.primitiveField()) << endl;
         const volScalarField beta(1.0/(alpha*rhoG + (1.0 - alpha)));
         const surfaceScalarField betaf(fvc::interpolate(beta));
+        scalar tStepAssembly = returnReduce(assemblyTimer.elapsedTime(), maxOp<scalar>());
 
         for (label corr = 0; corr < correctors; ++corr)
         {
+            synchronize();
+            const clockTime eqnTimer;
             fvScalarMatrix pEqn(-fvm::laplacian(betaf, p));
             pEqn.source() += mesh.V().field()*alpha.primitiveField();
+            const scalar tAssembly = returnReduce(eqnTimer.elapsedTime(), maxOp<scalar>()) + tStepAssembly;
+            tStepAssembly = 0;
 
             if (!warmStart)
             {
@@ -287,10 +303,31 @@ int main(int argc, char *argv[])
                 writeMatrixMarket(args.optionRead<fileName>("writeMatrix"), pEqn, gid);
             }
 
+            // As fvMatrix<scalar>::solveSegregated (pEqn.solve), with the construction of the solver
+            // (GAMG: agglomeration of the coarse matrices; the agglomeration itself is cached) and
+            // its iterations timed separately, each between two synchronizations of all processes.
+            const scalarField saveDiag(pEqn.diag());
+            pEqn.diag() = pEqn.D();
+            const scalarField source(totalSource(pEqn));
             synchronize();
-            const clockTime timer;
-            const SolverPerformance<scalar> perf = pEqn.solve(controls);
-            const scalar t = returnReduce(timer.elapsedTime(), maxOp<scalar>());
+            const clockTime setupTimer;
+            autoPtr<lduMatrix::solver> solver = lduMatrix::solver::New
+            (
+                p.name(),
+                pEqn,
+                pEqn.boundaryCoeffs(),
+                pEqn.internalCoeffs(),
+                p.boundaryField().scalarInterfaces(),
+                controls
+            );
+            const scalar tSetup = returnReduce(setupTimer.elapsedTime(), maxOp<scalar>());
+            const clockTime cyclesTimer;
+            const solverPerformance perf = solver->solve(p.primitiveFieldRef(), source);
+            const scalar tCycles = returnReduce(cyclesTimer.elapsedTime(), maxOp<scalar>());
+            pEqn.diag() = saveDiag;
+            p.correctBoundaryConditions();
+            perf.print(Info);
+            const scalar t = tSetup + tCycles;
 
             const scalar rel = trueRelativeResidual(pEqn);
             times.append(t);
@@ -304,7 +341,7 @@ int main(int argc, char *argv[])
                 csv() << solverName << ',' << Pstream::nProcs() << ',' << nGlobal << ',' << step << ','
                       << corr << ',' << t << ',' << perf.nIterations() << ',' << perf.initialResidual()
                       << ',' << perf.finalResidual() << ',' << rel << ',' << (perf.converged() ? 1 : 0)
-                      << endl;
+                      << ',' << tSetup << ',' << tCycles << ',' << tAssembly << endl;
             }
         }
     }
