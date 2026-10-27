@@ -11,6 +11,7 @@ rise per step, 3 solves per step, every solve from 0).
 | `run_gamg_23036378` | `Allrun_gamg.sh` (first version) | 5 OpenFOAM variants vs Schwarz `amg` / `exact`, 192³ and 256³, 240 processes, to ~1e-8 | reconnaissance only: OpenFOAM matrices not identical (section 1), timed out at 256³ |
 | `run_gamg_23038420` | `Allrun_gamg.sh` | GAMG_DIC, GAMG_GS, PCG_GAMG vs `amg`, `exact`, same problems, **to 1e-8** in the 2-norm | asymptotic comparison, [`report.md`](run_gamg_23038420/report.md) |
 | `run_scaling_np240_23040226`, `_np336_23040227`, `_np432_23040228` | `Allrun_scaling.sh` | GAMG_DIC vs `amg`, 192³ / 256³ / 320³ × 240 / 336 / 432 processes, **relTol 1e-2** of the OpenFOAM residual for both | practical tolerance and scaling, [`report.md`](scaling_report/report.md) |
+| `run_krylov_np240_r1e-2_23091304` | `Allrun_krylov.sh` | the same Schwarz preconditioner inside GMRES(30) and inside **BiCGStab**, 192³ / 256³ / 320³, 240 processes, relTol 1e-2 | Krylov method (section 5) |
 
 Schwarz = `--tau 0.3 --nev 8 --eig-tol 1e-4` (coarse space of P5), `--local-approx amg` (one AMG
 V-cycle per local solve, P7b; `exact`: Cholesky factors of A_ii), `--reuse auto`, coarse problem on
@@ -56,6 +57,9 @@ two-level Schwarz with AMG local solves, setup and updates included (> 1: Schwar
    solved on rank 0).
 7. **The anomalies of the previous campaigns are gone**: initial setup / median rebuild = 0.98-1.03
    in all 9 runs (it was 11 and 15 in the first Schwarz run of the two GAMG jobs), regular rebuilds.
+8. **BiCGStab instead of GMRES removes most of the Krylov overhead** (section 5): same preconditioner,
+   1.04-1.20× the applications, each 0.72-0.85× as expensive; cost per solve 1.02 / 0.89 / 0.82× that
+   of GMRES at 192³ / 256³ / 320³, so 1.8 / 2.2 / 2.3× cheaper than GAMG at 240 processes.
 
 ## 1. Reconnaissance: `run_gamg_23036378`
 
@@ -218,6 +222,69 @@ time, so their exact cause is not pinned down (one difference: those jobs compil
 before the runs, these used binaries built by a separate job); the measured runs are protected
 either way.
 
+## 5. Krylov method: GMRES vs BiCGStab, `run_krylov_np240_r1e-2_23091304`
+
+**Why.** In the scaling campaign the orthogonalization (CGS2) and the stopping test of GMRES took
+23-28% of the time of the Schwarz iterations at 240 processes, growing with the mesh: their cost is
+O(n_loc · j) per iteration, and both the rows per process and the iteration count j grow. BiCGStab
+has a fixed amount of vector work per application of the preconditioner and explicit residuals, so
+the OpenFOAM stopping test costs one sum in an existing reduction; it accepts the nonsymmetric
+RAS/deflated preconditioner. CG was set aside: it needs a symmetric preconditioner, and ASM needs
+~1.5× the iterations of RAS on these matrices, more than CG saves per iteration.
+
+**Setup.** `--krylov gmres` (`amg`, the setting of section 3) against `--krylov bicgstab` (the
+algorithm of OpenFOAM's `PBiCGStab`: right preconditioning, stopping test also at the half step),
+same preconditioner (RAS + deflated, AMG local solves, `--tau 0.3 --nev 8 --eig-tol 1e-4`, reuse
+`auto`), same matrices and stopping test as section 3 (OpenFOAM residual, relTol 1e-2), 16 steps ×
+3 correctors, 240 processes, one job (5 nodes; sources `7b4fb7fcfae5`, `test_bicgstab` and
+`test_stopping` passed on the compute node). *Iterations* = applications of the preconditioner for
+both (BiCGStab: two per step). GAMG_DIC from `run_scaling_np240_23040226`. 288 solves, all converged,
+final normalised residual ≤ 1.00e-2.
+
+| N | Krylov | applications avg (min – max) | ms per application | Krylov [s/solve] | setup + updates [s/solve] | **cost per solve [s]** | BiCGStab / GMRES | GAMG / Schwarz |
+|--:|:--|--:|--:|--:|--:|--:|--:|--:|
+| 192³ | GMRES(30) | 15.3 (11 – 27) | 13.6 | 0.063 | 0.097 | **0.306** | | 1.85× |
+| | BiCGStab | 18.4 (11 – 39) | 11.6 | 0.048 | 0.096 | **0.311** | 1.02 | 1.83× |
+| 256³ | GMRES(30) | 20.6 (13 – 39) | 34.9 | 0.271 | 0.274 | **0.995** | | 2.00× |
+| | BiCGStab | 21.5 (15 – 41) | 28.4 | 0.158 | 0.279 | **0.888** | **0.89** | 2.24× |
+| 320³ | GMRES(30) | 24.6 (15 – 46) | 72.0 | 0.721 | 0.714 | **2.48** | | 1.91× |
+| | BiCGStab | 25.4 (16 – 44) | 51.9 | 0.289 | 0.709 | **2.03** | **0.82** | 2.34× |
+
+*Krylov*: SpMV, orthogonalization / vector operations, stopping test and the rest of the Krylov
+method, without the preconditioner. Without the initial setup the ratio is 1.02 / 0.88 / 0.79.
+The GMRES runs reproduce section 3 to −3% / +1% / +4% (0.316 / 0.986 / 2.38 s), the run-to-run
+spread of these measurements.
+
+- **Where the gain comes from.** At 320³ the Krylov part drops from 0.72 to 0.29 s per solve:
+  orthogonalization 0.41 → 0.11 s (CGS2 against ~12 vector operations per BiCGStab step), stopping
+  test 0.12 → 0.015 s (no reconstruction of the residual from the basis). Local solves and coarse
+  correction stay the same (1.05 → 1.03 s per solve) since BiCGStab needs only 4% more applications.
+  The time per application is 0.85 / 0.81 / 0.72 of a GMRES iteration and keeps falling with the
+  mesh, as the cost of CGS2 grows with n_loc · j.
+- **Applications.** Per solve BiCGStab needs 1.17 / 1.06 / 1.05× the GMRES iterations (median),
+  stopping at the half step in 21 / 30 / 15 of the 48 solves. At 192³ the ratio grows as the coarse
+  space ages (27 vs 39 just before the rebuild), at 320³ it does not (46 vs 44): with one run per
+  variant this is not a trend. A likely mechanism where it occurs: the bubbles that left the span of
+  the old eigenvectors leave a few small isolated eigenvalues, which the minimal-residual GMRES
+  removes one per iteration and the degree-1 ω-step of BiCGStab handles worse.
+- **Same setup.** One rebuild in every run; at 256³ / 320³ BiCGStab rebuilds one step later
+  (solve 28 vs 25, 25 vs 22): with cheaper iterations the aging coarse space wastes less time before
+  the break-even with a rebuild. Setup and updates are now 31-35% of the Schwarz cost.
+- **For the port.** BiCGStab here is the algorithm of OpenFOAM's `PBiCGStab`: the two-level Schwarz
+  can be ported as an `lduMatrix::preconditioner` and used by the existing solver, which is
+  faster than a GMRES of its own on these problems.
+- Not measured: tighter tolerances (locally, 48³ on 8 processes, 1.15× the applications at relTol
+  1e-8 against 1.09× at 1e-2) and other process counts.
+
+![Cost per solve](run_krylov_np240_r1e-2_23091304/plots/cost_per_solve_np240.png)
+
+![Time per application](run_krylov_np240_r1e-2_23091304/plots/time_per_iteration_np240.png)
+
+![Every solve](run_krylov_np240_r1e-2_23091304/plots/solves_np240.png)
+
+Plots: `python3 plot_krylov.py run_krylov_np240_r1e-2_23091304 --gamg run_scaling_np240_23040226`
+(into the run directory); tables: `report_krylov.py` with the same arguments.
+
 ## Interpretation
 
 - **Why GAMG needs more V-cycles on finer meshes.** With β_gas = 1000 β_liquid, a pressure field that
@@ -260,9 +327,10 @@ either way.
 
 ## Next steps suggested by these numbers
 
-1. **PCG instead of GMRES** for this SPD problem, with a symmetric preconditioner (additive
-   two-level, symmetric AMG smoother): no orthogonalization and the residual is explicit, so the
-   OpenFOAM stopping test is free; 12-20% of the Schwarz cost.
+1. ~~PCG instead of GMRES~~ → **BiCGStab** (section 5): 0.82-1.02× the cost of GMRES with the same
+   preconditioner. The Krylov overhead (vector operations, stopping test, rest; SpMV excluded) is
+   now ~13% of the iterations at 320³; the cost is in the preconditioner (local solves ~58%, coarse
+   correction ~20% of the iterations) and in setup and updates (31-35% of the cost).
 2. **Cheaper rebuilds**: rebuild only the subdomains where the bubbles moved, or start the Arnoldi
    iteration from the old eigenvectors.
 3. **Coarse space size** at 1e-2: `--nev` 8 is binding everywhere; a larger cap trades setup for

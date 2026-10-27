@@ -1,0 +1,6 @@
+bub192_amg 240 ok 56 0
+bub192_bicgstab 240 ok 55 0
+bub256_amg 240 ok 134 0
+bub256_bicgstab 240 ok 129 0
+bub320_amg 240 ok 278 0
+bub320_bicgstab 240 ok 257 0

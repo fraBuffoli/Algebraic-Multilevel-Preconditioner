@@ -1,0 +1,2 @@
+amg schwarz2lvl --krylov gmres --tau 0.3 --nev 8 --eig-tol 1e-4 --local-approx amg --stop-norm openfoam --rtol 1e-2
+bicgstab schwarz2lvl --krylov bicgstab --tau 0.3 --nev 8 --eig-tol 1e-4 --local-approx amg --stop-norm openfoam --rtol 1e-2
