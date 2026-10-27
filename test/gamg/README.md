@@ -1,7 +1,8 @@
 # GAMG reference — OpenFOAM linear solvers and two-level Schwarz on the same matrices (G100)
 
-Results of the three campaigns (`run_gamg_23036378`, `run_gamg_23038420`, scaling): [`RESULTS.md`](RESULTS.md).
-Next: [Krylov campaign](#krylov-campaign-allrun_krylovsh) (GMRES vs BiCGStab with the same preconditioner).
+Results of the campaigns (`run_gamg_23036378`, `run_gamg_23038420`, scaling, Krylov): [`RESULTS.md`](RESULTS.md).
+Latest: [Krylov campaign](#krylov-campaign-allrun_krylovsh) (GMRES vs BiCGStab with the same preconditioner),
+[rebuilds](#rebuilds-run_rebuild_np240_23093509) (cheaper rebuilds of the coarse space).
 
 **Idea.** The goal is a preconditioner competitive with the GAMG of OpenFOAM. This campaign measures
 where we stand, before any porting: OpenFOAM solves the pressure matrices of the `bubbles3d` problem
@@ -129,13 +130,30 @@ cd test/gamg
 sbatch Allrun_krylov.sh                  # 5 nodes, ~25 min with the build (2 variants x 3 sizes)
 python3 report_krylov.py run_krylov_np240_r1e-2_<jobid> --gamg run_scaling_np240_23040226
                                          # -> krylov_report/report.md, summary.csv, plots/
+python3 plot_krylov.py run_krylov_np240_r1e-2_<jobid> --gamg run_scaling_np240_23040226
+                                         # -> run_krylov_np240_r1e-2_<jobid>/plots/ (--gamg required)
 ```
 
 `report.md`: iterations (= applications of the preconditioner) per solve, time per application split
 into local solves / coarse correction / SpMV / orthogonalization or vector operations / stopping test,
 cost per solve against GMRES and GAMG, and the ratio BiCGStab / GMRES split into applications × time per
-application. Plots: `cost_per_solve_np240.png`, `time_per_iteration_np240.png`. Local check:
-`SMOKE=1 NP=4 ./Allrun_krylov.sh`. With `RTOL=1e-8` the iterations triple: `sbatch --time=01:00:00`.
+application. `plot_krylov.py` writes the plots into the run directory itself (`<run>/plots/`):
+`cost_per_solve_np240.png` (phases, GAMG bar), `time_per_iteration_np240.png` (split of one
+application) and `solves_np240.png` (iterations and time of every solve, rebuilds marked, GAMG
+V-cycles). Local check: `SMOKE=1 NP=4 ./Allrun_krylov.sh`. With `RTOL=1e-8` the iterations triple:
+`sbatch --time=01:00:00`.
+
+**Result** (`run_krylov_np240_r1e-2_23091304`, [RESULTS.md](RESULTS.md) section 5): BiCGStab costs
+1.02 / 0.89 / 0.82× GMRES per solve at 192³ / 256³ / 320³ (1.04-1.20× the applications, each
+0.72-0.85× as expensive; same rebuilds), 1.8 / 2.2 / 2.3× cheaper than GAMG.
+
+## Rebuilds (`run_rebuild_np240_23093509`)
+
+Fourth step: cheaper rebuilds of the coarse space (BiCGStab, 256³ / 320³, 24 steps, 240 processes),
+run with a prototype that is not kept in the code (reuse of the factorization of Ã_ii between
+rebuilds). Result ([RESULTS.md](RESULTS.md) section 6): the useful part needs no code,
+`--eig-tol 1e-2 --eig-ncv 12` (rebuild −22-31%, initial setup −18%, same coarse space); the reuse of
+the factorization saved only 14% of a rebuild. The run directory keeps logs, CSV and plots.
 
 ## What to look at in `report.md` (`Allrun_gamg.sh`)
 

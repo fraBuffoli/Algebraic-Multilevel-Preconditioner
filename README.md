@@ -293,6 +293,16 @@ depends on, and `Preconditioner::update(UpdateLevel)` redoes only what is needed
   by the break-even rule in the P5/P7 campaigns, it catches an outlier in the initial setup) and
   `--rebuild-every N` (off); a solve that does not converge always triggers a rebuild. Decisions
   are made collective (`agree()`: maximum over the ranks).
+- **Cost of a rebuild** (`test/gamg/RESULTS.md`, section 6): almost all of it is the local
+  eigensolver (at 320³ / 240 processes ~14 s: factorization of Ã_ii + σI ~7 s, Arnoldi ~6.4 s with
+  42 applications of the operator, kernel detection ~1.8 s). For the bubbly-flow problems use
+  `--eig-tol 1e-2 --eig-ncv 12`: 27-29 applications instead of 42, rebuild −22-31%, initial setup
+  −18%, the same iterations after every rebuild. The coarse space needs the bubble modes (large,
+  well separated eigenvalues, converged in a few steps); the vectors of the cluster just above 1/τ
+  add little, and resolving each of them to 1e-4 is what costs. Tried and not kept: reusing the
+  symbolic analysis of Ã_ii + σI between rebuilds (−14% of a rebuild on G100, one more set of
+  factors in memory) and warm-starting the eigenvectors from the old ones (no fewer applications:
+  the cluster must be resolved whatever the starting vector).
 - **Driver** (`runTimeLoop`): steps × correctors; the matrix values of a step come from the
   generator at pseudo-time = step or from one Matrix Market file per step (`--matrix 'p_%04d.mtx'`,
   e.g. matrices written by OpenFOAM), sent by rank 0 without repartitioning
@@ -498,6 +508,12 @@ saves per iteration. BiCGStab accepts the nonsymmetric RAS/deflated precondition
   iteration, so BiCGStab gains if it needs less than ~1.2× (192³) to ~1.3× (320³) the applications.
   `test/gamg/Allrun_krylov.sh` measures it on G100 (240 processes, the scaling matrices, relTol 1e-2),
   `report_krylov.py` splits the result into applications × time per application.
+- **Result** (`run_krylov_np240_r1e-2_23091304`, [`test/gamg/RESULTS.md`](test/gamg/RESULTS.md) section 5):
+  1.20 / 1.04 / 1.04× the applications, each 0.85 / 0.81 / 0.72× as expensive, so a cost per solve of
+  1.02 / 0.89 / 0.82× that of GMRES at 192³ / 256³ / 320³ (setup and rebuilds unchanged), 1.8 / 2.2 /
+  2.3× cheaper than GAMG. At 320³ the Krylov part falls from 0.72 to 0.29 s per solve. GMRES stays the
+  default (the paper's setting); BiCGStab is the choice for the bubbly-flow problems and for a port,
+  where it is OpenFOAM's own PBiCGStab.
 
 **Limitations.** Real matrices only; one subdomain per MPI process; the global matrix lives on rank 0 during the
 decomposition; local indices are 32-bit and the MUMPS / MKL interfaces require n0 < 2^31.

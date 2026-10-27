@@ -12,6 +12,7 @@ rise per step, 3 solves per step, every solve from 0).
 | `run_gamg_23038420` | `Allrun_gamg.sh` | GAMG_DIC, GAMG_GS, PCG_GAMG vs `amg`, `exact`, same problems, **to 1e-8** in the 2-norm | asymptotic comparison, [`report.md`](run_gamg_23038420/report.md) |
 | `run_scaling_np240_23040226`, `_np336_23040227`, `_np432_23040228` | `Allrun_scaling.sh` | GAMG_DIC vs `amg`, 192³ / 256³ / 320³ × 240 / 336 / 432 processes, **relTol 1e-2** of the OpenFOAM residual for both | practical tolerance and scaling, [`report.md`](scaling_report/report.md) |
 | `run_krylov_np240_r1e-2_23091304` | `Allrun_krylov.sh` | the same Schwarz preconditioner inside GMRES(30) and inside **BiCGStab**, 192³ / 256³ / 320³, 240 processes, relTol 1e-2 | Krylov method (section 5) |
+| `run_rebuild_np240_23093509` | prototype script (not kept) | cheaper rebuilds of the coarse space: reuse of the factorization of Ã_ii, looser Arnoldi; BiCGStab, 256³ / 320³, 24 steps, 240 processes, relTol 1e-2 | rebuilds (section 6) |
 
 Schwarz = `--tau 0.3 --nev 8 --eig-tol 1e-4` (coarse space of P5), `--local-approx amg` (one AMG
 V-cycle per local solve, P7b; `exact`: Cholesky factors of A_ii), `--reuse auto`, coarse problem on
@@ -60,6 +61,11 @@ two-level Schwarz with AMG local solves, setup and updates included (> 1: Schwar
 8. **BiCGStab instead of GMRES removes most of the Krylov overhead** (section 5): same preconditioner,
    1.04-1.20× the applications, each 0.72-0.85× as expensive; cost per solve 1.02 / 0.89 / 0.82× that
    of GMRES at 192³ / 256³ / 320³, so 1.8 / 2.2 / 2.3× cheaper than GAMG at 240 processes.
+9. **A looser Arnoldi makes rebuilds cheaper at no cost in quality** (section 6): `--eig-tol 1e-2
+   --eig-ncv 12` takes 27-29 operator applications instead of 42, rebuild −22-31%, initial setup
+   −18%, same iterations after every rebuild. Reusing the factorization of Ã_ii between rebuilds
+   saves only 14% of a rebuild on G100, and warm-starting the eigenvectors does not pay: neither
+   was kept in the code.
 
 ## 1. Reconnaissance: `run_gamg_23036378`
 
@@ -285,6 +291,71 @@ spread of these measurements.
 Plots: `python3 plot_krylov.py run_krylov_np240_r1e-2_23091304 --gamg run_scaling_np240_23040226`
 (into the run directory); tables: `report_krylov.py` with the same arguments.
 
+## 6. Rebuilds of the coarse space: `run_rebuild_np240_23093509`
+
+**Why.** A rebuild at 320³ / 240 processes took ~14 s on the slowest rank (sections 3, 5), almost all
+in the local eigensolver: factorization of Ã_ii + σI ~7 s, Arnoldi ~6.4 s (42 applications of the
+operator, each a pair of triangular solves with those factors), kernel detection ~1.8 s; setup and
+updates are 31-35% of the cost per solve. Three ideas were tried, two with a prototype that is not
+kept in the code:
+
+- **Reuse of the factorization of Ã_ii + σI** (prototype `--rebuild-reuse symbolic`): its pattern
+  never changes in a time loop, so its symbolic analysis can be kept and only the numerical
+  factorization redone; the kernel detection starts from the previous kernel. Same coarse space.
+- **Warm-started eigenvectors** (block Krylov / Rayleigh-Ritz from the old eigenvectors, or Arnoldi
+  started from a combination of them): tested locally only, as many operator applications as the
+  cold Arnoldi (25-33 against 29). After one rebuild interval the eigenvectors near the threshold
+  have moved (subspace distance 0.2 after one cell of rise, 0.96 after four), and what costs is the
+  cluster of eigenvalues just above 1/τ (≈ 4.7-8 against 1/τ = 3.3), which a Krylov space must
+  resolve whatever its starting vector: a block method of depth 5 is a polynomial of degree 5,
+  Arnoldi with ncv = 28 one of degree 28.
+- **Looser Arnoldi** (`--eig-tol 1e-2 --eig-ncv 12`, existing options): the same cluster explains why
+  the coarse space barely changes. The bubble modes (large, well separated eigenvalues) converge in
+  a few steps; the vectors of the cluster add little, and resolving each of them to 1e-4 is what
+  costs. Locally: same iterations at relTol 1e-8 (25-27) with 13-23 applications instead of 42.
+
+**Setup.** BiCGStab + RAS/deflated, AMG local solves, `--tau 0.3 --nev 8`, reuse `auto`; 256³ and
+320³, 24 steps × 3 correctors, OpenFOAM test relTol 1e-2, 240 processes, one job (sources
+`dd47448012f9`, built and checked on the compute node). Variants (cumulative): `base`
+(`--eig-tol 1e-4`, the setting of section 5), `sym` (+ reuse of the factorization), `sym_eig`
+(+ `--eig-tol 1e-2 --eig-ncv 12`).
+
+**Machine disturbances.** `bub320_sym` timed out: its second solve took 375 s for 17 iterations (the
+others ~0.9 s). Stalls of 5-10 s per solve also hit `base` at 320³ and `sym_eig` at 256³ (up to 14×
+the median time per iteration), and in the next run (`bub320_sym_eig`) the warm-up of the direct
+solver, which does not depend on any option, took 222 s instead of 0.08 s; the processes of the
+killed run probably made it worse. The comparison therefore uses the rebuild times (from the CSV)
+and the iterations, and a cost per solve with the stalls removed: setup and updates as measured,
+the iterations at the median time per iteration of each run.
+
+| N | variant | initial setup [s] | rebuilds [s] | vs base | applications (max) | iterations avg | after each rebuild | cost per solve [s], stalls removed | vs base | GAMG / variant |
+|--:|:--|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| 256³ | base | 5.00 | 5.15, 4.94 | | 42 | 21.8 | 16, 15, 15 | 0.832 | | 2.39 |
+| | sym | 5.00 | 4.44, 4.25 | 0.86 | 42 | 20.9 | 16, 15, 14 | 0.789 | 0.95 | 2.52 |
+| | sym_eig | 4.15 | 3.64, 3.48, 3.38 | 0.69 | 27 | 21.6 | 16, 15, 14, 15 | 0.819 | 0.98 | 2.43 |
+| 320³ | base | 14.46 | 13.91, 13.52 | | 42 | 26.0 | 16, 16, 18 | 2.033 | | 2.33 |
+| | sym | – | – | – | – | – | – | timed out | | |
+| | sym_eig | 11.87 | 11.12, 10.31 | 0.78 | 29 | 25.2 | 16, 16, 19 | 1.872 | 0.92 | 2.53 |
+
+*after each rebuild*: iterations of the first solve with a fresh coarse space (initial setup and every
+rebuild), the quality of the coarse space. GAMG: cost per solve of `run_scaling_np240_23040226`
+(16 steps). The `base` runs reproduce section 5 (0.888 / 2.03 s per solve with 16 steps).
+
+- **The looser Arnoldi is the useful part.** 42 → 27-29 applications, Arnoldi −39% at 320³ (timer
+  maxima per setup 6.0 → 3.7 s), rebuild −22% at 320³ and −31% at 256³ (together with the reuse),
+  initial setup −17-18%; the iterations after every rebuild are the same (16 / 15 / 14-15 and
+  16 / 16 / 18-19). At 256³ the cheaper rebuild makes the policy rebuild once more (3 instead of
+  2), which keeps the cost per solve at −2%; at 320³ −8%.
+- **The reuse of the factorization saves 14% of a rebuild** (256³: 5.04 → 4.35 s; cost per solve −5%),
+  much less than locally (−37% of the factorization with 2 processes on 2 cores): with 48 processes per
+  node the numerical factorization, bound by memory bandwidth, dominates, and the symbolic analysis
+  it saves is ~20-25% of it. Not kept: one more set of factors per process in memory for ~5%.
+- **What remains** of a rebuild is the numerical factorization of Ã_ii (~6 s at 320³). Reducing it
+  would mean changing how the eigensolver solves with Ã_ii (e.g. iterative inner solves instead of
+  the factorization): a research change with an uncertain gain, not pursued.
+
+Plots of the run (made by the prototype's report script): `run_rebuild_np240_23093509/plots/`.
+
 ## Interpretation
 
 - **Why GAMG needs more V-cycles on finer meshes.** With β_gas = 1000 β_liquid, a pressure field that
@@ -331,8 +402,11 @@ Plots: `python3 plot_krylov.py run_krylov_np240_r1e-2_23091304 --gamg run_scalin
    preconditioner. The Krylov overhead (vector operations, stopping test, rest; SpMV excluded) is
    now ~13% of the iterations at 320³; the cost is in the preconditioner (local solves ~58%, coarse
    correction ~20% of the iterations) and in setup and updates (31-35% of the cost).
-2. **Cheaper rebuilds**: rebuild only the subdomains where the bubbles moved, or start the Arnoldi
-   iteration from the old eigenvectors.
+2. ~~Cheaper rebuilds~~ (section 6): `--eig-tol 1e-2 --eig-ncv 12` (rebuild −22-31%, initial setup
+   −18%, same coarse space) is the setting to use; the reuse of the factorization of Ã_ii (−14% per
+   rebuild) and warm-started eigenvectors (no gain) are not kept. Selective rebuilds (only the
+   subdomains whose matrix changed) would save core-hours but not wall time here: the slowest rank
+   sets the time and 70-85% of the subdomains contain a bubble.
 3. **Coarse space size** at 1e-2: `--nev` 8 is binding everywhere; a larger cap trades setup for
    iterations.
 4. **Warm start** in both codes (real time loop).
