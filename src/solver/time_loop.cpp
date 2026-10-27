@@ -6,7 +6,7 @@
 
 #include "distributed_matrix.hpp"
 #include "domain_decomposer.hpp"
-#include "gmres.hpp"
+#include "krylov.hpp"
 #include "local_solver.hpp"
 #include "logger.hpp"
 #include "mpi_utils.hpp"
@@ -71,7 +71,7 @@ std::vector<SolveRecord> runTimeLoop(const core::SolverConfig& cfg, MPI_Comm com
     const bool one_level = (cfg.coarse == "none");
     if (one_level && mode == prec::ReusePolicy::Mode::Auto) mode = prec::ReusePolicy::Mode::Refactor;
     prec::ReusePolicy policy(mode, cfg.rebuild_growth, cfg.rebuild_every);
-    const Gmres gmres(cfg.restart, cfg.rtol, cfg.maxit, parseStopNorm(cfg.stop_norm));
+    const std::unique_ptr<KrylovSolver> krylov = makeKrylovSolver(cfg);
     const bool of_stop = (cfg.stop_norm == "openfoam");
     std::unique_ptr<prec::Preconditioner> M;
     const prec::TwoLevelSchwarz* two = nullptr;
@@ -102,7 +102,8 @@ std::vector<SolveRecord> runTimeLoop(const core::SolverConfig& cfg, MPI_Comm com
             << std::fixed << twmax << " s\n" << std::defaultfloat;
     }
 
-    out << "Time loop: " << cfg.steps << " steps x " << cfg.correctors << " correctors, reuse " << cfg.reuse
+    out << "Time loop: " << cfg.steps << " steps x " << cfg.correctors << " correctors, " << krylov->name() << ", reuse "
+        << cfg.reuse
         << (one_level && cfg.reuse == "auto" ? " (one-level: no coarse basis to rebuild, as refactor)" : "") << "\n"
         << "   step corr  level         update[s]  solve[s]  its  it/decade      n0  wasted[s]\n";
     std::vector<SolveRecord> recs;
@@ -136,8 +137,8 @@ std::vector<SolveRecord> runTimeLoop(const core::SolverConfig& cfg, MPI_Comm com
                 }
             });
             core::Vec x = core::Vec::Zero(b.size());
-            GmresResult res;
-            r.t_solve = timed(comm, [&] { res = gmres.solve(A, *M, b, x); });
+            KrylovResult res;
+            r.t_solve = timed(comm, [&] { res = krylov->solve(A, *M, b, x); });
             // Reduction of the residual in the norm of the stopping test.
             const double r0 = of_stop ? res.initial_residual_of : (res.history.empty() ? 1.0 : res.history.front());
             const double r1 = of_stop ? res.final_residual_of : res.true_rel_residual;

@@ -14,7 +14,7 @@
 #include "config.hpp"
 #include "distributed_matrix.hpp"
 #include "domain_decomposer.hpp"
-#include "gmres.hpp"
+#include "krylov.hpp"
 #include "local_solver.hpp"
 #include "logger.hpp"
 #include "matrix_market_io.hpp"
@@ -126,14 +126,16 @@ int run(int argc, char** argv)
     core::Vec x = core::Vec::Zero(b.size()); // zero initial guess (Section 4)
     MPI_Barrier(comm);
     const double t_solve0 = MPI_Wtime();
-    const solv::GmresResult res =
-        solv::Gmres(cfg.restart, cfg.rtol, cfg.maxit, solv::parseStopNorm(cfg.stop_norm)).solve(A, *M, b, x);
+    const std::unique_ptr<solv::KrylovSolver> krylov = solv::makeKrylovSolver(cfg);
+    const solv::KrylovResult res = krylov->solve(A, *M, b, x);
     MPI_Barrier(comm);
     const double t_solve = MPI_Wtime() - t_solve0;
 
-    out << "GMRES(" << cfg.restart << ")\n"
-        << "  " << (res.converged ? "converged" : "NOT converged") << " in " << res.iterations << " iterations\n"
-        << std::scientific << std::setprecision(3) << "  relative residual (GMRES)  " << res.rel_residual << "\n"
+    out << krylov->name() << "\n"
+        << "  " << (res.converged ? "converged" : "NOT converged") << " in " << res.iterations << " iterations"
+        << (cfg.krylov == "bicgstab" ? " (applications of the preconditioner, two per BiCGStab step)" : "")
+        << (res.breakdown ? " (breakdown)" : "") << "\n"
+        << std::scientific << std::setprecision(3) << "  relative residual (Krylov) " << res.rel_residual << "\n"
         << "  relative residual (true)   " << res.true_rel_residual << "\n"
         << (cfg.stop_norm == "openfoam" ? "  OpenFOAM normalised residual: initial " + std::to_string(res.initial_residual_of) +
                                               ", final " + std::to_string(res.final_residual_of) + "\n"
@@ -164,7 +166,7 @@ int run(int argc, char** argv)
             std::ofstream c(cfg.csv, std::ios::app);
             if (header)
                 c << "problem,n,nnz,np,pou,one_level,coarse,tau,nev,local_solver,coarse_solver,n0,m_min,m_max,"
-                     "iterations,converged,true_rel_res,t_setup,t_eig,t_coarse_asm,t_coarse_fact,t_solve\n";
+                     "iterations,converged,true_rel_res,t_setup,t_eig,t_coarse_asm,t_coarse_fact,t_solve,krylov\n";
             c << '"' << info.description << '"' << ',' << sys.n_global << ',' << info.nnz << ',' << np << ','
               << cfg.pou << ',' << cfg.one_level << ',' << cfg.coarse << ',' << cfg.tau << ',' << cfg.nev << ','
               << (cfg.local_approx == "none" ? cfg.local_solver : "amg:" + cfg.amg_coarsening + "+gs")
@@ -173,7 +175,7 @@ int run(int argc, char** argv)
               << (two ? two->stats().n0 : 0) << ','
               << (two ? two->stats().m_min : 0) << ',' << (two ? two->stats().m_max : 0) << ',' << res.iterations
               << ',' << (res.converged ? 1 : 0) << ',' << res.true_rel_residual << ',' << t_setup << ',' << t_eig
-              << ',' << t_asm << ',' << t_cf << ',' << t_solve << "\n";
+              << ',' << t_asm << ',' << t_cf << ',' << t_solve << ',' << cfg.krylov << "\n";
         }
     }
     return res.converged ? 0 : 2;

@@ -8,7 +8,7 @@ C++17 / MPI implementation of the fully algebraic overlapping two-level Schwarz 
 The second level is a spectral coarse space built from the matrix alone: every subdomain solves a local
 generalized eigenproblem involving the lumped matrix Ã_ii (Definition 3.1), which is assembled in O(n_i)
 operations from the distance-one overlap. One MPI process owns one subdomain; the preconditioner is used
-inside a right-preconditioned restarted GMRES. Real arithmetic only.
+inside right-preconditioned restarted GMRES or BiCGStab. Real arithmetic only.
 
 ## Prerequisites
 
@@ -101,16 +101,18 @@ Options are given as `--key value` or `--key=value`. Defaults reproduce the setu
 | Local eigensolver | `--eig-tol --eig-maxit --eig-ncv`, `--shift-rel`, `--kernel-tol`, `--kernel-probe`, `--dense-threshold`, `--orth-tol` |
 | Direct solvers | `--local-solver auto\|sparselu\|umfpack\|pardiso`, `--local-factorization auto\|lu\|cholesky\|ldlt`, `--local-precision double\|single`, `--coarse-solver auto\|mumps\|cpardiso\|root`, `--coarse-factorization auto\|lu\|cholesky\|ldlt`, `--coarse-procs N`, `--coarse-root-below N` |
 | Approximate local solvers | `--local-approx none\|amg` (A_ii of the one-level part only), `--amg-coarsening sa\|rs`, `--amg-sweeps N`, `--amg-coarse-enough N`, `--amg-reuse 0\|1` |
-| GMRES | `--restart`, `--rtol`, `--maxit`, `--stop-norm l2\|openfoam` (stopping test: ‖r‖₂ ≤ rtol ‖b‖₂, or the normalised residual of OpenFOAM, Σ\|r\| ≤ rtol Σ\|r₀\|) |
+| Krylov | `--krylov gmres\|bicgstab`, `--restart` (GMRES), `--rtol`, `--maxit` (applications of the preconditioner), `--stop-norm l2\|openfoam` (stopping test: ‖r‖₂ ≤ rtol ‖b‖₂, or the normalised residual of OpenFOAM, Σ\|r\| ≤ rtol Σ\|r₀\|) |
 | Sequence | `--steps N` (time loop; 0 = single solve), `--correctors N`, `--reuse off\|refactor\|auto`, `--rebuild-growth G`, `--rebuild-every N`, `--steps-csv FILE`; `--matrix 'p_%04d.mtx'` reads one file per step |
 | Output | `--verbose 0\|1\|2`, `--csv FILE`, `--history FILE`, `--write-solution FILE` |
 
 `auto` picks the best backend compiled in (local: pardiso > umfpack > sparselu; coarse: mumps > cpardiso > root).
 
 **Output.** Rank 0 prints the configuration, min/avg/max subdomain sizes (n_I, n_Γ, neighbours, nnz(A_ii)), coarse
-space statistics (n0, m_i, kernel dimensions, Arnoldi convergence), GMRES iterations with the GMRES and true relative
-residuals, and a min/avg/max timing breakdown of every phase (the preconditioner application is split into
-`solve.preconditioner.coarse.{restrict,solve,prolong}`, `.spmv` and `.local.{halo,lu}`; the coarse solve contains
+space statistics (n0, m_i, kernel dimensions, Arnoldi convergence), Krylov iterations (applications of the
+preconditioner) with the residual of the iteration and the true relative residual, and a min/avg/max timing
+breakdown of every phase (the preconditioner application is split into
+`solve.preconditioner.coarse.{restrict,solve,prolong}`, `.spmv` and `.local.{halo,lu}`; the Krylov part into
+`solve.spmv`, `solve.orthogonalization` (GMRES) or `solve.vector_ops` (BiCGStab) and `solve.stopping_test`; the coarse solve contains
 collectives, so its max also includes waiting for the slowest rank). `--csv` appends one line per run (problem, n, nnz, np,
 options, n0, iterations, residual, setup / eigensolver / coarse assembly / coarse factorization / solve times),
 which is the format intended for strong/weak scaling studies. `--history` writes the residual at every iteration,
@@ -137,6 +139,7 @@ mpirun -np 4 ./bin/test_factorization    # Cholesky / LDLT / LU chains, single p
 mpirun -np 4 ./bin/test_inexact          # AMG as approximate local solver: linearity, quality, two-level GMRES
 mpirun -np 1 ./bin/test_bubbles          # bubble field shared with OpenFOAM, bubbles3d matrix structure
 mpirun -np 4 ./bin/test_stopping         # OpenFOAM stopping test of GMRES: exact stop, normalisation factor
+mpirun -np 4 ./bin/test_bicgstab         # BiCGStab: convergence, OpenFOAM stop at half/full steps, budget, time loop
 ```
 
 `matrices/` contains small SuiteSparse test matrices (sherman4, nos5, e05r0400, fidapm05/10, garon1, graham1,
@@ -152,7 +155,7 @@ include/<module>/*.hpp, src/<module>/*.cpp      one class per header/source pair
 │                              approximate inverses in inexact_solver), global dot/norm
 ├── preconditioner/  (prec)    Preconditioner (+ UpdateLevel), OneLevelSchwarz, local block splitting, LocalEigensolver,
 │                              CoarseSpace, CoarseSolver (MUMPS/cpardiso/root), TwoLevelSchwarz, ReusePolicy
-├── solver/          (solv)    Gmres, runTimeLoop (sequence of solves with setup reuse)
+├── solver/          (solv)    KrylovSolver (stopping norms, factory), Gmres, BiCgStab, runTimeLoop (sequence of solves with setup reuse)
 └── utils/           (utils)   MatrixGenerator, BubbleField (header-only, shared with OpenFOAM), TimerRegistry/ScopedTimer, Log
 src/main.cpp, src/matgen.cpp   drivers;   test/   MPI test programs;   external/   Eigen, Spectra, AMGCL
 openfoam/bubblyPressureFoam    OpenFOAM-10 application: the bubbles3d matrices solved by the OpenFOAM solvers (GAMG reference)
@@ -167,7 +170,7 @@ Flow of `main.cpp`:
 4. **Two level** — `TwoLevelSchwarz`: Ã_ii (Def. 3.1) → `LocalEigensolver` gives Z_i (3.1)–(3.2) → `CoarseSpace`
    builds V_i = orth(D_i Z_i) and A_00 = R_0 A R_0ᵀ → `CoarseSolver` factorizes A_00.
    Deflated (2.4): z = x_0 + M₁⁻¹(r − A x_0), x_0 = R_0ᵀ A_00⁻¹ R_0 r; additive (2.2): z = R_0ᵀ A_00⁻¹ R_0 r + M₁⁻¹ r.
-5. **Solve** — `Gmres` with the preconditioner applied on the right.
+5. **Solve** — `Gmres` (default) or `BiCgStab` (`--krylov bicgstab`), the preconditioner applied on the right.
 
 With `--steps N > 0` the driver runs `runTimeLoop()` instead (see [Setup reuse](#setup-reuse-between-solves-time-loops)).
 
@@ -241,6 +244,7 @@ With `--steps N > 0` the driver runs `runTimeLoop()` instead (see [Setup reuse](
   classical Gram–Schmidt applied twice (CGS2), one `MPI_Allreduce` per pass instead of j+1; the true residual is
   recomputed at every restart, and convergence is declared only if it is within 10% of the tolerance (the
   GMRES residual and the true one can drift apart, e.g. with single-precision local factors).
+- BiCGStab: the algorithm of OpenFOAM's PBiCGStab with fused reductions (see [BiCGStab](#bicgstab)).
 - Test generators: cell-centred finite volumes for Eq. (4.1) with upwind convection, the velocity fields of
   Section 4.2 integrated exactly on the faces (zero row sums, hence singular Ã_ii that exercise the kernel handling),
   heterogeneous diffusivity, and coupled variants with unknowns interleaved per cell as in OpenFOAM coupled solvers.
@@ -464,6 +468,36 @@ OpenFOAM solvers are measured on the same systems as `schwarz2lvl`:
   V-cycles from 192³ to 320³, Schwarz 15 → 25 iterations); parallel efficiency 240 → 432 processes
   0.85-1.18 against 0.56-0.96. Orthogonalization and stopping test of GMRES are 12-20% of the cost,
   the setup and the rebuilds of the coarse space ~30%.
+
+## BiCGStab
+
+In the scaling campaign the orthogonalization of GMRES (CGS2, O(j) passes over the Krylov basis at
+iteration j) and the stopping test (one more pass to form the residual for Σ|r|) were 23-28% of the
+time of the iterations, growing with the mesh (more iterations, longer vectors). A Krylov method with a
+fixed amount of vector work per iteration removes most of it. CG would need a symmetric preconditioner,
+i.e. ASM instead of RAS: on the bubbly matrices ASM needs ~1.5× the iterations of RAS, more than CG
+saves per iteration. BiCGStab accepts the nonsymmetric RAS/deflated preconditioner as it is.
+
+- **Algorithm** (`BiCgStab`, `--krylov bicgstab`): right-preconditioned BiCGStab exactly as
+  `PBiCGStab` of OpenFOAM: shadow residual r̂ = r₀, y = M⁻¹p, z = M⁻¹s, ω = (t, s)/(t, t),
+  x += αy + ωz, stopping test on the intermediate residual s (half step) and on r. A port could
+  therefore use the PBiCGStab of OpenFOAM with the two-level Schwarz as an `lduMatrix::preconditioner`.
+- **Cost per step**: 2 applications of M⁻¹, 2 SpMV, ~12 vector operations and 4 reductions (OpenFOAM: 6;
+  here (t, t) with (t, s), and the stopping norm of r with (r̂, r) of the next step). GMRES: per
+  iteration 1 application, 1 SpMV, ~4j vector operations (CGS2), 3 reductions, plus with the OpenFOAM
+  test one pass over the basis and one reduction.
+- **Counting**: `iterations` = applications of the preconditioner (two per BiCGStab step, one if the
+  test is met at the half step), the unit of a GMRES iteration, so iterations, time per iteration and the
+  reuse policy compare directly; `--maxit` counts applications too.
+- **Robustness**: restart with r̂ = r when (r̂, r) ≈ 0 or ω = 0; at convergence the true residual is
+  recomputed (10% slack as GMRES), otherwise BiCGStab restarts from it; (r̂, Ay) = 0 is a breakdown.
+- **Expected**: BiCGStab does not minimise the residual, so it needs at least as many applications as
+  unrestarted GMRES. Locally (bubbles3d 48³, 8 processes, AMG local solves, OpenFOAM test): 8 / 12 / 23
+  applications at relTol 1e-2 / 1e-4 / 1e-8 against 7 / 11 / 20 GMRES iterations (1.09-1.15×). With the
+  timers of the scaling campaign one application costs ~0.85× (192³) to ~0.75× (320³) of a GMRES
+  iteration, so BiCGStab gains if it needs less than ~1.2× (192³) to ~1.3× (320³) the applications.
+  `test/gamg/Allrun_krylov.sh` measures it on G100 (240 processes, the scaling matrices, relTol 1e-2),
+  `report_krylov.py` splits the result into applications × time per application.
 
 **Limitations.** Real matrices only; one subdomain per MPI process; the global matrix lives on rank 0 during the
 decomposition; local indices are 32-bit and the MUMPS / MKL interfaces require n0 < 2^31.

@@ -11,3 +11,6 @@ allrun_scaling*.out
 allrun_scaling*.err
 allprep_scaling.out
 allprep_scaling.err
+run_krylov_np*_local*/
+allrun_krylov.out
+allrun_krylov.err

@@ -77,6 +77,7 @@ SolverConfig SolverConfig::fromCommandLine(int argc, char** argv){
         {"coarse-factorization", [&](const std::string& v) { c.coarse_factorization = v; }},
         {"coarse-procs", [&](const std::string& v) { c.coarse_procs = std::stoi(v); }},
         {"coarse-root-below", [&](const std::string& v) { c.coarse_root_below = std::stoll(v); }},
+        {"krylov", [&](const std::string& v) { c.krylov = v; }},
         {"restart", [&](const std::string& v) { c.restart = std::stoi(v); }},
         {"rtol", [&](const std::string& v) { c.rtol = std::stod(v); }},
         {"stop-norm", [&](const std::string& v) { c.stop_norm = v; }},
@@ -126,6 +127,7 @@ void SolverConfig::validate() const
     if (tau <= 0.0) throw std::invalid_argument("--tau must be > 0");
     if (nev < 0) throw std::invalid_argument("--nev must be >= 0");
     if (nev_start < 0) throw std::invalid_argument("--nev-start must be >= 0");
+    if (krylov != "gmres" && krylov != "bicgstab") throw std::invalid_argument("--krylov must be gmres|bicgstab");
     if (restart < 1) throw std::invalid_argument("--restart must be >= 1");
     if (stop_norm != "l2" && stop_norm != "openfoam") throw std::invalid_argument("--stop-norm must be l2|openfoam");
     if (coarse_root_below < 0) throw std::invalid_argument("--coarse-root-below must be >= 0");
@@ -190,7 +192,7 @@ void SolverConfig::print(std::ostream& os) const
     line("coarse solver", coarse_solver + ", factorization " + coarse_factorization);
     line("coarse procs", coarse_procs == 0 ? std::string("all") : std::to_string(coarse_procs));
     if (coarse_root_below > 0) line("coarse root below n0", coarse_root_below);
-    line("GMRES restart", restart);
+    line("Krylov", krylov == "gmres" ? "GMRES(" + std::to_string(restart) + ")" : std::string("BiCGStab"));
     {
         std::ostringstream t;
         t << rtol << (stop_norm == "openfoam" ? " (OpenFOAM normalised residual: sum|r| <= rtol sum|r0|)" : " (||r||_2 <= rtol ||b||_2)");
@@ -259,7 +261,11 @@ std::string SolverConfig::help()
   --coarse-procs N         processes of the distributed coarse factorization         [all]
   --coarse-root-below N    use the root coarse solver when n0 < N (0 = never)        [0]
  Krylov:
-  --restart N --rtol T --maxit N                                                     [30, 1e-8, 1000]
+  --krylov gmres|bicgstab  gmres: restarted GMRES(restart), right preconditioning; bicgstab:
+                           BiCGStab with right preconditioning (as OpenFOAM's PBiCGStab), two
+                           applications of the preconditioner per step               [gmres]
+  --restart N --rtol T --maxit N   (restart: GMRES only; maxit counts applications of the
+                           preconditioner)                                            [30, 1e-8, 1000]
   --stop-norm l2|openfoam  l2: ||b - Ax||_2 <= rtol ||b||_2; openfoam: normalised residual of the
                            OpenFOAM solvers with relTol semantics, sum|b - Ax| <= rtol sum|b - Ax0|
                            (as OpenFOAM with tolerance 0, relTol rtol)                 [l2]

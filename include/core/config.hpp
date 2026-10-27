@@ -76,11 +76,13 @@ struct SolverConfig{
     long long coarse_root_below = 0;        ///< n0 below this: coarse solver "root" whatever coarse_solver says (0 = off).
 
     // KRYLOV SOLVER PARAMETERS
+    std::string krylov = "gmres";           ///< Krylov method: "gmres" (restarted, right preconditioning) or "bicgstab"
+                                            ///< (right preconditioning, the algorithm of OpenFOAM's PBiCGStab).
     int restart = 30;                       ///< GMRES restart length.
     double rtol = 1e-8;                     ///< Relative tolerance on the unpreconditioned residual.
     std::string stop_norm = "l2";           ///< Stopping test: "l2" (||r||_2 <= rtol ||b||_2) or "openfoam"
                                             ///< (OpenFOAM normalised residual, relTol semantics: sum|r| <= rtol sum|r0|).
-    int maxit = 1000;                       ///< Maximum number of GMRES iterations.
+    int maxit = 1000;                       ///< Maximum number of iterations (applications of the preconditioner).
 
     // OUTPUT PARAMETERS
     int verbose = 1;                        ///< 0 = quiet, 1 = summary, 2 = per-rank details.

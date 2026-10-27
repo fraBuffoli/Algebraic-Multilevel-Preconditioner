@@ -8,52 +8,20 @@
 #include "vector_ops.hpp"
 
 #include <cmath>
-#include <stdexcept>
 
 namespace schwarz2lvl::solv {
 
-StopNorm parseStopNorm(const std::string& s)
-{
-    if (s == "l2") return StopNorm::L2;
-    if (s == "openfoam") return StopNorm::OpenFOAM;
-    throw std::invalid_argument("unknown stopping norm '" + s + "' (l2|openfoam)");
-}
+using detail::norm1;
+using detail::openfoamNormFactor;
 
-const char* toString(StopNorm s) { return s == StopNorm::L2 ? "l2" : "openfoam"; }
-
-namespace {
-
-/// @brief sum_i |v_i| over all ranks.
-double norm1(const core::Vec& v, MPI_Comm comm)
-{
-    double s = v.cwiseAbs().sum();
-    MPI_Allreduce(MPI_IN_PLACE, &s, 1, MPI_DOUBLE, MPI_SUM, comm);
-    return s;
-}
-
-/// @brief OpenFOAM normalisation factor (lduMatrix::solver::normFactor) of the initial guess x0:
-///        F = sum|A x0 - xm A 1| + sum|b - xm A 1| + 1e-20, xm = mean of x0 over all rows.
-double openfoamNormFactor(const linalg::DistributedMatrix& A, const core::Vec& b, const core::Vec& x0, const core::Vec& Ax0,
-                          MPI_Comm comm)
-{
-    double sc[2] = {x0.sum(), static_cast<double>(x0.size())};
-    MPI_Allreduce(MPI_IN_PLACE, sc, 2, MPI_DOUBLE, MPI_SUM, comm);
-    const double xm = (sc[1] > 0.0) ? sc[0] / sc[1] : 0.0;
-    if (xm == 0.0) return norm1(Ax0, comm) + norm1(b, comm) + 1e-20;
-    core::Vec rowsum;
-    A.apply(core::Vec::Ones(x0.size()), rowsum);
-    return norm1(Ax0 - xm * rowsum, comm) + norm1(b - xm * rowsum, comm) + 1e-20;
-}
-
-} // namespace
-
-GmresResult Gmres::solve(const linalg::DistributedMatrix& A, const prec::Preconditioner& M, const core::Vec& b, core::Vec& x) const
+KrylovResult Gmres::solve(const linalg::DistributedMatrix& A, const prec::Preconditioner& M, const core::Vec& b,
+                          core::Vec& x) const
 {
     utils::ScopedTimer timer("solve");
     MPI_Comm comm = A.comm();
     const Eigen::Index n = b.size();
     const bool of = (stop_ == StopNorm::OpenFOAM);
-    GmresResult res;
+    KrylovResult res;
     const double bnorm = linalg::norm2(b, comm);
     if (x.size() != n) x = core::Vec::Zero(n);
     if (bnorm == 0.0) {

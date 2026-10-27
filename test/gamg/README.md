@@ -1,6 +1,7 @@
 # GAMG reference — OpenFOAM linear solvers and two-level Schwarz on the same matrices (G100)
 
 Results of the three campaigns (`run_gamg_23036378`, `run_gamg_23038420`, scaling): [`RESULTS.md`](RESULTS.md).
+Next: [Krylov campaign](#krylov-campaign-allrun_krylovsh) (GMRES vs BiCGStab with the same preconditioner).
 
 **Idea.** The goal is a preconditioner competitive with the GAMG of OpenFOAM. This campaign measures
 where we stand, before any porting: OpenFOAM solves the pressure matrices of the `bubbles3d` problem
@@ -100,6 +101,41 @@ Local check: `SMOKE=1 NPS="2 4" ./Allprep_scaling.sh`, then `SMOKE=1 NP=4 ./Allr
 Plots of `report_scaling.py`: `scaling_strong.png` (cost per solve and parallel efficiency vs processes),
 `scaling_size.png` (cost per solve vs cells), `scaling_ratio.png` (GAMG / Schwarz), `scaling_phases.png`
 (seconds per solve by phase), `scaling_iterations.png` (iterations of every solve).
+
+## Krylov campaign (`Allrun_krylov.sh`)
+
+Third step: the same preconditioner (RAS + deflated, AMG local solves) inside GMRES(30) and inside
+BiCGStab (see [BiCGStab](../../README.md#bicgstab)). In the scaling campaign orthogonalization and
+stopping test of GMRES were 23-28% of the time of the iterations; BiCGStab has a fixed amount of vector
+work per application of the preconditioner but needs more applications. The campaign measures the net
+effect, and whether OpenFOAM's PBiCGStab can host the preconditioner without losing performance.
+
+- **Variants** (`VARIANTS`, default `amg bicgstab`): `amg` = GMRES(30) + RAS/deflated (the reference,
+  same setting as the scaling campaign), `bicgstab` = BiCGStab + RAS/deflated.
+- **Problem and test**: the matrices of the scaling campaign (192³, 256³, 320³, 16 steps × 3
+  correctors), OpenFOAM stopping test with relTol 1e-2 (`RTOL=1e-8` for the asymptotic regime), 240
+  processes (5 nodes).
+- **GAMG** is not rerun (`OF_SOLVER=none`): `report_krylov.py --gamg run_scaling_np240_<jobid>` takes it,
+  and the GMRES run of the scaling campaign as a check of run-to-run variation, from the scaling
+  campaign. `OF_SOLVER=GAMG_DIC` runs it in the same job (OpenFOAM cases needed).
+- Nothing to compile beforehand: the job builds schwarz2lvl on the compute node, once per source
+  version (`cases/bin_s2l_<md5>`), with the modules of the scaling campaign (`autoload openfoam/10`
+  for the Intel compilers and Intel MPI, `metis`, `intel-oneapi-mkl`; no OpenFOAM build) and checks it
+  with `test_bicgstab` and `test_stopping` on 4 processes. A failed build or test stops the job with
+  `STOP: ...` in `allrun_krylov.out`.
+
+```bash
+cd test/gamg
+sbatch Allrun_krylov.sh                  # 5 nodes, ~25 min with the build (2 variants x 3 sizes)
+python3 report_krylov.py run_krylov_np240_r1e-2_<jobid> --gamg run_scaling_np240_23040226
+                                         # -> krylov_report/report.md, summary.csv, plots/
+```
+
+`report.md`: iterations (= applications of the preconditioner) per solve, time per application split
+into local solves / coarse correction / SpMV / orthogonalization or vector operations / stopping test,
+cost per solve against GMRES and GAMG, and the ratio BiCGStab / GMRES split into applications × time per
+application. Plots: `cost_per_solve_np240.png`, `time_per_iteration_np240.png`. Local check:
+`SMOKE=1 NP=4 ./Allrun_krylov.sh`. With `RTOL=1e-8` the iterations triple: `sbatch --time=01:00:00`.
 
 ## What to look at in `report.md` (`Allrun_gamg.sh`)
 
