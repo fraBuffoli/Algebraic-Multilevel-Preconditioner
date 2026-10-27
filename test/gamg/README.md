@@ -1,8 +1,10 @@
 # GAMG reference — OpenFOAM linear solvers and two-level Schwarz on the same matrices (G100)
 
-Results of the campaigns (`run_gamg_23036378`, `run_gamg_23038420`, scaling, Krylov): [`RESULTS.md`](RESULTS.md).
-Latest: [Krylov campaign](#krylov-campaign-allrun_krylovsh) (GMRES vs BiCGStab with the same preconditioner),
-[rebuilds](#rebuilds-run_rebuild_np240_23093509) (cheaper rebuilds of the coarse space).
+Results of the campaigns (`run_gamg_23036378`, `run_gamg_23038420`, scaling, Krylov, rebuilds, coarse space
+size): [`RESULTS.md`](RESULTS.md). Latest: [Krylov campaign](#krylov-campaign-allrun_krylovsh) (GMRES vs
+BiCGStab with the same preconditioner), [rebuilds](#rebuilds-run_rebuild_np240_23093509) (cheaper rebuilds
+of the coarse space), [coarse space size](#coarse-space-size-campaign-allrun_nevsh) (`--nev` 8 / 12 / 16:
+8 stays). Setting to port: BiCGStab, `--tau 0.3 --nev 8 --eig-tol 1e-2 --eig-ncv 12`, AMG local solves.
 
 **Idea.** The goal is a preconditioner competitive with the GAMG of OpenFOAM. This campaign measures
 where we stand, before any porting: OpenFOAM solves the pressure matrices of the `bubbles3d` problem
@@ -154,6 +156,50 @@ run with a prototype that is not kept in the code (reuse of the factorization of
 rebuilds). Result ([RESULTS.md](RESULTS.md) section 6): the useful part needs no code,
 `--eig-tol 1e-2 --eig-ncv 12` (rebuild −22-31%, initial setup −18%, same coarse space); the reuse of
 the factorization saved only 14% of a rebuild. The run directory keeps logs, CSV and plots.
+
+## Coarse space size campaign (`Allrun_nev.sh`)
+
+Fifth step, the last before a port: `--nev 8 / 12 / 16` at the practical tolerance. The cap 8 was chosen
+to 1e-8 with exact local solves, when coarse solve and eigensolver dominated; with AMG local solves at
+relTol 1e-2 it is reached in every subdomain (τ = 0.3 never selects fewer), and the iterations right
+after a rebuild still grow from 192³ to 320³ (16 → 16 → 18-19).
+
+- **Question**: does a larger coarse space buy back mesh independence and fewer (or cheaper) aged
+  iterations and rebuilds, for its larger setup (Arnoldi applications ~ nev) and coarse solve
+  (n0 = nev × processes, on rank 0 below 10⁴: 6912 at 432 processes with nev 16)?
+- **Variants**: `nev8`, `nev12`, `nev16`, all BiCGStab + RAS/deflated, AMG local solves, τ 0.3, the
+  looser Arnoldi of section 6 of RESULTS.md (`--eig-tol 1e-2`, `--eig-ncv` = 1.5 nev), reuse `auto`.
+  Locally (64³, 8 processes, one bubble per subdomain) m_i = nev everywhere, 23 / 35 / 45 operator
+  applications, 25 / 23 / 21 iterations at relTol 1e-8 for a fresh coarse space.
+- **Grid**: 192³, 256³, 320³, 16 steps × 3 correctors (as the scaling campaign), relTol 1e-2, one job per
+  process count: 240 and 432 (`NODES="5 9"`; `NODES="5 7 9"` adds 336). GAMG from the scaling campaign.
+  Run: 240 processes only (`run_nev_np240_23094441`); the 432 job was cancelled (see the result).
+
+```bash
+cd test/gamg
+./submit_nev.sh                          # 2 jobs (5 and 9 nodes), the second after the first; ~30 min each
+python3 report_nev.py run_nev_np240_<jobid> run_nev_np432_<jobid> \
+    --gamg run_scaling_np240_23040226 --gamg run_scaling_np432_23040228
+                                         # -> report.md, summary.csv, plots/ inside every run directory
+```
+
+`report.md`: n0, m_i, operator applications, iterations after every rebuild and on average, GAMG
+V-cycles; initial setup, rebuilds and their cost, coarse correction per iteration, cost per solve (also
+with machine stalls removed: iterations at the median time per iteration of the run), ratios to nev 8
+and to GAMG. Plots: `nev_iterations_np<NP>.png` (iterations vs mesh, fresh and average: mesh
+dependence), `nev_cost_np<NP>.png` (cost per solve by phase, GAMG), `nev_solves_np<NP>.png` (every
+solve, rebuilds marked). The first job builds and checks the binaries, the second reuses them. Local
+check: `SMOKE=1 NP=4 ./Allrun_nev.sh`. Report of the run that was made:
+`python3 report_nev.py run_nev_np240_23094441 --gamg run_scaling_np240_23040226`.
+
+**Result** (`run_nev_np240_23094441`, [RESULTS.md](RESULTS.md) section 7): nev 12 / 16 take 8-22% fewer
+applications, but each costs 6-28% more (the coarse correction grows with nev: products with the local
+basis, coarse solve on rank 0) and the setup grows by 20-61% (Arnoldi, coarse matrix at every
+refactorization): 1.04-1.06× (nev 12) and 1.15-1.20× (nev 16) the cost per solve of nev 8. The gain
+shrinks with the mesh (right after a rebuild at 320³: 16 / 15 / 15), so no mesh independence is bought
+back, and the coarse space ages at the same rate (one rebuild in every run). `--nev 8` stays. Not run at
+432 processes: smaller subdomains, a doubled coarse problem on rank 0 (n0 = 6912) and a coarse correction
+that already weighs more there would make the extra cost per application larger than at 240.
 
 ## What to look at in `report.md` (`Allrun_gamg.sh`)
 

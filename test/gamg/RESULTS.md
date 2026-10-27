@@ -13,6 +13,7 @@ rise per step, 3 solves per step, every solve from 0).
 | `run_scaling_np240_23040226`, `_np336_23040227`, `_np432_23040228` | `Allrun_scaling.sh` | GAMG_DIC vs `amg`, 192³ / 256³ / 320³ × 240 / 336 / 432 processes, **relTol 1e-2** of the OpenFOAM residual for both | practical tolerance and scaling, [`report.md`](scaling_report/report.md) |
 | `run_krylov_np240_r1e-2_23091304` | `Allrun_krylov.sh` | the same Schwarz preconditioner inside GMRES(30) and inside **BiCGStab**, 192³ / 256³ / 320³, 240 processes, relTol 1e-2 | Krylov method (section 5) |
 | `run_rebuild_np240_23093509` | prototype script (not kept) | cheaper rebuilds of the coarse space: reuse of the factorization of Ã_ii, looser Arnoldi; BiCGStab, 256³ / 320³, 24 steps, 240 processes, relTol 1e-2 | rebuilds (section 6) |
+| `run_nev_np240_23094441` | `Allrun_nev.sh` | size of the coarse space: `--nev 8 / 12 / 16` with the looser Arnoldi of section 6; BiCGStab, 192³ / 256³ / 320³, 240 processes, relTol 1e-2 | coarse space size (section 7) |
 
 Schwarz = `--tau 0.3 --nev 8 --eig-tol 1e-4` (coarse space of P5), `--local-approx amg` (one AMG
 V-cycle per local solve, P7b; `exact`: Cholesky factors of A_ii), `--reuse auto`, coarse problem on
@@ -30,9 +31,12 @@ part of the costs.
 | scaling, 240 processes | Σ\|r\| ≤ 1e-2 Σ\|b\| | **1.8×** | **2.0×** | **2.0×** |
 | scaling, 336 processes | Σ\|r\| ≤ 1e-2 Σ\|b\| | **2.2×** | **2.3×** | **1.9×** |
 | scaling, 432 processes | Σ\|r\| ≤ 1e-2 Σ\|b\| | **2.7×** | **2.6×** | **2.4×** |
+| BiCGStab, `--eig-tol 1e-2`, 240 processes (section 7) | Σ\|r\| ≤ 1e-2 Σ\|b\| | **2.0×** | **2.6×** | **2.5×** |
 
 Cost per solve of GAMG_DIC (the fastest OpenFOAM variant) divided by the cost per solve of the
-two-level Schwarz with AMG local solves, setup and updates included (> 1: Schwarz faster).
+two-level Schwarz with AMG local solves, setup and updates included (> 1: Schwarz faster). Scaling
+rows: GMRES(30), `--eig-tol 1e-4`; last row: the setting to port (BiCGStab, `--nev 8 --eig-tol 1e-2
+--eig-ncv 12`), cost with the machine stalls removed (≤ 2% below the measured one).
 
 1. **Same problem, verified.** OpenFOAM assembles the generated matrix and right-hand side to
    3.6e-15 / 1.0e-14 (24³ case against `matgen`, gated: the jobs stop otherwise). 864 + 492 solves
@@ -66,6 +70,11 @@ two-level Schwarz with AMG local solves, setup and updates included (> 1: Schwar
    −18%, same iterations after every rebuild. Reusing the factorization of Ã_ii between rebuilds
    saves only 14% of a rebuild on G100, and warm-starting the eigenvectors does not pay: neither
    was kept in the code.
+10. **A larger coarse space does not pay** (section 7): `--nev 12 / 16` take 8-22% fewer
+   applications, but each costs 6-28% more and the setup grows by 20-61%: 1.04-1.06× (nev 12) and
+   1.15-1.20× (nev 16) the cost per solve of nev 8. The gain in iterations shrinks with the mesh
+   (right after a rebuild at 320³: 16 / 15 / 15) and the aging of the coarse space is the same:
+   `--nev 8` stays.
 
 ## 1. Reconnaissance: `run_gamg_23036378`
 
@@ -356,6 +365,95 @@ rebuild), the quality of the coarse space. GAMG: cost per solve of `run_scaling_
 
 Plots of the run (made by the prototype's report script): `run_rebuild_np240_23093509/plots/`.
 
+## 7. Size of the coarse space: `run_nev_np240_23094441`
+
+**Why.** The cap `--nev 8` was chosen to 1e-8 with exact local solves (P5), when coarse solve and
+eigensolver dominated the cost. At relTol 1e-2 with AMG local solves it binds in every subdomain
+(m_i = 8 everywhere, τ = 0.3 never reached), and the iterations right after a rebuild still grow with
+the mesh (11 → 14 → 15 in section 3, 16 → 16 → 18-19 in section 6). Question: does a larger coarse
+space buy back mesh independence and fewer rebuilds, for a larger setup (Arnoldi) and a larger
+coarse problem (n0 = nev × processes, on rank 0)?
+
+**Setup.** `--nev 8 / 12 / 16` with `--eig-ncv` = 1.5 nev (12 / 18 / 24) and `--eig-tol 1e-2`
+(section 6); BiCGStab + RAS/deflated, AMG local solves, τ = 0.3, reuse `auto`; 192³ / 256³ / 320³,
+16 steps × 3 correctors, OpenFOAM test relTol 1e-2, 240 processes, one job (5 nodes; sources
+`dd47448012f9`, built and checked on the compute node). GAMG_DIC from `run_scaling_np240_23040226`.
+432 solves, all converged, final normalised residual ≤ 1.00e-2; no machine stalls (cost with stalls
+removed ≤ 2% below the measured one).
+
+| N | nev | n0 | Arnoldi applications (max) | after each rebuild | applications avg (min – max) | initial setup [s] | ms per application (coarse corr.) | **cost per solve [s]** | vs nev 8 | GAMG / Schwarz |
+|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| 192³ | 8 | 1920 | 29 | 12, 12 | 18.7 (11 – 37) | 1.31 | 10.5 (2.9) | **0.279** | | 2.03 |
+| | 12 | 2880 | 40 | 10, 10 | 15.9 (10 – 30) | 1.63 | 11.9 (4.2) | **0.297** | 1.06 | 1.91 |
+| | 16 | 3840 | 50 | 9, 10 | 14.5 (9 – 27) | 2.11 | 13.4 (5.8) | **0.335** | 1.20 | 1.69 |
+| 256³ | 8 | 1920 | 29 | 16, 15 | 21.8 (14 – 41) | 4.21 | 24.6 (5.6) | **0.772** | | 2.58 |
+| | 12 | 2880 | 40 | 14, 12 | 18.9 (12 – 37) | 5.24 | 26.5 (7.5) | **0.799** | 1.04 | 2.49 |
+| | 16 | 3840 | 49 | 12, 11 | 17.7 (11 – 36) | 6.45 | 28.6 (9.6) | **0.887** | 1.15 | 2.25 |
+| 320³ | 8 | 1920 | 35 | 16, 16 | 26.0 (16 – 46) | 12.1 | 49.0 (10.3) | **1.90** | | 2.49 |
+| | 12 | 2880 | 40 | 15, 15 | 23.9 (15 – 45) | 14.6 | 51.9 (13.2) | **2.01** | 1.06 | 2.36 |
+| | 16 | 3840 | 52 | 15, 15 | 23.9 (13 – 47) | 17.9 | 54.9 (16.2) | **2.26** | 1.19 | 2.10 |
+
+m_i = nev in every subdomain for all variants. *after each rebuild*: applications of the first solve
+with a fresh coarse space (initial setup and the one rebuild). *ms per application*: median of the
+run; *coarse corr.*: coarse solves and the product with A of the deflated correction. *cost per
+solve*: setup and updates included, stalls removed. Full tables:
+[`report.md`](run_nev_np240_23094441/report.md).
+
+- **Fewer iterations, not less time in them.** nev 16 needs 22 / 19 / 8% fewer applications than
+  nev 8 (192³ / 256³ / 320³), each 28 / 16 / 12% more expensive: the time of the iterations is the
+  same (9.6 / 26.1 / 62.9 s per run with nev 8, 9.6 / 24.6 / 63.5 s with nev 16). The local solves
+  per application do not change (6.1 / 15.3 / 31.1 ms); what grows is the part of the coarse
+  correction that depends on nev, 2.0 → 5.0 ms per application at 192³ and 6.0 → 12.0 ms at 320³
+  (timer maxima): restriction Zᵀr and prolongation Zy (products with the n_loc × nev local basis,
+  linear in nev) and the coarse solve on rank 0, 1.1 → 1.9 → 3.0 ms whatever the mesh (n0 = 1920 /
+  2880 / 3840; between linear and quadratic in nev, as the coarse matrix has an nev × nev block per
+  pair of neighbouring subdomains). The smaller the subdomains, the larger its share: hence the 28% at
+  192³.
+- **The setup grows with nev and buys nothing.** Arnoldi: 35 / 40 / 52 operator applications at
+  320³ with a basis of 12 / 18 / 24 vectors, 3.7 / 6.4 / 8.4 s per setup (timer maxima), while the
+  factorization of Ã_ii + σI (7.4 s) and the kernel detection (1.7 s) do not depend on nev. Initial
+  setup +20-25% (nev 12) and +48-61% (nev 16); every refactorization reassembles the coarse matrix
+  Zᵀ A Z, 0.14 → 0.40 s per step at 320³ (nev 8 → 16). Of the +0.33 s per solve of nev 16 at 320³:
+  initial setup and rebuild +0.24 s, refactorizations +0.09 s, iterations +0.01 s.
+- **The gain shrinks with the mesh: no mesh independence bought back.** Right after a rebuild,
+  12 → 16 → 16 applications with nev 8, 9.5 → 11.5 → 15 with nev 16 (192³ → 320³); at 320³ nev 12 and
+  16 give the same count, one less than nev 8. Every subdomain has at least 16 eigenvalues below
+  τ, so the coarse space is cut at λ_{nev+1}. The bubble modes are few (about 2 per subdomain: 150
+  bubbles of diameter 0.08 in 240 subdomains of side ~0.16) and well separated (section 6): nev 8
+  already contains them, and the extra vectors come from the cluster just below τ. Why that cluster
+  gets denser with the mesh, as an estimate (the eigenvalues are not printed by the G100 runs): with
+  an overlap of one cell, the small eigenvalues that are not bubble modes belong to fields smooth in
+  the subdomain whose energy lies mostly outside the overlap; in the GenEO setting their number below
+  a fixed level grows with the interface measured in cells, ~(H/h)², i.e. 2.7× from 192³ to 320³ at
+  240 processes (H/h ≈ 31 → 51). A fixed number of extra vectors then raises λ_{nev+1} less and less;
+  a mesh-independent coarse space needs m_i growing like (H/h)², the cost the cap is there to avoid.
+- **Aging and rebuilds unchanged.** One rebuild in every run, at the same step (nev 16 at 320³ one
+  step later: its rebuild costs 45% more, so the break-even comes later). Before the rebuild the
+  applications reach 2.6-3.1× the fresh count for all three sizes of the coarse space: the extra
+  eigenvectors are modes of the old matrix as well, and a bubble that has risen 3-4 cells needs a mode
+  constant on its new position, which more modes of the old matrix do not represent better. Fewer
+  rebuilds would need a coarse space that follows the bubbles, not a larger one.
+- **nev 8 stays.** nev 12 costs 4-6% more, nev 16 15-20%; neither wins on any mesh. The run also
+  confirms section 6 on 16-step runs: nev 8 with `--eig-tol 1e-2 --eig-ncv 12` costs 0.283 / 0.780 /
+  1.94 s per solve against 0.311 / 0.888 / 2.03 s with `--eig-tol 1e-4` in section 5 (−9 / −12 / −4%,
+  different jobs): 2.0 / 2.6 / 2.5× cheaper than GAMG at 240 processes (stalls removed), the
+  configuration to port.
+- **432 processes not run.** With smaller subdomains (16k-76k cells, H/h ≈ 25-42) the iteration gain of
+  nev 16 is expected at most as at 192³-256³ here (−19-22%), while the coarse problem doubles to
+  n0 = 6912 on rank 0 and the local solves per application are ~1.8× cheaper: the coarse correction,
+  already 29% of the cost at 192³ / 432 with nev 8 (section 3), weighs more, and the extra cost per
+  application is expected above the 12-28% measured at 240 processes. The second job (9 nodes, ~30 min) was
+  cancelled.
+
+![Iterations vs mesh](run_nev_np240_23094441/plots/nev_iterations_np240.png)
+
+![Cost per solve](run_nev_np240_23094441/plots/nev_cost_np240.png)
+
+![Every solve](run_nev_np240_23094441/plots/nev_solves_np240.png)
+
+Tables and plots: `python3 report_nev.py run_nev_np240_23094441 --gamg run_scaling_np240_23040226`
+(into the run directory).
+
 ## Interpretation
 
 - **Why GAMG needs more V-cycles on finer meshes.** With β_gas = 1000 β_liquid, a pressure field that
@@ -373,7 +471,9 @@ Plots of the run (made by the prototype's report script): `run_rebuild_np240_230
   remains grows slowly with the subdomain size (after a rebuild: 11 → 15 iterations at 1e-2,
   32 → 39 at 1e-8, the same with exact local solves: 30 → 36, so not the AMG approximation). The
   coarse space is capped by `--nev 8` in every subdomain (m_i = 8 everywhere, τ = 0.3 never
-  reached), a likely source of this residual growth.
+  reached). Raising the cap to 16 does not remove the growth (section 7): it lowers the count at
+  192³ / 256³ but not at 320³, consistent with a cluster of local eigenvalues below τ that gets
+  denser as the subdomains grow in cells; a fixed cap only shifts the growth.
 - **The price: the coarse space follows the bubbles.** The iterations grow 2-3× within 6-8 steps
   (3-4 cells of rise) and the basis must be rebuilt (eigensolver: 0.8-13.9 s); with the
   refactorizations this is ~30% of the Schwarz cost at 1e-2. GAMG pays nothing for the motion (setup
@@ -407,7 +507,9 @@ Plots of the run (made by the prototype's report script): `run_rebuild_np240_230
    rebuild) and warm-started eigenvectors (no gain) are not kept. Selective rebuilds (only the
    subdomains whose matrix changed) would save core-hours but not wall time here: the slowest rank
    sets the time and 70-85% of the subdomains contain a bubble.
-3. **Coarse space size** at 1e-2: `--nev` 8 is binding everywhere; a larger cap trades setup for
-   iterations.
+3. ~~Coarse space size~~ (section 7): `--nev 12 / 16` cut the applications by 8-22% but cost
+   4-20% more per solve (coarse correction per application and setup grow with nev, the gain
+   vanishes at 320³, same aging); `--nev 8` stays. The setting to port: BiCGStab, `--tau 0.3
+   --nev 8 --eig-tol 1e-2 --eig-ncv 12`, AMG local solves, reuse `auto`.
 4. **Warm start** in both codes (real time loop).
 5. **Harness**: distributed generation of the matrix values (more than halves the Schwarz test cost).

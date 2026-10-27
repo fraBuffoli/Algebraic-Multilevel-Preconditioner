@@ -303,6 +303,12 @@ depends on, and `Preconditioner::update(UpdateLevel)` redoes only what is needed
   symbolic analysis of Ã_ii + σI between rebuilds (−14% of a rebuild on G100, one more set of
   factors in memory) and warm-starting the eigenvectors from the old ones (no fewer applications:
   the cluster must be resolved whatever the starting vector).
+- **Size of the coarse space** (`test/gamg/RESULTS.md`, section 7): keep `--nev 8` for the bubbly-flow
+  problems at relTol 1e-2. With 12 / 16 (and `--eig-ncv` = 1.5 nev) the applications drop by 8-22%,
+  but the coarse correction (products with the local basis, coarse solve on rank 0) and the setup
+  (Arnoldi, coarse matrix at every refactorization) grow with nev: 1.04-1.20× the cost per solve at
+  240 processes. The gain shrinks with the mesh (320³: 16 / 15 / 15 applications after a rebuild) and
+  the coarse space ages at the same rate, so neither mesh independence nor fewer rebuilds are bought.
 - **Driver** (`runTimeLoop`): steps × correctors; the matrix values of a step come from the
   generator at pseudo-time = step or from one Matrix Market file per step (`--matrix 'p_%04d.mtx'`,
   e.g. matrices written by OpenFOAM), sent by rank 0 without repartitioning
