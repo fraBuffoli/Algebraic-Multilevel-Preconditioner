@@ -269,9 +269,12 @@ void checkDistributed()
             prec::TwoLevelSchwarz M(sd, A, c);
             const solv::GmresResult r = gmresSolve(M);
             const auto& st = M.stats();
+            // A~_ii keeps the exact factorization of the exact run, whatever the backend of the build
+            // (Cholesky with PARDISO / Eigen, LU with UMFPACK).
             test::check(r.converged && r.true_rel_residual <= 1.1e-8 && r.iterations <= bound &&
                             M.coarse().dimension() == n0 && st.local_factorization.rfind("amg " + co, 0) == 0 &&
-                            st.atilde_factorization.find("cholesky") != std::string::npos,
+                            st.atilde_factorization == Mex.stats().atilde_factorization &&
+                            st.atilde_factorization.rfind("amg", 0) != 0,
                         "two-level, A_ii " + st.local_factorization + ": GMRES " + std::to_string(r.iterations) +
                             " it. (exact " + std::to_string(rex.iterations) + ", bound " + std::to_string(bound) +
                             "), true residual " + test::sci(r.true_rel_residual) + ", same n0 = " +

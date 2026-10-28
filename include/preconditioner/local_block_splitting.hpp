@@ -25,6 +25,6 @@ namespace schwarz2lvl::prec{
  */
 core::SpMat buildLocalBlockSplitting(const part::Subdomain& sd);
 
-} // namespace schwarz2lvl
+} // namespace schwarz2lvl::prec
 
 #endif // SCHWARZ2LVL_PRECONDITIONER_LOCAL_BLOCK_SPLITTING_HPP

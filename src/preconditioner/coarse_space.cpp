@@ -241,4 +241,4 @@ void CoarseSpace::apply(const core::Vec& r, core::Vec& x) const
     prolong(y_, x);         // V_i y
 }
 
-} // namespace schwarz2lvl::part
+} // namespace schwarz2lvl::prec

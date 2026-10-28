@@ -22,6 +22,11 @@
  *     GMRES reaches the tolerance on the *true* residual; a time loop with Cholesky + single
  *     precision and setup reuse converges.
  *
+ * UMFPACK has neither symmetric factorizations nor single precision, and in a build with UMFPACK
+ * but without PARDISO it is the `auto` local backend. Parts 2 (root coarse solver) and 3 therefore
+ * use symmetricBackend(): the first local backend of the build that has them (pardiso, else
+ * sparselu), so that the Cholesky and single-precision paths are checked in every build.
+ *
  * Run e.g. `mpirun -np 4 ./bin/test_factorization` (a few seconds).
  */
 #include "coarse_solver.hpp"
@@ -90,6 +95,15 @@ double normInf(const core::SpMat& A)
 double backwardError(const core::SpMat& A, const core::Vec& x, const core::Vec& b)
 {
     return (A * x - b).lpNorm<Eigen::Infinity>() / (normInf(A) * x.lpNorm<Eigen::Infinity>() + b.lpNorm<Eigen::Infinity>());
+}
+
+/// @brief First local backend of the build with symmetric factorizations and single precision
+///        (every backend but umfpack: pardiso if compiled in, otherwise sparselu, always present).
+std::string symmetricBackend()
+{
+    for (const std::string& be : linalg::availableLocalSolvers())
+        if (be != "umfpack") return be;
+    return "sparselu";
 }
 
 } // namespace
@@ -216,7 +230,7 @@ void checkCoarse()
     for (const auto& solver : prec::availableCoarseSolvers()) {
         for (const std::string req : {"auto", "ldlt", "lu"}) {
             const std::string what = "coarse " + solver + " request " + req + ": ";
-            auto S = prec::makeCoarseSolver(solver, std::max(1, np / 2), "auto", req);
+            auto S = prec::makeCoarseSolver(solver, std::max(1, np / 2), symmetricBackend(), req);
             auto e0 = entries(spd);
             S->setup(comm, offsets, e0, true);
             const std::string n0 = S->name(), x0 = expectedCoarse(solver, req, true);
@@ -229,7 +243,7 @@ void checkCoarse()
             const double b1 = backward(*S, ind);
             test::check(n1.find(x1) != std::string::npos && b1 < 1e-12,
                         what + "update to indefinite -> " + n1 + " (backward error " + test::sci(b1) + ")", comm);
-            auto T = prec::makeCoarseSolver(solver, std::max(1, np / 2), "auto", req);
+            auto T = prec::makeCoarseSolver(solver, std::max(1, np / 2), symmetricBackend(), req);
             auto e2 = entries(ind);
             T->setup(comm, offsets, e2, true);
             const std::string n2 = T->name();
@@ -254,6 +268,7 @@ void checkDistributed(const std::string& gen, int nx)
     cfg.dense_threshold = 0;
     cfg.eig_tol = 1e-12;
     cfg.coarse_solver = "root";
+    cfg.local_solver = symmetricBackend(); // A_ii, A~_ii and the root A_00
     part::DecompositionInfo info;
     const core::LocalSystem sys = part::DomainDecomposer::decompose(cfg, comm, info);
     part::Subdomain sd(sys, cfg.pou);
@@ -304,6 +319,7 @@ void checkTimeLoop()
     cfg.steps = 3;
     cfg.correctors = 2;
     cfg.reuse = "refactor";
+    cfg.local_solver = symmetricBackend();
     cfg.local_factorization = "auto";
     cfg.local_precision = "single";
     const auto r = solv::runTimeLoop(cfg, MPI_COMM_WORLD, utils::Log::nullStream());

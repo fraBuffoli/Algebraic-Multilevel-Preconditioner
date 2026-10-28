@@ -1,16 +1,19 @@
 /**
  * @file test_subdomain.cpp
  * @brief Tests of the decomposition phase: overlap, halo, A_ii, lumping sums,
- *        partition of unity and distributed matrix-vector product.
+ *        partition of unity and distributed matrix-vector product; symmetry detection
+ *        of a matrix read from a Matrix Market file in general storage.
  *
  * Run with several process counts, e.g. `mpirun -np 4 ./bin/test_subdomain`.
  */
 #include "config.hpp"
 #include "distributed_matrix.hpp"
 #include "domain_decomposer.hpp"
+#include "matrix_market_io.hpp"
 #include "subdomain.hpp"
 #include "test_utils.hpp"
 
+#include <cstdio>
 #include <set>
 
 using namespace schwarz2lvl;
@@ -95,6 +98,48 @@ void runCase(const std::string& gen, int nx, int ncomp, const std::string& pou)
     test::check(ok, "gather in original ordering");
 }
 
+/**
+ * @brief A matrix in general storage is declared symmetric only if every off-diagonal entry, in
+ *        both triangles, equals its mirror (a missing mirror counts as 0). Tridiagonal-like 1D
+ *        matrices of size 64 written by rank 0, read and decomposed as with --matrix.
+ */
+void checkSymmetryDetection()
+{
+    MPI_Comm comm = MPI_COMM_WORLD;
+    const int rank = core::mpiRank(comm);
+    const core::GlobalIndex n = 64;
+    const std::string file = "test_subdomain_symmetry.mtx";
+    struct Case {
+        const char* name;
+        double lower, upper; // a(i, i-1), a(i-1, i); 0 = not stored
+        bool symmetric;
+    };
+    const Case cases[] = {{"lower triangle only", -1.0, 0.0, false},
+                          {"upper triangle only", 0.0, -1.0, false},
+                          {"symmetric values", -1.0, -1.0, true},
+                          {"symmetric pattern, different values", -1.0, -0.5, false}};
+    for (const Case& c : cases) {
+        if (rank == 0) {
+            std::vector<core::GlobalIndex> r, cl;
+            std::vector<core::Scalar> v;
+            for (core::GlobalIndex i = 0; i < n; ++i) {
+                r.push_back(i), cl.push_back(i), v.push_back(4.0);
+                if (i > 0 && c.lower != 0.0) r.push_back(i), cl.push_back(i - 1), v.push_back(c.lower);
+                if (i > 0 && c.upper != 0.0) r.push_back(i - 1), cl.push_back(i), v.push_back(c.upper);
+            }
+            part::MatrixMarketIO::writeMatrix(file, part::CsrMatrix::fromCoo(n, n, r, cl, v));
+        }
+        core::SolverConfig cfg;
+        cfg.matrix_file = file;
+        cfg.rhs = "ones";
+        part::DecompositionInfo info;
+        const core::LocalSystem sys = part::DomainDecomposer::decompose(cfg, comm, info);
+        test::check(sys.symmetric == c.symmetric,
+                    std::string("symmetry detection, ") + c.name + ": " + (sys.symmetric ? "symmetric" : "nonsymmetric"));
+    }
+    if (rank == 0) std::remove(file.c_str());
+}
+
 
 int main(int argc, char** argv)
 {
@@ -104,6 +149,7 @@ int main(int argc, char** argv)
         runCase("convdiff2d", 16, 1, "multiplicity");
         runCase("coupled2d", 10, 3, "multiplicity");
         runCase("laplace3d", 7, 1, "boolean");
+        checkSymmetryDetection();
     } catch (const std::exception& e) {
         std::cerr << "exception: " << e.what() << std::endl;
         MPI_Abort(MPI_COMM_WORLD, 1);

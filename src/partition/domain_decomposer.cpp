@@ -36,7 +36,14 @@ int toCount(std::size_t n)
     return static_cast<int>(n);
 }
 
-/// @brief Numerical symmetry test (|a_ij - a_ji| <= tol * max|a|), rank 0 only.
+/**
+ * @brief Numerical symmetry test (|a_ij - a_ji| <= tol * max|a|), rank 0 only.
+ *
+ * Every off-diagonal entry is compared with its mirror, in both triangles: an entry whose mirror
+ * is not stored (structurally nonsymmetric pattern) is compared with 0. Checking the upper triangle
+ * only would miss an entry a_ij (j < i) without a stored a_ji, and declare e.g. a lower-triangular
+ * pattern symmetric (then Cholesky / LDL^T read one triangle only: wrong factors).
+ */
 bool isNumericallySymmetric(const CsrMatrix& A)
 {
     core::Scalar amax = 0.0;
@@ -45,7 +52,7 @@ bool isNumericallySymmetric(const CsrMatrix& A)
     for (core::GlobalIndex i = 0; i < A.nrows; ++i) {
         for (std::int64_t k = A.row_ptr[static_cast<std::size_t>(i)]; k < A.row_ptr[static_cast<std::size_t>(i) + 1]; ++k) {
             const core::GlobalIndex j = A.col[static_cast<std::size_t>(k)];
-            if (j <= i) continue;
+            if (j == i) continue;
             const auto b = A.col.begin() + A.row_ptr[static_cast<std::size_t>(j)];
             const auto e = A.col.begin() + A.row_ptr[static_cast<std::size_t>(j) + 1];
             const auto it = std::lower_bound(b, e, i);
@@ -422,4 +429,4 @@ std::vector<core::Scalar> DomainDecomposer::gatherOriginalOrder(const core::Loca
     return x;
 }
 
-} // namespace schwarz2lvl
+} // namespace schwarz2lvl::part

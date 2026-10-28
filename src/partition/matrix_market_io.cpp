@@ -188,4 +188,4 @@ void MatrixMarketIO::writeVector(const std::string& path, const std::vector<core
     std::fclose(f);
 }
 
-} // namespace schwarz2lvl
+} // namespace schwarz2lvl::part

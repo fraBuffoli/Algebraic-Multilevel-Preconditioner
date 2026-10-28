@@ -1,7 +1,8 @@
 # Prerequisites
 *.d
 
-# Compiled Object files
+# Build output (make)
+build/
 bin/
 obj/
 *.slo
@@ -38,7 +39,6 @@ obj/
 *.exe
 *.out
 *.app
-schwarz_solver
 
 # debug information files
 *.dwo
@@ -46,8 +46,14 @@ schwarz_solver
 #vscode
 .vscode
 
-#Doxygen
-docs/Doxygen/html
+#Doxygen (make doc)
+docs/Doxygen/
 
 #matrices
 matrices/*.mtx
+
+# Local build configuration (see README.md)
+make.inc
+
+# Files written by the tests
+test_subdomain_symmetry.mtx

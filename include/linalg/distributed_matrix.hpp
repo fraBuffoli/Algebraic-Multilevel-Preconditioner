@@ -49,6 +49,6 @@ private:
     mutable core::Vec xloc_;    ///< Work vector on Omega_i.
 };
 
-} // namespace schwarz2lvl
+} // namespace schwarz2lvl::linalg
 
 #endif // SCHWARZ2LVL_LINALG_DISTRIBUTED_MATRIX_HPP

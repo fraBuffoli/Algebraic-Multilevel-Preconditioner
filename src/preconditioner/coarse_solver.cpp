@@ -807,4 +807,4 @@ std::unique_ptr<CoarseSolver> makeCoarseSolver(const std::string& name, int coar
     throw std::invalid_argument("coarse solver '" + n + "' is unknown or not compiled in (USE_MUMPS / USE_CPARDISO)");
 }
 
-} // namespace schwarz2lvl
+} // namespace schwarz2lvl::prec

@@ -274,7 +274,7 @@ std::string SolverConfig::help()
   --kernel-tol T           relative threshold of the numerical kernel of A~_ii        [1e-8]
   --kernel-probe N         initial block size of the kernel detection                 [8]
   --dense-threshold N      n_i <= N uses dense eigensolvers                           [400]
-  --orth-tol T             rank threshold of the local coarse basis                   [1e-13]
+  --orth-tol T             rank threshold of the local coarse basis                   [1e-10]
   --local-solver auto|sparselu|umfpack|pardiso                                       [auto]
   --local-factorization auto|lu|cholesky|ldlt   symmetric A: auto = Cholesky, then LDL^T,
                            then LU if a factorization fails; nonsymmetric A: always LU  [auto]

@@ -259,8 +259,11 @@ int main(int argc, char** argv)
                 const solv::KrylovResult r_both_tight = make(1e-4, 1e-12, 500)->solve(A, M, b, x2);
                 const solv::KrylovResult r_both_loose = make(1e-4, 1e-2, 500)->solve(A, M, b, x3);
                 const double t3 = norm1(residual(A, b, x3), comm) / F0;
-                test::check(r_both_tight.iterations == r_rel.iterations && r_both_loose.iterations < r_rel.iterations && t3 <= 1.1e-2 &&
-                                r_both_loose.converged,
+                // One process: M^{-1} = A^{-1} (one subdomain, exact local solve), so every tolerance is
+                // met by the first application and the looser test cannot stop earlier.
+                const bool exact = r_rel.iterations <= 1;
+                test::check(r_both_tight.iterations == r_rel.iterations &&
+                                (exact || r_both_loose.iterations < r_rel.iterations) && t3 <= 1.1e-2 && r_both_loose.converged,
                             sname + ", relTol 1e-4 with tolerance 1e-12 / 1e-2: " + std::to_string(r_both_tight.iterations) + " / " +
                                 std::to_string(r_both_loose.iterations) + " it. (relTol alone " + std::to_string(r_rel.iterations) + ")",
                             comm);

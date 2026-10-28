@@ -487,4 +487,4 @@ double warmUpLocalSolver(const LocalSolverSpec& spec)
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
 }
 
-} // namespace schwarz2lvl
+} // namespace schwarz2lvl::linalg

@@ -18,14 +18,14 @@ namespace schwarz2lvl::core{
  */
 struct SolverConfig{
     // INPUT PARAMETERS
-    std::string matrix_file;                ///< Matrix Marix Market file name (read on rank 0).
+    std::string matrix_file;                ///< Matrix Market file name (read on rank 0).
     std::string rhs = "random";             ///< "random", "ones", "generated" or a Matrix Market array file.
     std::string generate;                   ///< Built-in generator (laplace2d, laplace3d, convdiff2d, convdiff3d, coupled2d, coupled3d).
     int nx = 64;                            ///< Generator: cells along x-axis.
     int ny = 0;                             ///< Generator: cells along y-axis (0 = same as nx).
     int nz = 0;                             ///< Generator: cells along z-axis (0 = same as nx).
     double nu = 1.0;                        ///< Generator: viscosity.
-    int ncomp = 4;                          ///< Generator: numeber of unknowns per cell for coupled problems. 
+    int ncomp = 4;                          ///< Generator: number of unknowns per cell for coupled problems.
     int block_size = 0;                     ///< Unknowns per cell (0 = automatic: 1 or ncomp).
     unsigned seed = 12345;                  ///< Seed of the random right-hand side.
     double rho_ratio = 1000.0;              ///< Generator bubbles: liquid / gas density ratio.
