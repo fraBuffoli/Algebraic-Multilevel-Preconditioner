@@ -45,18 +45,19 @@ UpdateLevel ReusePolicy::decide(bool matrix_changed) const
     if (mode_ == Mode::Refactor) return UpdateLevel::Refactorize;
     if (!converged_) return UpdateLevel::Rebuild;
     if (max_age_ > 0 && age_ + 1 > max_age_) return UpdateLevel::Rebuild;
-    if (growth_ > 0.0 && ref_ > 0.0 && last_ > growth_ * ref_) return UpdateLevel::Rebuild;
+    if (growth_ > 0.0 && last_ref_ > 0.0 && last_ > growth_ * last_ref_) return UpdateLevel::Rebuild;
     const double premium = rebuildPremium();
     if (premium > 0.0 && wasted_ >= premium) return UpdateLevel::Rebuild; // break-even reached
     return UpdateLevel::Refactorize;
 }
 
 void ReusePolicy::record(UpdateLevel done, int iterations, double reduction, bool converged, double t_update,
-                         double t_solve)
+                         double t_solve, int kind)
 {
     if (done == UpdateLevel::Rebuild) {
         age_ = 0;
-        need_ref_ = true;
+        std::fill(ref_.begin(), ref_.end(), 0.0); // every kind needs a new reference
+        last_ref_ = 0.0;
         wasted_ = 0.0;
         if (t_update > 0.0) t_rebuild_.push_back(t_update);
     } else if (done == UpdateLevel::Refactorize) {
@@ -67,13 +68,16 @@ void ReusePolicy::record(UpdateLevel done, int iterations, double reduction, boo
     const double q = perDecade(iterations, reduction);
     if (q <= 0.0) return;
     last_ = q;
-    if (need_ref_) { // first solve with a fresh coarse basis: the reference, nothing wasted
-        ref_ = q;
-        need_ref_ = false;
+    const auto k = static_cast<std::size_t>(std::max(0, kind));
+    if (k >= ref_.size()) ref_.resize(k + 1, 0.0);
+    if (ref_[k] <= 0.0) { // first solve of this kind with a fresh coarse basis: the reference, nothing wasted
+        ref_[k] = q;
+        last_ref_ = q;
         return;
     }
+    last_ref_ = ref_[k];
     // Iterations beyond what the fresh basis needed for the same reduction, times their cost.
-    const double excess = iterations - ref_ * std::log10(1.0 / reduction);
+    const double excess = iterations - ref_[k] * std::log10(1.0 / reduction);
     if (excess > 0.0) wasted_ += excess * t_solve / iterations;
 }
 

@@ -7,6 +7,7 @@
 #include "timer.hpp"
 #include "vector_ops.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace schwarz2lvl::solv {
@@ -37,16 +38,18 @@ KrylovResult Gmres::solve(const linalg::DistributedMatrix& A, const prec::Precon
     core::Vec r(n), w(n), z(n), rj;
 
     A.apply(x, r);
-    double normF = 1.0, l1_0 = 0.0, l1 = 0.0; // OpenFOAM test: sum|r| <= rtol sum|r0|
+    double normF = 1.0, l1_0 = 0.0, l1 = 0.0; // OpenFOAM test: sum|r| <= max(rtol sum|r0|, atol F)
     if (of) normF = openfoamNormFactor(A, b, x, r, comm);
     r = b - r;
     double beta = linalg::norm2(r, comm);
     res.history.push_back(beta / bnorm);
     res.rel_residual = beta / bnorm;
+    double thr = 0.0; // threshold on sum|r| (OpenFOAM test)
     if (of) {
         l1_0 = l1 = norm1(r, comm);
         res.initial_residual_of = l1_0 / normF;
-        if (l1_0 == 0.0) res.converged = true;
+        thr = std::max(rtol_ * l1_0, atol_ * normF);
+        if (l1_0 <= thr) res.converged = true; // as OpenFOAM: no iteration if x0 already satisfies the test
     } else if (beta <= rtol_ * bnorm) {
         res.converged = true;
     }
@@ -116,7 +119,7 @@ KrylovResult Gmres::solve(const linalg::DistributedMatrix& A, const prec::Precon
                     rj.noalias() = V.leftCols(j + 2) * q;
                     l1 = std::abs(g[j + 1]) * norm1(rj, comm);
                 }
-                done = l1 <= rtol_ * l1_0;
+                done = l1 <= thr;
             } else {
                 done = res.rel_residual <= rtol_;
             }
@@ -142,8 +145,8 @@ KrylovResult Gmres::solve(const linalg::DistributedMatrix& A, const prec::Precon
         r = b - r;
         beta = linalg::norm2(r, comm);
         if (of) l1 = norm1(r, comm);
-        const bool within = of ? (l1 <= rtol_ * l1_0) : (beta <= rtol_ * bnorm);
-        const bool within_slack = of ? (l1 <= 1.1 * rtol_ * l1_0) : (beta <= 1.1 * rtol_ * bnorm);
+        const bool within = of ? (l1 <= thr) : (beta <= rtol_ * bnorm);
+        const bool within_slack = of ? (l1 <= 1.1 * thr) : (beta <= 1.1 * rtol_ * bnorm);
         if (breakdown) res.converged = within || res.converged;
         // The GMRES estimate can be optimistic when M^{-1} is not exactly linear (e.g. factors in
         // single precision): accept convergence only if the true residual agrees (10% slack: in

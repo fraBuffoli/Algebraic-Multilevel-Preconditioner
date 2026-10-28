@@ -72,6 +72,11 @@ std::vector<SolveRecord> runTimeLoop(const core::SolverConfig& cfg, MPI_Comm com
     if (one_level && mode == prec::ReusePolicy::Mode::Auto) mode = prec::ReusePolicy::Mode::Refactor;
     prec::ReusePolicy policy(mode, cfg.rebuild_growth, cfg.rebuild_every);
     const std::unique_ptr<KrylovSolver> krylov = makeKrylovSolver(cfg);
+    // Last corrector of every step with its own tolerances (as p_rghFinal), when given.
+    const bool final_tols = (cfg.final_rtol >= 0.0 || cfg.final_atol >= 0.0);
+    const double final_rtol = (cfg.final_rtol >= 0.0) ? cfg.final_rtol : cfg.rtol;
+    const double final_atol = (cfg.final_atol >= 0.0) ? cfg.final_atol : cfg.atol;
+    const std::unique_ptr<KrylovSolver> krylov_final = final_tols ? makeKrylovSolver(cfg, final_rtol, final_atol) : nullptr;
     const bool of_stop = (cfg.stop_norm == "openfoam");
     std::unique_ptr<prec::Preconditioner> M;
     const prec::TwoLevelSchwarz* two = nullptr;
@@ -84,7 +89,7 @@ std::vector<SolveRecord> runTimeLoop(const core::SolverConfig& cfg, MPI_Comm com
         csv.open(cfg.steps_csv, std::ios::app);
         if (header)
             csv << "problem,np,reuse,rebuild_growth,rebuild_every,step,corrector,level,t_update,t_solve,iterations,"
-                   "per_decade,converged,true_rel_res,n0,wasted,initial_res_of,final_res_of\n";
+                   "per_decade,converged,true_rel_res,n0,wasted,initial_res_of,final_res_of,final\n";
     }
 
     // One-time costs of the first factorization in the process (loading of the computational kernels,
@@ -104,9 +109,12 @@ std::vector<SolveRecord> runTimeLoop(const core::SolverConfig& cfg, MPI_Comm com
 
     out << "Time loop: " << cfg.steps << " steps x " << cfg.correctors << " correctors, " << krylov->name() << ", reuse "
         << cfg.reuse
-        << (one_level && cfg.reuse == "auto" ? " (one-level: no coarse basis to rebuild, as refactor)" : "") << "\n"
-        << "   step corr  level         update[s]  solve[s]  its  it/decade      n0  wasted[s]\n";
+        << (one_level && cfg.reuse == "auto" ? " (one-level: no coarse basis to rebuild, as refactor)" : "")
+        << (cfg.warm_start ? ", warm start" : ", every solve from 0");
+    if (final_tols) out << ", last corrector rtol " << final_rtol << " atol " << final_atol;
+    out << "\n   step corr  level         update[s]  solve[s]  its  it/decade      n0  wasted[s]\n";
     std::vector<SolveRecord> recs;
+    core::Vec x; // solution of the last solve: initial guess of the next one with --warm-start
     for (int step = 0; step < cfg.steps; ++step) {
         // New matrix values (outside the timers: in OpenFOAM the matrix is assembled by the solver).
         if (step > 0) part::DomainDecomposer::updateValues(cfg, step, sys, info);
@@ -136,20 +144,26 @@ std::vector<SolveRecord> runTimeLoop(const core::SolverConfig& cfg, MPI_Comm com
                     r.level = M->update(policy.decide(!M->upToDate()));
                 }
             });
-            core::Vec x = core::Vec::Zero(b.size());
+            if (!cfg.warm_start || x.size() != b.size()) x = core::Vec::Zero(b.size());
+            r.final_corrector = (corr == cfg.correctors - 1);
+            const KrylovSolver& ks = (krylov_final && r.final_corrector) ? *krylov_final : *krylov;
             KrylovResult res;
-            r.t_solve = timed(comm, [&] { res = krylov->solve(A, *M, b, x); });
+            r.t_solve = timed(comm, [&] { res = ks.solve(A, *M, b, x); });
             // Reduction of the residual in the norm of the stopping test.
             const double r0 = of_stop ? res.initial_residual_of : (res.history.empty() ? 1.0 : res.history.front());
             const double r1 = of_stop ? res.final_residual_of : res.true_rel_residual;
             const double reduction = (r0 > 0.0) ? r1 / r0 : 0.0;
-            policy.record(r.level, res.iterations, reduction, res.converged, r.t_update, r.t_solve);
+            // With a warm start or final tolerances the correctors are different kinds of solves (own q_ref).
+            policy.record(r.level, res.iterations, reduction, res.converged, r.t_update, r.t_solve,
+                          (cfg.warm_start || final_tols) ? corr : 0);
             r.wasted = policy.wasted();
             r.iterations = res.iterations;
             r.per_decade = prec::ReusePolicy::perDecade(res.iterations, reduction);
             r.converged = res.converged;
             r.true_rel_residual = res.true_rel_residual;
             r.n0 = two ? two->stats().n0 : 0;
+            r.initial_res_of = res.initial_residual_of;
+            r.final_res_of = res.final_residual_of;
             recs.push_back(r);
 
             out << std::right << std::setw(7) << step << std::setw(5) << corr << "  " << std::left << std::setw(12)
@@ -163,7 +177,7 @@ std::vector<SolveRecord> runTimeLoop(const core::SolverConfig& cfg, MPI_Comm com
                     << cfg.rebuild_every << ',' << step << ',' << corr << ',' << prec::toString(r.level) << ','
                     << r.t_update << ',' << r.t_solve << ',' << r.iterations << ',' << r.per_decade << ','
                     << (r.converged ? 1 : 0) << ',' << r.true_rel_residual << ',' << r.n0 << ',' << r.wasted << ','
-                    << res.initial_residual_of << ',' << res.final_residual_of << "\n";
+                    << res.initial_residual_of << ',' << res.final_residual_of << ',' << (r.final_corrector ? 1 : 0) << "\n";
         }
     }
     // Numerical refactorizations that had to fall back to a full factorization (e.g. PARDISO with
@@ -209,6 +223,20 @@ void printTimeLoopSummary(const std::vector<SolveRecord>& recs, const core::Solv
         << its / static_cast<double>(recs.size()) << ", max " << itmax << ")\n"
         << std::setprecision(3) << "  total setup + updates + solves " << tinit + tupd + tsolve << " s\n"
         << std::defaultfloat;
+    if (cfg.correctors > 1 && (cfg.warm_start || cfg.final_rtol >= 0.0 || cfg.final_atol >= 0.0)) {
+        // With a warm start or final tolerances the correctors of a step are different solves.
+        double its_c = 0.0, its_f = 0.0, t_c = 0.0, t_f = 0.0;
+        int n_c = 0, n_f = 0;
+        for (const auto& r : recs) {
+            (r.final_corrector ? its_f : its_c) += r.iterations;
+            (r.final_corrector ? t_f : t_c) += r.t_solve;
+            ++(r.final_corrector ? n_f : n_c);
+        }
+        out << std::fixed << std::setprecision(1) << "  correctors                 iterations avg " << (n_c ? its_c / n_c : 0.0)
+            << ", solves " << std::setprecision(3) << t_c << " s\n"
+            << std::setprecision(1) << "  last corrector             iterations avg " << (n_f ? its_f / n_f : 0.0) << ", solves "
+            << std::setprecision(3) << t_f << " s\n" << std::defaultfloat;
+    }
 }
 
 } // namespace schwarz2lvl::solv

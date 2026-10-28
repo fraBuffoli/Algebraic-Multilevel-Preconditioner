@@ -20,12 +20,19 @@ StopNorm parseStopNorm(const std::string& s)
 
 const char* toString(StopNorm s) { return s == StopNorm::L2 ? "l2" : "openfoam"; }
 
-std::unique_ptr<KrylovSolver> makeKrylovSolver(const core::SolverConfig& cfg)
+std::unique_ptr<KrylovSolver> makeKrylovSolver(const core::SolverConfig& cfg, double rtol, double atol)
 {
     const StopNorm stop = parseStopNorm(cfg.stop_norm);
-    if (cfg.krylov == "gmres") return std::make_unique<Gmres>(cfg.restart, cfg.rtol, cfg.maxit, stop);
-    if (cfg.krylov == "bicgstab") return std::make_unique<BiCgStab>(cfg.rtol, cfg.maxit, stop);
+    if (atol > 0.0 && stop != StopNorm::OpenFOAM)
+        throw std::invalid_argument("an absolute tolerance needs the OpenFOAM stopping norm");
+    if (cfg.krylov == "gmres") return std::make_unique<Gmres>(cfg.restart, rtol, cfg.maxit, stop, atol);
+    if (cfg.krylov == "bicgstab") return std::make_unique<BiCgStab>(rtol, cfg.maxit, stop, atol);
     throw std::invalid_argument("unknown Krylov solver '" + cfg.krylov + "' (gmres|bicgstab)");
+}
+
+std::unique_ptr<KrylovSolver> makeKrylovSolver(const core::SolverConfig& cfg)
+{
+    return makeKrylovSolver(cfg, cfg.rtol, cfg.atol);
 }
 
 namespace detail {

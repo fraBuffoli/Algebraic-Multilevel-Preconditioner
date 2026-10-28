@@ -40,6 +40,7 @@ struct GeneratorOptions {
     double radius = 0.06;          ///< bubbles: radius (domain = unit square/cube).
     double cfl = 0.5;              ///< bubbles: rise per step, in cells.
     unsigned seed = 2024;          ///< bubbles: seed of the initial positions.
+    std::string source = "alpha";  ///< bubbles: right-hand side, "alpha" (vol x alpha) or "buoyancy" (p_rgh source).
 };
 
 /**
@@ -78,6 +79,11 @@ struct GeneratorOptions {
  *    Lemma 3.2 of the paper. The bubbles rise by `cfl` cells per step (periodic in the
  *    vertical direction: a bubble leaving the top re-enters at the bottom) and wobble
  *    sideways, so the matrix values change from step to step near the interfaces only.
+ *    Right-hand side (`source`): "alpha" = cell volume x alpha (constant on every bubble), or
+ *    "buoyancy" = the source of the p_rgh equation of a VoF solver (interFoam) for the fluid at
+ *    rest, A p = -div(phig) with phig_f = -gh_f snGrad(rho)_f beta_f |S_f|, gh = g.(x - x_top),
+ *    |g| = 1 pointing down (gh_f = 1 - z_f; y in 2D): the divergence of fluxes that live on the
+ *    interfaces only (zero sum over any region whose boundary crosses no interface).
  *
  * With `pulse` > 0 the convection of `convdiff`/`coupled` is scaled by
  * 1 + pulse sin(2 pi time / pulse_period): nonsymmetric matrices that change with time.

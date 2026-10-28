@@ -16,12 +16,22 @@ Description
         laplacianSchemes { default Gauss linear orthogonal; }
         interpolationSchemes { default linear; }
     on the uniform blockMesh of the case, p fixedValue 0 on "top" and zeroGradient elsewhere, the
-    matrix and right-hand side are those of `schwarz2lvl --generate bubbles3d --rhs generated` up to
-    round-off (checked with -writeMatrix against `matgen bubbles3d ... t=<last step>`).
+    matrix and right-hand side are those of `schwarz2lvl --generate bubbles3d --rhs generated
+    --bubble-source <source>` up to round-off (checked with -writeMatrix against `matgen bubbles3d ...
+    t=<last step> source=<source>`).
+
+    Right-hand side (bubblesDict `source`, default alpha): alpha, or `buoyancy`, the source of the
+    p_rgh equation of interFoam for the fluid at rest, laplacian(rAUf, p_rgh) == fvc::div(phig) with
+    phig = -ghf snGrad(rho) rAUf |Sf| (no surface tension), i.e. here
+        -div(beta grad p) = fvc::div(ghf snGrad(rho) betaf |Sf|),   ghf = 1 - z_f
+    (|g| = 1 pointing down, reference on the top face): the divergence of fluxes that live on the
+    interfaces, as `schwarz2lvl --bubble-source buoyancy`.
 
     For every step (pseudo-time = step, bubbles rising by cfl cells per step) and every corrector the
-    equation is assembled and solved from p = 0 (as schwarz2lvl does) with the solver controls
-    solvers/<solver> of system/fvSolution. Every solve is timed between two synchronizations of all
+    equation is assembled and solved from p = 0 (as schwarz2lvl does), or with -warmStart from the
+    previous solution (as a PISO/PIMPLE loop does), with the solver controls solvers/<solver> of
+    system/fvSolution; the last corrector of every step uses solvers/<solver>Final when it exists (as
+    p_rghFinal). Every solve is timed between two synchronizations of all
     processes (as schwarz2lvl does); assembly is not timed. The true relative residual
     ||b - A x||_2 / ||b||_2 is computed after every solve: the stopping test of OpenFOAM is on the
     normalised L1 residual (with p = 0 at the start: sum|b - A x| / sum|b|).
@@ -31,7 +41,8 @@ Usage
                        [-writeMatrix PREFIX] [-warmStart]
 
     Parameters of the bubbles: system/bubblesDict (nx ny nz nBubbles radius rhoRatio cfl seed steps
-    correctors). One CSV line per solve, written by the master process.
+    correctors source). One CSV line per solve, written by the master process (column `controls`: the
+    solver dictionary used).
 
 \*---------------------------------------------------------------------------*/
 
@@ -193,6 +204,11 @@ int main(int argc, char *argv[])
     const scalar radius = bubblesDict.lookup<scalar>("radius");
     const scalar cfl = bubblesDict.lookup<scalar>("cfl");
     const label seed = bubblesDict.lookupOrDefault<label>("seed", 2024);
+    const word source(bubblesDict.lookupOrDefault<word>("source", "alpha"));
+    if (source != "alpha" && source != "buoyancy")
+    {
+        FatalErrorInFunction << "bubblesDict: source must be alpha or buoyancy, not " << source << exit(FatalError);
+    }
     // Bubble field of schwarz2lvl at pseudo-time t (C interface, see bubbleFieldCapi.h).
     auto newField = [&](const scalar t)
     {
@@ -216,6 +232,10 @@ int main(int argc, char *argv[])
         FatalErrorInFunction << "rhoRatio must be > 0" << exit(FatalError);
     }
     const dictionary& controls = mesh.solution().solverDict(solverName);
+    // Last corrector of every step: solvers/<solver>Final if present (as p_rghFinal), else the same.
+    const word finalName(solverName + "Final");
+    const bool hasFinal = mesh.solution().solversDict().found(finalName);
+    const dictionary& finalControls = hasFinal ? mesh.solution().solverDict(finalName) : controls;
 
     // Cell (i, j, k) of every local cell from its centre: global number and bubble lookups.
     std::vector<int> ci(mesh.nCells()), cj(mesh.nCells()), ck(mesh.nCells());
@@ -245,19 +265,31 @@ int main(int argc, char *argv[])
         zeroGradientFvPatchScalarField::typeName
     );
     const dimensionedScalar rhoG(dimless, 1.0/rhoRatio);
+    // gh on the faces: g.(x - x_top) with |g| = 1 pointing down, i.e. 1 - z (buoyancy source only).
+    const surfaceScalarField ghf
+    (
+        "ghf",
+        1.0 - mesh.Cf().component(vector::Z)/dimensionedScalar(dimLength, 1.0)
+    );
+    scalarField buoyancySource(mesh.nCells(), 0.0);
 
     autoPtr<OFstream> csv;
     if (Pstream::master())
     {
         csv.reset(new OFstream(csvName));
         csv() << "solver,np,ncells,step,corrector,t_solve,iterations,initial_res,final_res,true_rel_res,converged,"
-                 "t_setup,t_cycles,t_assembly" << nl;
+                 "t_setup,t_cycles,t_assembly,controls" << nl;
     }
 
     Info<< "bubblyPressureFoam: " << nx << "x" << ny << "x" << nz << " cells, " << nBubbles
         << " bubbles, radius " << radius << ", rho ratio " << rhoRatio << ", cfl " << cfl << ", seed " << seed << ", "
-        << steps << " steps x " << correctors << " correctors, solver " << solverName << " "
-        << controls << nl << endl;
+        << steps << " steps x " << correctors << " correctors, source " << source
+        << (warmStart ? ", warm start" : ", every solve from 0") << ", solver " << solverName << " " << controls << nl;
+    if (hasFinal)
+    {
+        Info<< "last corrector of every step: " << finalName << " " << finalControls << nl;
+    }
+    Info<< endl;
 
     scalarField times;
     labelList iters;
@@ -278,6 +310,15 @@ int main(int argc, char *argv[])
         Info<< "step " << step << ": sum of alpha " << gSum(alpha.primitiveField()) << endl;
         const volScalarField beta(1.0/(alpha*rhoG + (1.0 - alpha)));
         const surfaceScalarField betaf(fvc::interpolate(beta));
+        if (source == "buoyancy")
+        {
+            // -div(phig) of interFoam for the fluid at rest, integrated over the cells: fluxes
+            // betaf ghf snGrad(rho) |Sf| summed over the faces of each cell (outward from the owner);
+            // zero on the boundary faces (zero gradient of rho), across processor faces as inside.
+            const volScalarField rho(alpha*rhoG + (1.0 - alpha));
+            const surfaceScalarField phiB(betaf*ghf*fvc::snGrad(rho)*mesh.magSf());
+            buoyancySource = mesh.V().field()*fvc::div(phiB)().primitiveField();
+        }
         scalar tStepAssembly = returnReduce(assemblyTimer.elapsedTime(), maxOp<scalar>());
 
         for (label corr = 0; corr < correctors; ++corr)
@@ -285,9 +326,31 @@ int main(int argc, char *argv[])
             synchronize();
             const clockTime eqnTimer;
             fvScalarMatrix pEqn(-fvm::laplacian(betaf, p));
-            pEqn.source() += mesh.V().field()*alpha.primitiveField();
+            if (source == "buoyancy")
+            {
+                pEqn.source() += buoyancySource;
+            }
+            else
+            {
+                pEqn.source() += mesh.V().field()*alpha.primitiveField();
+            }
             const scalar tAssembly = returnReduce(eqnTimer.elapsedTime(), maxOp<scalar>()) + tStepAssembly;
             tStepAssembly = 0;
+            if (corr == 0)
+            {
+                // Checksums of the right-hand side that do not depend on the decomposition (weights
+                // from the global cell number): the serial and parallel runs of the matrix check must
+                // agree to round-off (the buoyancy source has terms on the processor faces).
+                const scalarField b(totalSource(pEqn));
+                scalarField w(b.size());
+                forAll(w, c)
+                {
+                    w[c] = Foam::cos(0.37*scalar(gid[c]));
+                }
+                char sums[96];
+                std::snprintf(sums, sizeof(sums), "%.15e %.15e", gSum(mag(b)), gSum(b*w));
+                Info<< "step " << step << ": rhs checksums " << sums << endl;
+            }
 
             if (!warmStart)
             {
@@ -311,6 +374,8 @@ int main(int argc, char *argv[])
             const scalarField source(totalSource(pEqn));
             synchronize();
             const clockTime setupTimer;
+            const bool lastCorrector = (corr == correctors - 1);
+            const dictionary& solverControls = lastCorrector ? finalControls : controls;
             autoPtr<lduMatrix::solver> solver = lduMatrix::solver::New
             (
                 p.name(),
@@ -318,7 +383,7 @@ int main(int argc, char *argv[])
                 pEqn.boundaryCoeffs(),
                 pEqn.internalCoeffs(),
                 p.boundaryField().scalarInterfaces(),
-                controls
+                solverControls
             );
             const scalar tSetup = returnReduce(setupTimer.elapsedTime(), maxOp<scalar>());
             const clockTime cyclesTimer;
@@ -341,7 +406,8 @@ int main(int argc, char *argv[])
                 csv() << solverName << ',' << Pstream::nProcs() << ',' << nGlobal << ',' << step << ','
                       << corr << ',' << t << ',' << perf.nIterations() << ',' << perf.initialResidual()
                       << ',' << perf.finalResidual() << ',' << rel << ',' << (perf.converged() ? 1 : 0)
-                      << ',' << tSetup << ',' << tCycles << ',' << tAssembly << endl;
+                      << ',' << tSetup << ',' << tCycles << ',' << tAssembly << ','
+                      << ((lastCorrector && hasFinal) ? finalName : solverName) << endl;
             }
         }
     }

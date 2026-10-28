@@ -100,6 +100,7 @@ utils::GeneratorOptions generatorOptions(const core::SolverConfig& cfg, int step
     o.nbubbles = cfg.nbubbles;
     o.radius = cfg.radius;
     o.cfl = cfg.cfl;
+    o.source = cfg.bubble_source;
     return o;
 }
 

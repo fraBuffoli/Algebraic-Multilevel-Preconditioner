@@ -27,11 +27,18 @@ namespace schwarz2lvl::prec {
  * **Break-even rule (Auto).** After a Rebuild the coarse basis fits the matrix; as the matrix
  * drifts, the same tolerance needs more iterations. The convergence is measured in
  * iterations per decade of residual reduction, q = iterations / log10(||r_0|| / ||r||), which
- * does not depend on the tolerance (p_rgh and p_rghFinal can be compared). With q_ref the value
- * of the first solve after the last Rebuild, every solve "wastes"
+ * depends little on the tolerance when every solve starts from 0. With q_ref the value of the first
+ * solve after the last Rebuild, every solve "wastes"
  *   (iterations - q_ref * decades) * (time per iteration)
  * seconds because of the old basis. A Rebuild is requested when the time wasted since the last
  * Rebuild reaches the extra cost of a Rebuild over a Refactorize (both measured on the run).
+ *
+ * **Kinds of solves.** When the solves of a step differ (warm start: the first corrector starts from
+ * the previous step, the next ones from the previous corrector; last corrector to an absolute
+ * tolerance), q differs between them by 30-80% with a fresh basis (bubbles, 32^3), which the rule
+ * above would count as aging. record() then takes a kind (the corrector index) and every kind has
+ * its own q_ref, set by its first solve after the Rebuild: like is compared with like. Kind 0 only
+ * (the default) is the single reference above.
  *
  * **Robust costs.** The cost of a Rebuild (Refactorize) is the *lower median* of all the Rebuild
  * (Refactorize) times measured so far, not the last one: a single stall (G100, P7 campaign: a
@@ -82,14 +89,20 @@ public:
      * @param converged  The solve reached its tolerance.
      * @param t_update   Wall time of the update performed before the solve [s].
      * @param t_solve    Wall time of the solve [s].
+     * @param kind       Kind of solve (>= 0, e.g. the corrector index): q is compared with the q_ref of
+     *                   the same kind.
      */
-    void record(UpdateLevel done, int iterations, double reduction, bool converged, double t_update, double t_solve);
+    void record(UpdateLevel done, int iterations, double reduction, bool converged, double t_update, double t_solve,
+                int kind = 0);
 
     /// @brief Iterations per decade, or 0 if not defined (no iteration or no reduction).
     static double perDecade(int iterations, double reduction);
 
-    /// @brief Reference q_ref (0 = not yet measured).
-    double reference() const { return ref_; }
+    /// @brief Reference q_ref of the solves of kind @p kind (0 = not yet measured).
+    double reference(int kind = 0) const
+    {
+        return (kind >= 0 && static_cast<std::size_t>(kind) < ref_.size()) ? ref_[static_cast<std::size_t>(kind)] : 0.0;
+    }
     /// @brief q of the last solve (0 = not defined).
     double last() const { return last_; }
     /// @brief Refactorizations since the last Rebuild.
@@ -108,10 +121,10 @@ private:
     Mode mode_;
     double growth_;
     int max_age_;
-    double ref_ = 0.0;         ///< q of the first solve after the last Rebuild.
+    std::vector<double> ref_;  ///< Per kind: q of its first solve after the last Rebuild (0 = not yet).
     double last_ = 0.0;        ///< q of the last solve.
+    double last_ref_ = 0.0;    ///< q_ref of the kind of the last solve.
     int age_ = 0;              ///< Refactorizations since the last Rebuild.
-    bool need_ref_ = true;     ///< The next valid q becomes the reference.
     bool converged_ = true;    ///< The last solve converged.
     double wasted_ = 0.0;      ///< Seconds lost to the old basis since the last Rebuild.
     std::vector<double> t_rebuild_;  ///< Measured Rebuild times (initial setup included).

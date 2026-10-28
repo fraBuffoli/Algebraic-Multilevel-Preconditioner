@@ -44,8 +44,12 @@ public:
      * @param rtol  Relative tolerance.
      * @param maxit Maximum number of applications of the preconditioner.
      * @param stop  Norm of the stopping test.
+     * @param atol  StopNorm::OpenFOAM: absolute tolerance on the normalised residual (0 = off).
      */
-    BiCgStab(double rtol, int maxit, StopNorm stop = StopNorm::L2) : rtol_(rtol), maxit_(maxit), stop_(stop) {}
+    BiCgStab(double rtol, int maxit, StopNorm stop = StopNorm::L2, double atol = 0.0)
+        : rtol_(rtol), atol_(atol), maxit_(maxit), stop_(stop)
+    {
+    }
 
     KrylovResult solve(const linalg::DistributedMatrix& A, const prec::Preconditioner& M, const core::Vec& b,
                        core::Vec& x) const override;
@@ -54,6 +58,7 @@ public:
 
 private:
     double rtol_;   ///< Relative tolerance.
+    double atol_;   ///< Absolute tolerance on the OpenFOAM normalised residual.
     int maxit_;     ///< Maximum applications of the preconditioner.
     StopNorm stop_; ///< Norm of the stopping test.
 };

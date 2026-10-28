@@ -197,6 +197,8 @@ GeneratedProblem MatrixGenerator::bubbles(int dim, const GeneratorOptions& opt)
     const int nx = opt.nx, ny = opt.ny, nz = (dim == 3) ? opt.nz : 1;
     if (opt.rho_ratio <= 0.0 || opt.radius <= 0.0 || opt.nbubbles < 0)
         throw std::invalid_argument("bubbles: rho_ratio and radius must be > 0, nbubbles >= 0");
+    if (opt.source != "alpha" && opt.source != "buoyancy")
+        throw std::invalid_argument("bubbles: source must be alpha or buoyancy");
     const double hx = 1.0 / nx, hy = 1.0 / ny, hz = (dim == 3) ? 1.0 / nz : 1.0;
     const core::GlobalIndex ncell = static_cast<core::GlobalIndex>(nx) * ny * nz;
     auto cid = [&](int i, int j, int k) {
@@ -263,13 +265,42 @@ GeneratedProblem MatrixGenerator::bubbles(int dim, const GeneratorOptions& opt)
                 A.row_ptr[static_cast<std::size_t>(P) + 1] = static_cast<core::GlobalIndex>(A.col.size());
                 g.rhs[static_cast<std::size_t>(P)] = vol * alpha[static_cast<std::size_t>(P)]; // buoyancy-like source
             }
+    if (opt.source == "buoyancy") {
+        // ---- p_rgh source of a VoF solver with the fluid at rest (interFoam: fvm::laplacian(rAUf, p_rgh)
+        //      == fvc::div(phig), phig = -ghf snGrad(rho) rAUf |Sf|), i.e. A p = -div(phig): every interior
+        //      face f = (P, N), P < N, carries F_f = beta_f gh_f (rho_N - rho_P) |S_f| / d, added to row P
+        //      and subtracted from row N (outward from P, as fvc::div sums owner / neighbour faces).
+        //      gh = g.(x - x_top) with |g| = 1 downward: gh_f = 1 - (vertical coordinate of the face
+        //      centre). Boundary faces carry nothing (zero gradient of rho). Nonzero only across the
+        //      interfaces, and the sum over any set of cells whose boundary crosses no interface is zero.
+        std::vector<double> rho(static_cast<std::size_t>(ncell));
+        for (std::size_t q = 0; q < rho.size(); ++q) rho[q] = alpha[q] * rho_g + (1.0 - alpha[q]);
+        std::fill(g.rhs.begin(), g.rhs.end(), 0.0);
+        const double hv = (dim == 3) ? hz : hy; // vertical spacing
+        auto flux = [&](core::GlobalIndex P, core::GlobalIndex N, double geom, double zf) {
+            const auto p = static_cast<std::size_t>(P), q = static_cast<std::size_t>(N);
+            const double F = 0.5 * (beta[p] + beta[q]) * (1.0 - zf) * (rho[q] - rho[p]) * geom;
+            g.rhs[p] += F;
+            g.rhs[q] -= F;
+        };
+        for (int k = 0; k < nz; ++k)
+            for (int j = 0; j < ny; ++j)
+                for (int i = 0; i < nx; ++i) {
+                    const core::GlobalIndex P = cid(i, j, k);
+                    const double zc = (((dim == 3) ? k : j) + 0.5) * hv; // cell centre = centre of its side faces
+                    if (i + 1 < nx) flux(P, cid(i + 1, j, k), gx, zc);
+                    if (j + 1 < ny) flux(P, cid(i, j + 1, k), gy, (dim == 3) ? zc : (j + 1) * hy);
+                    if (dim == 3 && k + 1 < nz) flux(P, cid(i, j, k + 1), gz, (k + 1) * hz);
+                }
+    }
     A.symmetric = true;
     g.block_size = 1;
     std::ostringstream d;
     d << "bubbles" << dim << "d " << nx << "x" << ny;
     if (dim == 3) d << "x" << nz;
     d << " rho_ratio=" << opt.rho_ratio << " nb=" << opt.nbubbles << " R=" << opt.radius << " cfl=" << opt.cfl
-      << " t=" << opt.time << " (n=" << ncell << ", nnz=" << A.nnz() << ")";
+      << " t=" << opt.time << (opt.source == "alpha" ? "" : " source=" + opt.source) << " (n=" << ncell
+      << ", nnz=" << A.nnz() << ")";
     g.description = d.str();
     return g;
 }

@@ -2,10 +2,11 @@
  * @file matgen.cpp
  * @brief Sequential tool writing the built-in test problems in Matrix Market format.
  *
- * Usage: `matgen NAME NX [NY [NZ]] [nu=V] [ncomp=C] [rho=R nb=N radius=R cfl=C t=T seed=S] [out=PREFIX]`
+ * Usage: `matgen NAME NX [NY [NZ]] [nu=V] [ncomp=C] [rho=R nb=N radius=R cfl=C t=T seed=S source=K] [out=PREFIX]`
  * writes PREFIX.mtx (matrix) and PREFIX_rhs.mtx (generated right-hand side), e.g. to compare
  * with PETSc/PCHPDDM, or with OpenFOAM (openfoam/bubblyPressureFoam -writeMatrix), on exactly
- * the same systems. rho, nb, radius, cfl, t (pseudo-time = step) and seed: bubbles generators.
+ * the same systems. rho, nb, radius, cfl, t (pseudo-time = step), seed and source (alpha | buoyancy:
+ * right-hand side, see MatrixGenerator): bubbles generators.
  */
 #include "matrix_generators.hpp"
 #include "matrix_market_io.hpp"
@@ -18,7 +19,8 @@ using namespace schwarz2lvl;
 int main(int argc, char** argv)
 {
     if (argc < 3) {
-        std::cerr << "usage: matgen NAME NX [NY [NZ]] [nu=V] [ncomp=C] [rho=R nb=N radius=R cfl=C t=T seed=S]\n"
+        std::cerr << "usage: matgen NAME NX [NY [NZ]] [nu=V] [ncomp=C] [rho=R nb=N radius=R cfl=C t=T seed=S\n"
+                     "              source=alpha|buoyancy]\n"
                      "              [out=PREFIX]\n"
                      "  NAME: laplace2d laplace3d convdiff2d convdiff3d coupled2d coupled3d bubbles2d bubbles3d\n";
         return 1;
@@ -40,6 +42,7 @@ int main(int argc, char** argv)
             else if (a.rfind("cfl=", 0) == 0) o.cfl = std::stod(v);
             else if (a.rfind("t=", 0) == 0) o.time = std::stod(v);
             else if (a.rfind("seed=", 0) == 0) o.seed = static_cast<unsigned>(std::stoul(v));
+            else if (a.rfind("source=", 0) == 0) o.source = v;
             else if (a.rfind("out=", 0) == 0) prefix = v;
             else if (nd < 3) dims[nd++] = std::stoi(a);
             else throw std::invalid_argument("unexpected argument " + a);

@@ -27,6 +27,10 @@ namespace schwarz2lvl::solv {
  *    relTol semantics: stop when it is <= rtol times its initial value, i.e.
  *    sum|b - A x| <= rtol sum|b - A x0| (from x0 = 0: sum|b - A x| / sum|b| <= rtol). The same test
  *    as OpenFOAM with `tolerance 0; relTol rtol;`, for comparisons and for an OpenFOAM port.
+ *    With an absolute tolerance atol > 0 (OpenFOAM `tolerance`) the solve also stops when
+ *    sum|b - A x| / F <= atol, i.e. at sum|b - A x| <= max(rtol sum|b - A x0|, atol F), and does
+ *    not iterate at all if x0 already satisfies it; rtol = 0 leaves atol only (as `relTol 0`, the
+ *    usual setting of the final corrector, p_rghFinal). F is computed once, from x0.
  */
 enum class StopNorm { L2, OpenFOAM };
 
@@ -71,8 +75,11 @@ public:
     virtual std::string name() const = 0;
 };
 
-/// @brief Krylov solver of a configuration: --krylov gmres (with --restart) or bicgstab; --rtol, --maxit, --stop-norm.
+/// @brief Krylov solver of a configuration: --krylov gmres (with --restart) or bicgstab; --rtol, --atol, --maxit,
+///        --stop-norm.
 std::unique_ptr<KrylovSolver> makeKrylovSolver(const core::SolverConfig& cfg);
+/// @brief Same, with the tolerances @p rtol and @p atol instead of those of @p cfg (e.g. the last corrector).
+std::unique_ptr<KrylovSolver> makeKrylovSolver(const core::SolverConfig& cfg, double rtol, double atol);
 
 namespace detail {
 

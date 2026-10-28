@@ -42,9 +42,11 @@ public:
      * @param restart Restart length m.
      * @param rtol    Relative tolerance.
      * @param maxit   Maximum number of iterations.
+     * @param stop    Norm of the stopping test.
+     * @param atol    StopNorm::OpenFOAM: absolute tolerance on the normalised residual (0 = off).
      */
-    Gmres(int restart, double rtol, int maxit, StopNorm stop = StopNorm::L2)
-        : m_(restart), rtol_(rtol), maxit_(maxit), stop_(stop)
+    Gmres(int restart, double rtol, int maxit, StopNorm stop = StopNorm::L2, double atol = 0.0)
+        : m_(restart), rtol_(rtol), atol_(atol), maxit_(maxit), stop_(stop)
     {
     }
 
@@ -63,6 +65,7 @@ public:
 private:
     int m_;        ///< Restart length.
     double rtol_;  ///< Relative tolerance.
+    double atol_;  ///< Absolute tolerance on the OpenFOAM normalised residual.
     int maxit_;    ///< Maximum iterations.
     StopNorm stop_;///< Norm of the stopping test.
 };

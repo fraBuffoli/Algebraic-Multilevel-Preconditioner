@@ -7,6 +7,7 @@
 #include "timer.hpp"
 #include "vector_ops.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace schwarz2lvl::solv {
@@ -30,7 +31,7 @@ KrylovResult BiCgStab::solve(const linalg::DistributedMatrix& A, const prec::Pre
 
     core::Vec r(n), rh(n), p = core::Vec::Zero(n), v = core::Vec::Zero(n), y(n), s(n), z(n), t(n);
     A.apply(x, r);
-    double normF = 1.0, l1_0 = 0.0; // OpenFOAM test: sum|r| <= rtol sum|r0|
+    double normF = 1.0, l1_0 = 0.0; // OpenFOAM test: sum|r| <= thr = max(rtol sum|r0|, atol F)
     if (of) normF = detail::openfoamNormFactor(A, b, x, r, comm);
     r = b - r;
 
@@ -46,7 +47,8 @@ KrylovResult BiCgStab::solve(const linalg::DistributedMatrix& A, const prec::Pre
         l1 = d[1];
         return d[2];
     };
-    auto satisfied = [&](double slack) { return of ? (l1 <= slack * rtol_ * l1_0) : (rn <= slack * rtol_ * bnorm); };
+    double thr = 0.0;
+    auto satisfied = [&](double slack) { return of ? (l1 <= slack * thr) : (rn <= slack * rtol_ * bnorm); };
     auto applyM = [&](const core::Vec& in, core::Vec& out) {
         utils::ScopedTimer tp("solve.preconditioner");
         M.apply(in, out);
@@ -60,6 +62,7 @@ KrylovResult BiCgStab::solve(const linalg::DistributedMatrix& A, const prec::Pre
     if (of) {
         l1_0 = l1;
         res.initial_residual_of = l1_0 / normF;
+        thr = std::max(rtol_ * l1_0, atol_ * normF); // x0 already below it: no iteration (as OpenFOAM)
     }
     res.history.push_back(rn / bnorm);
     res.rel_residual = rn / bnorm;

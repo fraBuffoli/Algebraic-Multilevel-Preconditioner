@@ -41,6 +41,7 @@ SolverConfig SolverConfig::fromCommandLine(int argc, char** argv){
         {"nbubbles", [&](const std::string& v) { c.nbubbles = std::stoi(v); }},
         {"radius", [&](const std::string& v) { c.radius = std::stod(v); }},
         {"cfl", [&](const std::string& v) { c.cfl = std::stod(v); }},
+        {"bubble-source", [&](const std::string& v) { c.bubble_source = v; }},
         {"pulse", [&](const std::string& v) { c.pulse = std::stod(v); }},
         {"pulse-period", [&](const std::string& v) { c.pulse_period = std::stoi(v); }},
         {"steps", [&](const std::string& v) { c.steps = std::stoi(v); }},
@@ -49,6 +50,9 @@ SolverConfig SolverConfig::fromCommandLine(int argc, char** argv){
         {"rebuild-growth", [&](const std::string& v) { c.rebuild_growth = std::stod(v); }},
         {"rebuild-every", [&](const std::string& v) { c.rebuild_every = std::stoi(v); }},
         {"steps-csv", [&](const std::string& v) { c.steps_csv = v; }},
+        {"warm-start", [&](const std::string& v) { c.warm_start = parseBool(v); }},
+        {"final-rtol", [&](const std::string& v) { c.final_rtol = std::stod(v); }},
+        {"final-atol", [&](const std::string& v) { c.final_atol = std::stod(v); }},
         {"metis-objective", [&](const std::string& v) { c.metis_objective = v; }},
         {"metis-vertex-weights", [&](const std::string& v) { c.metis_vertex_weights = parseBool(v); }},
         {"pou", [&](const std::string& v) { c.pou = v; }},
@@ -80,6 +84,7 @@ SolverConfig SolverConfig::fromCommandLine(int argc, char** argv){
         {"krylov", [&](const std::string& v) { c.krylov = v; }},
         {"restart", [&](const std::string& v) { c.restart = std::stoi(v); }},
         {"rtol", [&](const std::string& v) { c.rtol = std::stod(v); }},
+        {"atol", [&](const std::string& v) { c.atol = std::stod(v); }},
         {"stop-norm", [&](const std::string& v) { c.stop_norm = v; }},
         {"maxit", [&](const std::string& v) { c.maxit = std::stoi(v); }},
         {"verbose", [&](const std::string& v) { c.verbose = std::stoi(v); }},
@@ -130,6 +135,16 @@ void SolverConfig::validate() const
     if (krylov != "gmres" && krylov != "bicgstab") throw std::invalid_argument("--krylov must be gmres|bicgstab");
     if (restart < 1) throw std::invalid_argument("--restart must be >= 1");
     if (stop_norm != "l2" && stop_norm != "openfoam") throw std::invalid_argument("--stop-norm must be l2|openfoam");
+    if (rtol < 0.0) throw std::invalid_argument("--rtol must be >= 0");
+    if (atol < 0.0) throw std::invalid_argument("--atol must be >= 0");
+    if ((atol > 0.0 || final_atol > 0.0) && stop_norm != "openfoam")
+        throw std::invalid_argument("--atol / --final-atol need --stop-norm openfoam (tolerance on the normalised residual)");
+    if (stop_norm == "l2" && (rtol == 0.0 || final_rtol == 0.0))
+        throw std::invalid_argument("--rtol / --final-rtol 0 need --stop-norm openfoam with an --atol / --final-atol");
+    if (stop_norm == "openfoam" && rtol == 0.0 && atol == 0.0)
+        throw std::invalid_argument("--rtol 0 needs an --atol > 0");
+    if (stop_norm == "openfoam" && final_rtol == 0.0 && (final_atol < 0.0 ? atol : final_atol) == 0.0)
+        throw std::invalid_argument("--final-rtol 0 needs an --atol or --final-atol > 0");
     if (coarse_root_below < 0) throw std::invalid_argument("--coarse-root-below must be >= 0");
     if (metis_objective != "cut" && metis_objective != "vol")
         throw std::invalid_argument("--metis-objective must be cut|vol");
@@ -155,6 +170,8 @@ void SolverConfig::validate() const
     if (radius <= 0.0) throw std::invalid_argument("--radius must be > 0");
     if (nbubbles < 0) throw std::invalid_argument("--nbubbles must be >= 0");
     if (pulse_period < 1) throw std::invalid_argument("--pulse-period must be >= 1");
+    if (bubble_source != "alpha" && bubble_source != "buoyancy")
+        throw std::invalid_argument("--bubble-source must be alpha|buoyancy");
 }
 
 void SolverConfig::print(std::ostream& os) const
@@ -166,7 +183,8 @@ void SolverConfig::print(std::ostream& os) const
         std::ostringstream g;
         g << generate << " (nx=" << nx << ", ny=" << ny << ", nz=" << nz << ", nu=" << nu << ", ncomp=" << ncomp;
         if (generate.rfind("bubbles", 0) == 0)
-            g << ", rho_ratio=" << rho_ratio << ", nbubbles=" << nbubbles << ", radius=" << radius << ", cfl=" << cfl;
+            g << ", rho_ratio=" << rho_ratio << ", nbubbles=" << nbubbles << ", radius=" << radius << ", cfl=" << cfl
+              << ", source=" << bubble_source;
         if (pulse != 0.0) g << ", pulse=" << pulse << ", period=" << pulse_period;
         g << ")";
         line("generator", g.str());
@@ -197,6 +215,11 @@ void SolverConfig::print(std::ostream& os) const
         std::ostringstream t;
         t << rtol << (stop_norm == "openfoam" ? " (OpenFOAM normalised residual: sum|r| <= rtol sum|r0|)" : " (||r||_2 <= rtol ||b||_2)");
         line("rtol", t.str());
+        if (atol > 0.0) {
+            std::ostringstream a;
+            a << atol << " (OpenFOAM tolerance: sum|r| / F <= atol)";
+            line("atol", a.str());
+        }
     }
     if (steps > 0) {
         line("steps x correctors", std::to_string(steps) + " x " + std::to_string(correctors));
@@ -209,6 +232,12 @@ void SolverConfig::print(std::ostream& os) const
             r << ")";
         }
         line("setup reuse", r.str());
+        line("initial guess", warm_start ? std::string("previous solution (warm start)") : std::string("0"));
+        if (final_rtol >= 0.0 || final_atol >= 0.0) {
+            std::ostringstream f;
+            f << "rtol " << (final_rtol >= 0.0 ? final_rtol : rtol) << ", atol " << (final_atol >= 0.0 ? final_atol : atol);
+            line("last corrector", f.str());
+        }
     }
 }
 
@@ -224,6 +253,8 @@ std::string SolverConfig::help()
   --nu V                   generator viscosity nu of Eq. (4.1)                        [1]
   --ncomp N                unknowns per cell of the coupled generators                [4]
   --rho-ratio R --nbubbles N --radius R --cfl C   bubbles generators              [1000, 50, 0.06, 0.5]
+  --bubble-source alpha|buoyancy   bubbles: --rhs generated = vol x alpha, or the p_rgh source
+                           of a VoF solver for the fluid at rest (-div(phig))         [alpha]
   --pulse A --pulse-period P   convdiff/coupled: convection x (1 + A sin(2 pi t / P))  [0, 20]
   --block-size N           unknowns per cell (partition by cells)                     [auto]
   --seed N                 seed of the random right-hand side                         [12345]
@@ -269,6 +300,8 @@ std::string SolverConfig::help()
   --stop-norm l2|openfoam  l2: ||b - Ax||_2 <= rtol ||b||_2; openfoam: normalised residual of the
                            OpenFOAM solvers with relTol semantics, sum|b - Ax| <= rtol sum|b - Ax0|
                            (as OpenFOAM with tolerance 0, relTol rtol)                 [l2]
+  --atol T                 openfoam only: also stop when sum|b - Ax| / F <= T (OpenFOAM
+                           `tolerance`; F = normalisation factor of x0); rtol 0 = atol only [0]
  Sequence of solves (same pattern, values changing with the step):
   --steps N                steps of the time loop (0 = one solve)                     [0]
                            --generate: pseudo-time = step; --matrix with a printf pattern
@@ -280,6 +313,9 @@ std::string SolverConfig::help()
   --rebuild-growth G       auto: also rebuild when it/decade > G x reference (0 = off) [4]
   --rebuild-every N        auto: also rebuild after N refactorizations (0 = off)       [0]
   --steps-csv FILE         one line per solve (step, level, times, iterations)
+  --warm-start 0|1         start every solve from the previous solution (OpenFOAM) [0]
+  --final-rtol T --final-atol T   tolerances of the last corrector of every step (as
+                           p_rghFinal, e.g. --final-rtol 0 --final-atol 1e-7)  [rtol, atol]
  Output:
   --verbose 0|1|2 --csv FILE --history FILE --write-solution FILE
 )";

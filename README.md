@@ -37,7 +37,7 @@ sudo apt install build-essential libopenmpi-dev openmpi-bin libmetis-dev \
 ```bash
 make -j EIGEN_INC=external/eigen3                              # bin/schwarz2lvl, bin/matgen
 make -j EIGEN_INC=external/eigen3 USE_MUMPS=0 USE_UMFPACK=0    # minimal build: MPI + METIS only
-make tests EIGEN_INC=external/eigen3                           # bin/test_subdomain, bin/test_preconditioner
+make tests EIGEN_INC=external/eigen3                           # bin/test_* (see Tests below)
 make doc                                                       # Doxygen HTML in docs/Doxygen/html
 make clean
 ```
@@ -95,14 +95,14 @@ Options are given as `--key value` or `--key=value`. Defaults reproduce the setu
 
 | Group | Options |
 |---|---|
-| Input | `--matrix FILE` (Matrix Market coordinate, real/integer/pattern, general/symmetric/skew) **or** `--generate laplace2d\|laplace3d\|convdiff2d\|convdiff3d\|coupled2d\|coupled3d\|bubbles2d\|bubbles3d` with `--nx --ny --nz --nu --ncomp`, `--rho-ratio --nbubbles --radius --cfl` (bubbles), `--pulse --pulse-period` (time-dependent convection); `--rhs random\|ones\|generated\|FILE`; `--block-size N` (unknowns per cell) |
+| Input | `--matrix FILE` (Matrix Market coordinate, real/integer/pattern, general/symmetric/skew) **or** `--generate laplace2d\|laplace3d\|convdiff2d\|convdiff3d\|coupled2d\|coupled3d\|bubbles2d\|bubbles3d` with `--nx --ny --nz --nu --ncomp`, `--rho-ratio --nbubbles --radius --cfl --bubble-source alpha\|buoyancy` (bubbles), `--pulse --pulse-period` (time-dependent convection); `--rhs random\|ones\|generated\|FILE`; `--block-size N` (unknowns per cell) |
 | Partition | `--metis-objective cut\|vol`, `--metis-vertex-weights 0\|1` |
 | Preconditioner | `--one-level ras\|asm`, `--coarse deflated\|additive\|none`, `--pou boolean\|multiplicity`, `--tau`, `--nev`, `--nev-start` |
 | Local eigensolver | `--eig-tol --eig-maxit --eig-ncv`, `--shift-rel`, `--kernel-tol`, `--kernel-probe`, `--dense-threshold`, `--orth-tol` |
 | Direct solvers | `--local-solver auto\|sparselu\|umfpack\|pardiso`, `--local-factorization auto\|lu\|cholesky\|ldlt`, `--local-precision double\|single`, `--coarse-solver auto\|mumps\|cpardiso\|root`, `--coarse-factorization auto\|lu\|cholesky\|ldlt`, `--coarse-procs N`, `--coarse-root-below N` |
 | Approximate local solvers | `--local-approx none\|amg` (A_ii of the one-level part only), `--amg-coarsening sa\|rs`, `--amg-sweeps N`, `--amg-coarse-enough N`, `--amg-reuse 0\|1` |
-| Krylov | `--krylov gmres\|bicgstab`, `--restart` (GMRES), `--rtol`, `--maxit` (applications of the preconditioner), `--stop-norm l2\|openfoam` (stopping test: ‖r‖₂ ≤ rtol ‖b‖₂, or the normalised residual of OpenFOAM, Σ\|r\| ≤ rtol Σ\|r₀\|) |
-| Sequence | `--steps N` (time loop; 0 = single solve), `--correctors N`, `--reuse off\|refactor\|auto`, `--rebuild-growth G`, `--rebuild-every N`, `--steps-csv FILE`; `--matrix 'p_%04d.mtx'` reads one file per step |
+| Krylov | `--krylov gmres\|bicgstab`, `--restart` (GMRES), `--rtol`, `--maxit` (applications of the preconditioner), `--stop-norm l2\|openfoam` (stopping test: ‖r‖₂ ≤ rtol ‖b‖₂, or the normalised residual of OpenFOAM, Σ\|r\| ≤ rtol Σ\|r₀\|), `--atol` (openfoam: also Σ\|r\|/F ≤ atol, OpenFOAM `tolerance`) |
+| Sequence | `--steps N` (time loop; 0 = single solve), `--correctors N`, `--reuse off\|refactor\|auto`, `--rebuild-growth G`, `--rebuild-every N`, `--steps-csv FILE`, `--warm-start 0\|1`, `--final-rtol --final-atol` (last corrector of every step); `--matrix 'p_%04d.mtx'` reads one file per step |
 | Output | `--verbose 0\|1\|2`, `--csv FILE`, `--history FILE`, `--write-solution FILE` |
 
 `auto` picks the best backend compiled in (local: pardiso > umfpack > sparselu; coarse: mumps > cpardiso > root).
@@ -140,6 +140,7 @@ mpirun -np 4 ./bin/test_inexact          # AMG as approximate local solver: line
 mpirun -np 1 ./bin/test_bubbles          # bubble field shared with OpenFOAM, bubbles3d matrix structure
 mpirun -np 4 ./bin/test_stopping         # OpenFOAM stopping test of GMRES: exact stop, normalisation factor
 mpirun -np 4 ./bin/test_bicgstab         # BiCGStab: convergence, OpenFOAM stop at half/full steps, budget, time loop
+mpirun -np 4 ./bin/test_warmstart        # p_rgh source, OpenFOAM tolerance, warm start, last corrector, q_ref per corrector
 ```
 
 `matrices/` contains small SuiteSparse test matrices (sherman4, nos5, e05r0400, fidapm05/10, garon1, graham1,
@@ -309,6 +310,11 @@ depends on, and `Preconditioner::update(UpdateLevel)` redoes only what is needed
   (Arnoldi, coarse matrix at every refactorization) grow with nev: 1.04-1.20× the cost per solve at
   240 processes. The gain shrinks with the mesh (320³: 16 / 15 / 15 applications after a rebuild) and
   the coarse space ages at the same rate, so neither mesh independence nor fewer rebuilds are bought.
+- **Kinds of solves.** With `--warm-start 1` or final tolerances the correctors of a step are different
+  solves (the first starts from the previous step, the next ones from the previous corrector, the last
+  goes to an absolute tolerance): with a fresh basis their q differs by 30-80% (bubbles 32³), which
+  one q_ref would count as aging. The policy then keeps one q_ref per corrector index, set by the
+  first solve of that corrector after a Rebuild. Without warm start or final tolerances nothing changes.
 - **Driver** (`runTimeLoop`): steps × correctors; the matrix values of a step come from the
   generator at pseudo-time = step or from one Matrix Market file per step (`--matrix 'p_%04d.mtx'`,
   e.g. matrices written by OpenFOAM), sent by rank 0 without repartitioning
@@ -484,6 +490,29 @@ OpenFOAM solvers are measured on the same systems as `schwarz2lvl`:
   V-cycles from 192³ to 320³, Schwarz 15 → 25 iterations); parallel efficiency 240 → 432 processes
   0.85-1.18 against 0.56-0.96. Orthogonalization and stopping test of GMRES are 12-20% of the cost,
   the setup and the rebuilds of the coarse space ~30%.
+
+## Warm start and PIMPLE tolerances
+
+The earlier comparisons with GAMG solved every system from 0, with b = vol·α (constant on every
+bubble) and the same tolerance for the three correctors of a step. An OpenFOAM time loop differs in
+three ways, all available now:
+
+- `--bubble-source buoyancy` (`matgen ... source=buoyancy`, bubblesDict `source buoyancy;`): the
+  right-hand side of the p_rgh equation of interFoam for the fluid at rest, A p = −div(φ_g),
+  φ_g = −gh_f snGrad(ρ)_f β_f |S_f|, gh_f = 1 − z_f (|g| = 1 downward, reference on the top face).
+  It lives on the interfaces only and sums to zero over every bubble (Gauss), while α is constant on
+  the bubbles: α projects almost entirely on the near-kernel modes of D⁻¹A (one per bubble), the
+  modes a coefficient-blind agglomeration cannot represent. The matrix does not change.
+- `--warm-start 1`: every solve starts from the solution of the previous one (`bubblyPressureFoam
+  -warmStart`). The OpenFOAM normalisation factor F is computed from that initial guess, as in
+  OpenFOAM.
+- `--atol T` (OpenFOAM `tolerance`, `--stop-norm openfoam` only): stop at
+  Σ|r| ≤ max(rtol Σ|r₀|, T F); no iteration if the initial guess already satisfies it.
+  `--final-rtol 0 --final-atol T`: the last corrector of every step to the tolerance only, as
+  p_rghFinal (`bubblyPressureFoam` uses `solvers/<name>Final` for it when it exists).
+
+`test/gamg/Allrun_warm.sh` runs the comparison with GAMG in these conditions (see
+`test/gamg/README.md`).
 
 ## BiCGStab
 

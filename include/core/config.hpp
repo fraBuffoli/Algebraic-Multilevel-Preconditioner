@@ -32,6 +32,8 @@ struct SolverConfig{
     int nbubbles = 50;                      ///< Generator bubbles: number of bubbles.
     double radius = 0.06;                   ///< Generator bubbles: radius (unit domain).
     double cfl = 0.5;                       ///< Generator bubbles: rise per step [cells].
+    std::string bubble_source = "alpha";    ///< Generator bubbles: --rhs generated is "alpha" (vol x alpha) or
+                                            ///< "buoyancy" (p_rgh source of a VoF solver, fluid at rest).
     double pulse = 0.0;                     ///< Generators convdiff/coupled: amplitude of the convection pulsation in time.
     int pulse_period = 20;                  ///< Period of the pulsation [steps].
 
@@ -42,6 +44,9 @@ struct SolverConfig{
     double rebuild_growth = 4.0;            ///< auto: also rebuild when iterations per decade exceed this factor times the reference (0 = off).
     int rebuild_every = 0;                  ///< auto: also rebuild after this many refactorizations (0 = off).
     std::string steps_csv;                  ///< Append one line per solve to this CSV file (rank 0).
+    bool warm_start = false;                ///< Every solve starts from the solution of the previous one (else from 0).
+    double final_rtol = -1.0;               ///< rtol of the last corrector of every step (as p_rghFinal; < 0: rtol).
+    double final_atol = -1.0;               ///< atol of the last corrector of every step (< 0: atol).
 
     // PARTITIONING PARAMETERS
     std::string metis_objective = "cut";    ///< METIS objective: "cut" or "vol".
@@ -80,6 +85,8 @@ struct SolverConfig{
                                             ///< (right preconditioning, the algorithm of OpenFOAM's PBiCGStab).
     int restart = 30;                       ///< GMRES restart length.
     double rtol = 1e-8;                     ///< Relative tolerance on the unpreconditioned residual.
+    double atol = 0.0;                      ///< --stop-norm openfoam only: absolute tolerance on the normalised
+                                            ///< residual (OpenFOAM `tolerance`): stop when sum|r| / F <= atol.
     std::string stop_norm = "l2";           ///< Stopping test: "l2" (||r||_2 <= rtol ||b||_2) or "openfoam"
                                             ///< (OpenFOAM normalised residual, relTol semantics: sum|r| <= rtol sum|r0|).
     int maxit = 1000;                       ///< Maximum number of iterations (applications of the preconditioner).
