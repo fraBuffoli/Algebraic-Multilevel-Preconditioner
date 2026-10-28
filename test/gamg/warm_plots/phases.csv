@@ -1,0 +1,137 @@
+NP,N,variant,steps,phase,seconds_per_step
+240,192,W_GAMG,24,setup (coarse matrices),0.00664912
+240,192,W_GAMG,24,iterations,0.574341
+240,192,W_GAMG,24,"iterations, first corrector",0.0239002
+240,192,W_GAMG,24,"iterations, second corrector",0.0423149
+240,192,W_GAMG,24,"iterations, last corrector",0.508126
+240,192,W_GAMG_PCG,24,setup (coarse matrices),0.00395129
+240,192,W_GAMG_PCG,24,iterations,1.229
+240,192,W_GAMG_PCG,24,"iterations, first corrector",0.0223318
+240,192,W_GAMG_PCG,24,"iterations, second corrector",0.04246
+240,192,W_GAMG_PCG,24,"iterations, last corrector",1.16421
+240,192,s2l_1L,24,setup,0.0026474
+240,192,s2l_1L,24,refactorizations,0.0600012
+240,192,s2l_1L,24,iterations: local solves,2.51618
+240,192,s2l_1L,24,iterations: Krylov,0.694193
+240,192,s2l_1L,24,"iterations, first corrector",0.0347068
+240,192,s2l_1L,24,"iterations, second corrector",0.085465
+240,192,s2l_1L,24,"iterations, last corrector",3.0902
+240,192,s2l_2L,24,setup: eigensolver,0.120479
+240,192,s2l_2L,24,setup: rest,0.0395956
+240,192,s2l_2L,24,refactorizations,0.0900018
+240,192,s2l_2L,24,iterations: local solves,0.183398
+240,192,s2l_2L,24,iterations: coarse correction,0.0923078
+240,192,s2l_2L,24,iterations: Krylov,0.0794682
+240,192,s2l_2L,24,"iterations, first corrector",0.0370218
+240,192,s2l_2L,24,"iterations, second corrector",0.059352
+240,192,s2l_2L,24,"iterations, last corrector",0.258801
+240,256,W_GAMG,24,setup (coarse matrices),0.0129478
+240,256,W_GAMG,24,iterations,1.95308
+240,256,W_GAMG,24,"iterations, first corrector",0.0596358
+240,256,W_GAMG,24,"iterations, second corrector",0.130685
+240,256,W_GAMG,24,"iterations, last corrector",1.76276
+240,256,s2l_1L,24,setup,0.00531846
+240,256,s2l_1L,24,refactorizations,0.124278
+240,256,s2l_1L,24,iterations: local solves,8.59506
+240,256,s2l_1L,24,iterations: Krylov,2.5094
+240,256,s2l_1L,24,"iterations, first corrector",0.0864505
+240,256,s2l_1L,24,"iterations, second corrector",0.166427
+240,256,s2l_1L,24,"iterations, last corrector",10.8516
+240,256,s2l_2L,24,setup: eigensolver,0.40366
+240,256,s2l_2L,24,setup: rest,0.109051
+240,256,s2l_2L,24,refactorizations,0.17797
+240,256,s2l_2L,24,iterations: local solves,0.575107
+240,256,s2l_2L,24,iterations: coarse correction,0.220498
+240,256,s2l_2L,24,iterations: Krylov,0.193736
+240,256,s2l_2L,24,"iterations, first corrector",0.0865326
+240,256,s2l_2L,24,"iterations, second corrector",0.160416
+240,256,s2l_2L,24,"iterations, last corrector",0.742393
+240,320,W_GAMG,24,setup (coarse matrices),0.0265177
+240,320,W_GAMG,24,iterations,5.05138
+240,320,W_GAMG,24,"iterations, first corrector",0.132584
+240,320,W_GAMG,24,"iterations, second corrector",0.310746
+240,320,W_GAMG,24,"iterations, last corrector",4.60806
+240,320,s2l_1L,24,setup,0.0105953
+240,320,s2l_1L,24,refactorizations,0.255848
+240,320,s2l_1L,24,iterations: local solves,19.9463
+240,320,s2l_1L,24,iterations: Krylov,6.00438
+240,320,s2l_1L,24,"iterations, first corrector",0.179656
+240,320,s2l_1L,24,"iterations, second corrector",0.30176
+240,320,s2l_1L,24,"iterations, last corrector",25.4692
+240,320,s2l_2L,24,setup: eigensolver,1.13998
+240,320,s2l_2L,24,setup: rest,0.34015
+240,320,s2l_2L,24,refactorizations,0.355893
+240,320,s2l_2L,24,iterations: local solves,1.45164
+240,320,s2l_2L,24,iterations: coarse correction,0.503537
+240,320,s2l_2L,24,iterations: Krylov,0.512516
+240,320,s2l_2L,24,"iterations, first corrector",0.172138
+240,320,s2l_2L,24,"iterations, second corrector",0.366501
+240,320,s2l_2L,24,"iterations, last corrector",1.92906
+432,192,W_GAMG,24,setup (coarse matrices),0.00425079
+432,192,W_GAMG,24,iterations,0.642671
+432,192,W_GAMG,24,"iterations, first corrector",0.014735
+432,192,W_GAMG,24,"iterations, second corrector",0.0290179
+432,192,W_GAMG,24,"iterations, last corrector",0.598918
+432,192,W_GAMG_PCG,24,setup (coarse matrices),0.00244538
+432,192,W_GAMG_PCG,24,iterations,1.57403
+432,192,W_GAMG_PCG,24,"iterations, first corrector",0.0141178
+432,192,W_GAMG_PCG,24,"iterations, second corrector",0.0304591
+432,192,W_GAMG_PCG,24,"iterations, last corrector",1.52945
+432,192,s2l_1L,24,setup,0.00140957
+432,192,s2l_1L,24,refactorizations,0.0316469
+432,192,s2l_1L,24,iterations: local solves,1.34427
+432,192,s2l_1L,24,iterations: Krylov,0.522505
+432,192,s2l_1L,24,"iterations, first corrector",0.0210885
+432,192,s2l_1L,24,"iterations, second corrector",0.0466206
+432,192,s2l_1L,24,"iterations, last corrector",1.79906
+432,192,s2l_2L,24,setup: eigensolver,0.0575968
+432,192,s2l_2L,24,setup: rest,0.0241725
+432,192,s2l_2L,24,refactorizations,0.0590219
+432,192,s2l_2L,24,iterations: local solves,0.0844248
+432,192,s2l_2L,24,iterations: coarse correction,0.0886314
+432,192,s2l_2L,24,iterations: Krylov,0.04437
+432,192,s2l_2L,24,"iterations, first corrector",0.0302927
+432,192,s2l_2L,24,"iterations, second corrector",0.0424421
+432,192,s2l_2L,24,"iterations, last corrector",0.144691
+432,256,W_GAMG,24,setup (coarse matrices),0.00744662
+432,256,W_GAMG,24,iterations,1.50137
+432,256,W_GAMG,24,"iterations, first corrector",0.0331865
+432,256,W_GAMG,24,"iterations, second corrector",0.0773693
+432,256,W_GAMG,24,"iterations, last corrector",1.39081
+432,256,s2l_1L,24,setup,0.00361962
+432,256,s2l_1L,24,refactorizations,0.0850307
+432,256,s2l_1L,24,iterations: local solves,5.1754
+432,256,s2l_1L,24,iterations: Krylov,1.58514
+432,256,s2l_1L,24,"iterations, first corrector",0.0497226
+432,256,s2l_1L,24,"iterations, second corrector",0.0942477
+432,256,s2l_1L,24,"iterations, last corrector",6.61657
+432,256,s2l_2L,24,setup: eigensolver,0.174821
+432,256,s2l_2L,24,setup: rest,0.0621129
+432,256,s2l_2L,24,refactorizations,0.131011
+432,256,s2l_2L,24,iterations: local solves,0.269769
+432,256,s2l_2L,24,iterations: coarse correction,0.171936
+432,256,s2l_2L,24,iterations: Krylov,0.101565
+432,256,s2l_2L,24,"iterations, first corrector",0.0590225
+432,256,s2l_2L,24,"iterations, second corrector",0.102926
+432,256,s2l_2L,24,"iterations, last corrector",0.381321
+432,320,W_GAMG,24,setup (coarse matrices),0.0145376
+432,320,W_GAMG,24,iterations,2.77477
+432,320,W_GAMG,24,"iterations, first corrector",0.070358
+432,320,W_GAMG,24,"iterations, second corrector",0.169655
+432,320,W_GAMG,24,"iterations, last corrector",2.53476
+432,320,s2l_1L,24,setup,0.00581358
+432,320,s2l_1L,24,refactorizations,0.13631
+432,320,s2l_1L,24,iterations: local solves,11.2797
+432,320,s2l_1L,24,iterations: Krylov,3.73062
+432,320,s2l_1L,24,"iterations, first corrector",0.0968846
+432,320,s2l_1L,24,"iterations, second corrector",0.178734
+432,320,s2l_1L,24,"iterations, last corrector",14.7347
+432,320,s2l_2L,24,setup: eigensolver,0.467184
+432,320,s2l_2L,24,setup: rest,0.15954
+432,320,s2l_2L,24,refactorizations,0.212637
+432,320,s2l_2L,24,iterations: local solves,0.652725
+432,320,s2l_2L,24,iterations: coarse correction,0.30836
+432,320,s2l_2L,24,iterations: Krylov,0.263908
+432,320,s2l_2L,24,"iterations, first corrector",0.108812
+432,320,s2l_2L,24,"iterations, second corrector",0.210765
+432,320,s2l_2L,24,"iterations, last corrector",0.905416

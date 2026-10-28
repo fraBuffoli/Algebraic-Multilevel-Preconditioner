@@ -1,0 +1,10 @@
+bub192_s2l_2L 240 ok 69 0
+bub192_s2l_1L 240 ok 132 0
+bub192_W_GAMG 240 ok 23 0
+bub192_W_GAMG_PCG 240 ok 37 0
+bub256_s2l_2L 240 ok 159 0
+bub256_s2l_1L 240 ok 389 0
+bub256_W_GAMG 240 ok 56 0
+bub320_s2l_2L 240 ok 327 0
+bub320_s2l_1L 240 ok 855 0
+bub320_W_GAMG 240 ok 136 0

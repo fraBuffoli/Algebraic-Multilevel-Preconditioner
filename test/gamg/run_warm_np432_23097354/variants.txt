@@ -1,0 +1,4 @@
+s2l_2L schwarz2lvl --krylov bicgstab --tau 0.3 --nev 8 --eig-tol 1e-2 --eig-ncv 12 --local-approx amg --coarse-solver cpardiso --coarse-procs 48 --coarse-root-below 10000 --stop-norm openfoam --rtol 0.05 --atol 1e-7 --final-rtol 0 --final-atol 1e-7 --warm-start 1
+s2l_1L schwarz2lvl --krylov bicgstab --coarse none --local-approx amg --stop-norm openfoam --rtol 0.05 --atol 1e-7 --final-rtol 0 --final-atol 1e-7 --warm-start 1
+W_GAMG openfoam -solver W_GAMG -warmStart relTol 0.05 tolerance 1e-7, W_GAMGFinal tolerance 1e-7
+W_GAMG_PCG openfoam -solver W_GAMG_PCG -warmStart relTol 0.05 tolerance 1e-7, W_GAMG_PCGFinal tolerance 1e-7

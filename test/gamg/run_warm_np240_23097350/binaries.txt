@@ -1,0 +1,1 @@
+sources=729b64f0bbbf test_bubbles=passed matrix_check="OK: both sources (alpha, buoyancy), parallel assembly on 4 processes" 2026-10-27 17:24:09 test_warmstart=passed test_stopping=passed test_bicgstab=passed

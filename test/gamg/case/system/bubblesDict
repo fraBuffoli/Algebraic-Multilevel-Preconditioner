@@ -24,6 +24,7 @@ radius      0.04;
 rhoRatio    1000;
 cfl         0.5;
 seed        2024;
+source      alpha;  // right-hand side: alpha | buoyancy (p_rgh source, fluid at rest)
 
 steps       20;     // pseudo-time = step
 correctors  3;      // solves per step

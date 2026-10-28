@@ -1,0 +1,15 @@
+Currently Loaded Modulefiles:
+ 1) profile/base(default)                             
+ 2) cintools/1.0                                      
+ 3) profile/eng                                       
+ 4) autoload                                          
+ 5) intel/oneapi-2021--binary <aL>                    
+ 6) intelmpi/oneapi-2021--binary <aL>                 
+ 7) boost/1.76.0--intelmpi--oneapi-2021--binary <aL>  
+ 8) fftw/3.3.9--intelmpi--oneapi-2021--binary <aL>    
+ 9) openfoam/10                                       
+10) metis/5.1.0--gcc--10.2.0                          
+11) intel-oneapi-mkl/2023.2.0                         
+
+Key:
+(symbolic-version)  <module-tag>  <aL>=auto-loaded  

@@ -1,0 +1,10 @@
+bub192_s2l_2L 432 ok 63 0
+bub192_s2l_1L 432 ok 99 0
+bub192_W_GAMG 432 ok 24 0
+bub192_W_GAMG_PCG 432 ok 43 0
+bub256_s2l_2L 432 ok 141 0
+bub256_s2l_1L 432 ok 285 0
+bub256_W_GAMG 432 ok 42 0
+bub320_s2l_2L 432 ok 276 0
+bub320_s2l_1L 432 not_converged 589 2
+bub320_W_GAMG 432 ok 74 0

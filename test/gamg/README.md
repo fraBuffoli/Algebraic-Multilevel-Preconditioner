@@ -5,6 +5,8 @@ size): [`RESULTS.md`](RESULTS.md). Latest: [Krylov campaign](#krylov-campaign-al
 BiCGStab with the same preconditioner), [rebuilds](#rebuilds-run_rebuild_np240_23093509) (cheaper rebuilds
 of the coarse space), [coarse space size](#coarse-space-size-campaign-allrun_nevsh) (`--nev` 8 / 12 / 16:
 8 stays). Setting to port: BiCGStab, `--tau 0.3 --nev 8 --eig-tol 1e-2 --eig-ncv 12`, AMG local solves.
+Next: [warm-start campaign](#warm-start-campaign-allrun_warmsh) (p_rgh source, warm start, PIMPLE
+tolerances).
 
 **Idea.** The goal is a preconditioner competitive with the GAMG of OpenFOAM. This campaign measures
 where we stand, before any porting: OpenFOAM solves the pressure matrices of the `bubbles3d` problem
@@ -200,6 +202,61 @@ shrinks with the mesh (right after a rebuild at 320³: 16 / 15 / 15), so no mesh
 back, and the coarse space ages at the same rate (one rebuild in every run). `--nev 8` stays. Not run at
 432 processes: smaller subdomains, a doubled coarse problem on rank 0 (n0 = 6912) and a coarse correction
 that already weighs more there would make the extra cost per application larger than at 240.
+
+## Warm-start campaign (`Allrun_warm.sh`)
+
+Phase A before a port: are the 2.0-2.6× of the earlier campaigns a property of the method or of the
+test? Three choices of the earlier campaigns favour the coarse space exactly where GAMG is weak:
+b = vol·α is constant on every bubble (the near-kernel modes of D⁻¹A, one per bubble, which the
+`faceAreaPair` agglomeration does not represent), every solve starts from 0, and the three correctors
+of a step are the same solve. Locally (48³, 25 bubbles, 8 subdomains) the energy of the initial error
+in the 10 lowest modes of (A, diag A) was 99% with b = α from 0, 1% with the p_rgh source from 0 and
+< 0.1% with it and a warm start; a coefficient-blind aggregation AMG (proxy of GAMG) needed 22 / 6 / 5
+V-cycles to relTol 1e-2, the two-level Schwarz 7 / 4 / 3 applications.
+
+- **Systems**: the matrices of the scaling campaign (bubbles3d, 150 bubbles, ρ ratio 1000, 0.5 cells per
+  step), right-hand side the p_rgh source of interFoam for the fluid at rest (`--bubble-source
+  buoyancy`, bubblesDict `source buoyancy;`), checked against OpenFOAM with the alpha source (24³).
+- **Time loop as PIMPLE**: every solve from the previous solution (`--warm-start 1`, `-warmStart`);
+  correctors at relTol 0.05 or tolerance 1e-7 of the normalised residual, the last corrector of every
+  step at tolerance 1e-7 only (`W_<variant>Final`, `--final-rtol 0 --final-atol 1e-7`): the p_rgh /
+  p_rghFinal controls of the interFoam tutorials. 24 steps × 3 correctors.
+- **Variants**: `s2l_2L` (the setting to port: BiCGStab + RAS/deflated, AMG local solves, `--tau 0.3
+  --nev 8 --eig-tol 1e-2 --eig-ncv 12`, reuse auto), `s2l_1L` (BiCGStab + one-level RAS, AMG local
+  solves: no eigensolver, no rebuilds), `W_GAMG` (GAMG, DIC smoother) and, at the smallest size only,
+  `W_GAMG_PCG` (GAMG for the correctors, PCG + GAMG for the last one). `W_PCG_DIC` (the damBreak
+  setting) is in `fvSolution` but not run by default (thousands of iterations to 1e-7).
+- **Grid**: 192³, 256³, 320³ on 240 and 432 processes (one job each).
+- **Reuse policy**: with a warm start the correctors are different kinds of solves; the policy keeps
+  one q_ref per corrector (main README, *Setup reuse*), otherwise the differences between correctors
+  would count as aging.
+
+```bash
+cd test/gamg
+./submit_warm.sh              # Allprep_scaling.sh (1 node) + Allrun_warm.sh on 5 then 9 nodes (~1 h each)
+PREP=0 ./submit_warm.sh       # cases and binaries already there (cases/ of the scaling campaign)
+sbatch Allrun_warm.sh         # one job, 240 processes, prepares what is missing
+python3 report_warm.py run_warm_np240_<jobid> run_warm_np432_<jobid> \
+    --ref run_scaling_np240_23040226 --ref run_scaling_np432_23040228   # -> warm_report/
+```
+
+Separate the two effects (one more job each): `SOURCE=alpha sbatch Allrun_warm.sh` (old right-hand
+side, warm start and PIMPLE tolerances), `WARM=0 sbatch Allrun_warm.sh` (p_rgh source, every solve from
+0); their run directories are named `run_warm_alpha_*` and `run_warm_cold_*` and are reported
+separately. The job builds everything on the compute node (`cases/bin_<md5>`, with a lock, shared with
+Allprep_scaling.sh), checks the matrices of both right-hand sides against OpenFOAM and runs
+`test_warmstart`, `test_stopping`, `test_bicgstab`; any failure stops it with `STOP: ...` in
+`allrun_warm_<np>.out`. Local check (OpenFOAM-10 sourced): `SMOKE=1 NP=1 ./Allrun_warm.sh`.
+
+**Reading `warm_report/report.md`.** *Cost per time step*: all correctors of a step, setup and updates
+included, for every variant, and the ratio best OpenFOAM variant / Schwarz (> 1: Schwarz faster), over
+the whole run and over the steps after the first (steady). *Iterations*: correctors and last corrector
+separately, and *res0*, the initial normalised residual of the first corrector (how good the warm
+start is). *Schwarz: setup and phases*: setup share and rebuilds. *Against the earlier setting*
+(`--ref`): the GAMG / Schwarz ratio of the scaling campaign at the same mesh and processes. Decision
+proposed before the run: port if the two-level Schwarz stays ≥ ~1.5× faster than the best OpenFOAM
+variant at both process counts (the port adds the LDU → CSR conversion, OpenFOAM's decomposition and
+processor interfaces); if the one-level RAS is as fast, port that first.
 
 ## What to look at in `report.md` (`Allrun_gamg.sh`)
 

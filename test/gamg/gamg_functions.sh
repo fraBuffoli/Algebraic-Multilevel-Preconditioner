@@ -69,17 +69,23 @@ case_ok() {
 }
 
 # set_dicts DIR: solver controls, schemes and bubbles of the current template, then the bubble
-# parameters of the campaign (NBUB RADIUS RHO CFL SEED STEPS CORR [RELTOL]).
+# parameters of the campaign (NBUB RADIUS RHO CFL SEED STEPS CORR [RELTOL] [SOURCE] [W_RTOL W_ATOL]).
+# SOURCE: right-hand side, alpha (default) or buoyancy. W_RTOL / W_ATOL: relTol / tolerance of the
+# W_* variants of the warm-start campaign (template: 0.05 / 1e-7).
 set_dicts() {
     local d=$1 f
     for f in controlDict fvSchemes fvSolution bubblesDict; do cp $GAMG_DIR/case/system/$f $d/system/$f; done
     sed -i -e "s/^nBubbles .*/nBubbles    $NBUB;/" -e "s/^radius .*/radius      $RADIUS;/" \
            -e "s/^rhoRatio .*/rhoRatio    $RHO;/" -e "s/^cfl .*/cfl         $CFL;/" \
            -e "s/^seed .*/seed        $SEED;/" -e "s/^steps .*/steps       ${STEPS:-1};/" \
-           -e "s/^correctors .*/correctors  $CORR;/" $d/system/bubblesDict
+           -e "s/^correctors .*/correctors  $CORR;/" -e "s/^source .*/source      ${SOURCE:-alpha};/" \
+           $d/system/bubblesDict
     # RELTOL (optional): relTol of the solver variants (the template has 1e-9; the relTol 0 of the
     # GAMG preconditioner of PCG_GAMG is kept).
     [ -z "$RELTOL" ] || sed -i "s/^\( *relTol  *\)1e-9;/\1$RELTOL;/" $d/system/fvSolution
+    [ -z "$W_RTOL" ] || sed -i "s/^\( *relTol  *\)0\.05;/\1$W_RTOL;/" $d/system/fvSolution
+    [ -z "$W_ATOL" ] || sed -i "s/^\( *tolerance  *\)1e-7;/\1$W_ATOL;/" $d/system/fvSolution
+    grep -q "^source  *${SOURCE:-alpha};" $d/system/bubblesDict    # template without the source entry: fail
 }
 
 # build_app DIR: bubblyPressureFoam built in DIR (copy of the sources), executable DIR/bin/...
@@ -96,15 +102,57 @@ build_app() {
 }
 
 # matrix_check DIR APP MATGEN: 24^3 serial case, OpenFOAM matrix of step 3 (-writeMatrix) against
-# the generator (matgen). Last line of DIR/log.check_matrix: OK / DIFFERENT. Returns 0 if OK.
+# the generator (matgen), for both right-hand sides (alpha, buoyancy). Last line of
+# DIR/log.check_matrix: OK / DIFFERENT (one line per source before it). Returns 0 if both are OK.
 matrix_check() {
-    local d=$1 app=$2 matgen=$3
-    prep_case 24 1 $d/check24 > $d/log.check_prep 2>&1 && STEPS=4 set_dicts $d/check24 &&
-        ( timeout 300 $app -case $d/check24 -solver GAMG_GS -steps 4 -correctors 1 -writeMatrix $d/check_of \
-              -csv $d/check_of.csv > $d/log.check_app 2>&1 ) &&
-        ( cd $d && timeout 300 $matgen bubbles3d 24 nb=$NBUB radius=$RADIUS rho=$RHO cfl=$CFL t=3 seed=$SEED \
-              out=$d/check_s2l > $d/log.check_matgen 2>&1 ) &&
-        python3 $GAMG_DIR/compare_mtx.py $d/check_of $d/check_s2l > $d/log.check_matrix 2>&1
+    local d=$1 app=$2 matgen=$3 src ok=0
+    prep_case 24 1 $d/check24 > $d/log.check_prep 2>&1 || { echo "DIFFERENT: no check case" > $d/log.check_matrix; return 1; }
+    : > $d/log.check_matrix.all
+    for src in alpha buoyancy; do
+        rm -f $d/check_of_$src.mtx $d/check_s2l_$src.mtx
+        STEPS=4 SOURCE=$src set_dicts $d/check24 &&
+            ( timeout 300 $app -case $d/check24 -solver GAMG_GS -steps 4 -correctors 1 -writeMatrix $d/check_of_$src \
+                  -csv $d/check_of_$src.csv > $d/log.check_app_$src 2>&1 ) &&
+            ( cd $d && timeout 300 $matgen bubbles3d 24 nb=$NBUB radius=$RADIUS rho=$RHO cfl=$CFL t=3 seed=$SEED \
+                  source=$src out=$d/check_s2l_$src > $d/log.check_matgen_$src 2>&1 ) &&
+            python3 $GAMG_DIR/compare_mtx.py $d/check_of_$src $d/check_s2l_$src > $d/log.check_matrix_$src 2>&1 || ok=1
+        echo "$src: $(tail -n1 $d/log.check_matrix_$src 2>/dev/null || echo 'no result')" >> $d/log.check_matrix.all
+    done
+    # Parallel assembly (the buoyancy source has terms on the processor faces): the checksums of the
+    # right-hand side of every step, printed by the application, on CHECK_NP processes against the
+    # serial runs above. Skipped where decomposePar is not available (local smoke tests).
+    local par=""
+    if [ $ok = 0 ] && [ "${CHECK_NP:-4}" -gt 1 ] && command -v decomposePar > /dev/null; then
+        sed -i "s/^numberOfSubdomains .*/numberOfSubdomains ${CHECK_NP:-4};/" $d/check24/system/decomposeParDict
+        if decompose $d/check24 ${CHECK_NP:-4} hierarchical; then
+            for src in alpha buoyancy; do
+                STEPS=4 SOURCE=$src set_dicts $d/check24 &&
+                    ( timeout 300 mpirun $MPIRUN_OPTS -n ${CHECK_NP:-4} $app -case $d/check24 -parallel -solver GAMG_GS -steps 4 \
+                          -correctors 1 -csv $d/check_par_$src.csv > $d/log.check_app_par_$src 2>&1 ) &&
+                    python3 - $d/log.check_app_$src $d/log.check_app_par_$src > $d/log.check_par_$src 2>&1 <<'PYEOF' || ok=1
+import sys
+def sums(path):
+    return [tuple(float(x) for x in l.split()[-2:]) for l in open(path) if "rhs checksums" in l]
+s, p = sums(sys.argv[1]), sums(sys.argv[2])
+# both checksums relative to sum|b| of the serial run (sum b w may be small: b sums to ~0)
+d = max(abs(a - b) / max(u[0], 1e-300) for u, v in zip(s, p) for a, b in zip(u, v)) if s and len(s) == len(p) else float("inf")
+print("%s: %d steps, rhs checksums serial / parallel differ by %.1e of sum|b| (tolerance 1e-12)" % ("OK" if d <= 1e-12 else "DIFFERENT", len(s), d))
+sys.exit(0 if d <= 1e-12 else 1)
+PYEOF
+                echo "$src, ${CHECK_NP:-4} processes: $(tail -n1 $d/log.check_par_$src 2>/dev/null || echo 'no result')" >> $d/log.check_matrix.all
+            done
+            par=", parallel assembly on ${CHECK_NP:-4} processes"
+        else
+            echo "parallel check: decomposePar failed (see $d/check24/log.decomposePar.*)" >> $d/log.check_matrix.all
+            ok=1
+        fi
+    elif [ $ok = 0 ]; then
+        echo "parallel check skipped (no decomposePar or CHECK_NP <= 1)" >> $d/log.check_matrix.all
+    fi
+    { cat $d/log.check_matrix.all
+      if [ $ok = 0 ]; then echo "OK: both sources (alpha, buoyancy)$par"; else echo "DIFFERENT: see log.check_matrix_* / log.check_par_*"; fi
+    } > $d/log.check_matrix
+    return $ok
 }
 
 # src_md5: fingerprint of the sources, build files and compiler flags. Binaries built by

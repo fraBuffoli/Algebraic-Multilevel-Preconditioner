@@ -1,0 +1,5 @@
+alpha: OK: matrices equal to 3.6e-15, right-hand sides to 1.0e-14 (relative to the largest entry; tolerance 1e-12)
+buoyancy: OK: matrices equal to 3.6e-15, right-hand sides to 2.5e-15 (relative to the largest entry; tolerance 1e-12)
+alpha, 4 processes: OK: 4 steps, rhs checksums serial / parallel differ by 5.4e-15 of sum|b| (tolerance 1e-12)
+buoyancy, 4 processes: OK: 4 steps, rhs checksums serial / parallel differ by 8.1e-15 of sum|b| (tolerance 1e-12)
+OK: both sources (alpha, buoyancy), parallel assembly on 4 processes

@@ -3,8 +3,10 @@
 The goal of the project is a preconditioner competitive with the GAMG of OpenFOAM. These campaigns
 measure where the two-level Schwarz preconditioner stands **before any porting**: OpenFOAM
 (`openfoam/bubblyPressureFoam`) and `schwarz2lvl` solve the same pressure matrices, the bubbles3d
-problem of P5/P7b (−∇·(β∇p) = α, β = 1/ρ, 150 rising gas bubbles, density ratio 1000, 0.5 cells of
-rise per step, 3 solves per step, every solve from 0).
+problem of P5/P7b (−∇·(β∇p) = b, β = 1/ρ, 150 rising gas bubbles, density ratio 1000, 0.5 cells of
+rise per step, 3 solves per step). Sections 1-7 solve every system from 0 with b = vol·α; section 8
+repeats the comparison in the conditions of a PIMPLE loop: the p_rgh source of a VoF solver, every
+solve from the previous solution, the last corrector of every step to an absolute tolerance.
 
 | campaign | script | what | outcome |
 |:--|:--|:--|:--|
@@ -13,9 +15,10 @@ rise per step, 3 solves per step, every solve from 0).
 | `run_scaling_np240_23040226`, `_np336_23040227`, `_np432_23040228` | `Allrun_scaling.sh` | GAMG_DIC vs `amg`, 192³ / 256³ / 320³ × 240 / 336 / 432 processes, **relTol 1e-2** of the OpenFOAM residual for both | practical tolerance and scaling, [`report.md`](scaling_report/report.md) |
 | `run_krylov_np240_r1e-2_23091304` | `Allrun_krylov.sh` | the same Schwarz preconditioner inside GMRES(30) and inside **BiCGStab**, 192³ / 256³ / 320³, 240 processes, relTol 1e-2 | Krylov method (section 5) |
 | `run_rebuild_np240_23093509` | prototype script (not kept) | cheaper rebuilds of the coarse space: reuse of the factorization of Ã_ii, looser Arnoldi; BiCGStab, 256³ / 320³, 24 steps, 240 processes, relTol 1e-2 | rebuilds (section 6) |
-| `run_nev_np240_23094441` | `Allrun_nev.sh` | size of the coarse space: `--nev 8 / 12 / 16` with the looser Arnoldi of section 6; BiCGStab, 192³ / 256³ / 320³, 240 processes, relTol 1e-2 | coarse space size (section 7) |
+| `run_nev_np240_23094441` | `Allrun_nev.sh` (not in the repository) | size of the coarse space: `--nev 8 / 12 / 16` with the looser Arnoldi of section 6; BiCGStab, 192³ / 256³ / 320³, 240 processes, relTol 1e-2 | coarse space size (section 7) |
+| `run_warm_np240_23097350`, `run_warm_np432_23097354` | `Allrun_warm.sh` | PIMPLE-like loop: p_rgh source, warm start, correctors to relTol 0.05 or tolerance 1e-7, last corrector to tolerance 1e-7; two-level Schwarz, one-level RAS, GAMG_DIC (+ PCG_GAMG for the last corrector at 192³), 192³ / 256³ / 320³, 240 and 432 processes | warm start (section 8), [`report.md`](warm_report/report.md) |
 
-Schwarz = `--tau 0.3 --nev 8 --eig-tol 1e-4` (coarse space of P5), `--local-approx amg` (one AMG
+Unless stated otherwise, Schwarz = `--tau 0.3 --nev 8 --eig-tol 1e-4` (coarse space of P5), `--local-approx amg` (one AMG
 V-cycle per local solve, P7b; `exact`: Cholesky factors of A_ii), `--reuse auto`, coarse problem on
 rank 0 (n0 < 10000). GAMG = OpenFOAM-10 defaults, `faceAreaPair` agglomeration, DIC (`GAMG_DIC`) or
 GaussSeidel (`GAMG_GS`) smoother. Times: every solve between two synchronizations of all processes;
@@ -32,11 +35,15 @@ part of the costs.
 | scaling, 336 processes | Σ\|r\| ≤ 1e-2 Σ\|b\| | **2.2×** | **2.3×** | **1.9×** |
 | scaling, 432 processes | Σ\|r\| ≤ 1e-2 Σ\|b\| | **2.7×** | **2.6×** | **2.4×** |
 | BiCGStab, `--eig-tol 1e-2`, 240 processes (section 7) | Σ\|r\| ≤ 1e-2 Σ\|b\| | **2.0×** | **2.6×** | **2.5×** |
+| PIMPLE-like loop, 240 processes (section 8) | relTol 0.05 / tolerance 1e-7, warm start | **0.96×** | **1.17×** | **1.18×** |
+| PIMPLE-like loop, 432 processes (section 8) | relTol 0.05 / tolerance 1e-7, warm start | **1.81×** | **1.66×** | **1.35×** |
 
 Cost per solve of GAMG_DIC (the fastest OpenFOAM variant) divided by the cost per solve of the
 two-level Schwarz with AMG local solves, setup and updates included (> 1: Schwarz faster). Scaling
-rows: GMRES(30), `--eig-tol 1e-4`; last row: the setting to port (BiCGStab, `--nev 8 --eig-tol 1e-2
---eig-ncv 12`), cost with the machine stalls removed (≤ 2% below the measured one).
+rows: GMRES(30), `--eig-tol 1e-4`; BiCGStab row: the setting to port (BiCGStab, `--nev 8 --eig-tol 1e-2
+--eig-ncv 12`), cost with the machine stalls removed (≤ 2% below the measured one). PIMPLE-like rows:
+the same setting, p_rgh source instead of α, every solve from the previous solution; cost per **time
+step** (3 correctors, setup and rebuilds included, 24 steps), best OpenFOAM variant (GAMG_DIC) / Schwarz.
 
 1. **Same problem, verified.** OpenFOAM assembles the generated matrix and right-hand side to
    3.6e-15 / 1.0e-14 (24³ case against `matgen`, gated: the jobs stop otherwise). 864 + 492 solves
@@ -75,6 +82,14 @@ rows: GMRES(30), `--eig-tol 1e-4`; last row: the setting to port (BiCGStab, `--n
    1.15-1.20× (nev 16) the cost per solve of nev 8. The gain in iterations shrinks with the mesh
    (right after a rebuild at 320³: 16 / 15 / 15) and the aging of the coarse space is the same:
    `--nev 8` stays.
+11. **In a PIMPLE-like loop the gain is smaller and lives in the last corrector** (section 8): p_rgh
+   source of a VoF solver, warm start, correctors to relTol 0.05, last corrector to tolerance 1e-7.
+   Schwarz is faster in 5 of 6 configurations (1.17-1.81× per time step, 1.24-1.90× without the
+   first step) and equal at 192³ / 240 processes (0.96×, 1.01×). On the first two correctors GAMG is
+   1.2-1.7× cheaper; on the last one Schwarz is 2.0-4.1× cheaper (19-38 applications against 34-72
+   V-cycles on average). Setup and updates are 39-43% of the Schwarz cost. The one-level RAS costs
+   2.9-5.7× GAMG. By the rule written before the run (≥ ~1.5× at both process counts) a port is not
+   justified as it stands.
 
 ## 1. Reconnaissance: `run_gamg_23036378`
 
@@ -363,7 +378,9 @@ rebuild), the quality of the coarse space. GAMG: cost per solve of `run_scaling_
   would mean changing how the eigensolver solves with Ã_ii (e.g. iterative inner solves instead of
   the factorization): a research change with an uncertain gain, not pursued.
 
-Plots of the run (made by the prototype's report script): `run_rebuild_np240_23093509/plots/`.
+The run directory `run_rebuild_np240_23093509` (logs, CSV, plots of the prototype's report script)
+and the prototype itself are not in the repository: the table above is the record of this campaign.
+Sources `dd47448012f9` are the committed code plus the uncommitted prototype.
 
 ## 7. Size of the coarse space: `run_nev_np240_23094441`
 
@@ -396,8 +413,7 @@ removed ≤ 2% below the measured one).
 m_i = nev in every subdomain for all variants. *after each rebuild*: applications of the first solve
 with a fresh coarse space (initial setup and the one rebuild). *ms per application*: median of the
 run; *coarse corr.*: coarse solves and the product with A of the deflated correction. *cost per
-solve*: setup and updates included, stalls removed. Full tables:
-[`report.md`](run_nev_np240_23094441/report.md).
+solve*: setup and updates included, stalls removed.
 
 - **Fewer iterations, not less time in them.** nev 16 needs 22 / 19 / 8% fewer applications than
   nev 8 (192³ / 256³ / 320³), each 28 / 16 / 12% more expensive: the time of the iterations is the
@@ -445,14 +461,154 @@ solve*: setup and updates included, stalls removed. Full tables:
   application is expected above the 12-28% measured at 240 processes. The second job (9 nodes, ~30 min) was
   cancelled.
 
-![Iterations vs mesh](run_nev_np240_23094441/plots/nev_iterations_np240.png)
+The run directory `run_nev_np240_23094441` (report, CSV, logs, plots) and the scripts of this
+campaign (`Allrun_nev.sh`, `submit_nev.sh`, `report_nev.py`) are not in the repository: the tables of
+this section are the record of the campaign. Sources `dd47448012f9` (section 6); the variants do not
+use the prototype of section 6.
 
-![Cost per solve](run_nev_np240_23094441/plots/nev_cost_np240.png)
+## 8. Warm start, p_rgh source and PIMPLE tolerances: `run_warm_np240_23097350`, `run_warm_np432_23097354`
 
-![Every solve](run_nev_np240_23094441/plots/nev_solves_np240.png)
+**Why.** Sections 1-7 solve every system from 0 with b = vol·α. That right-hand side is constant on
+every bubble, i.e. close to the near-kernel modes of D⁻¹A (one per bubble, nearly constant on it) that
+the coarse space captures and the `faceAreaPair` agglomeration does not: locally (48³, 25 bubbles,
+8 subdomains) 99% of the energy of the initial error lay in the 10 lowest modes of (A, diag A). An
+OpenFOAM time loop differs in three ways, each of which lowers that weight: the source of p_rgh lives
+on the interfaces (1% in the same modes, from 0), every solve starts from the previous solution
+(< 0.1% with both), and only the last corrector of a step goes to a tight tolerance. This campaign
+repeats the comparison in those conditions, the last check before a port. Decision rule written before
+the run (`README.md`): port if the two-level Schwarz is ≥ ~1.5× faster than the best OpenFOAM variant
+at both process counts.
 
-Tables and plots: `python3 report_nev.py run_nev_np240_23094441 --gamg run_scaling_np240_23040226`
-(into the run directory).
+**Setup.**
+
+- *Systems*: the matrices of sections 3-7 (bubbles3d, 150 bubbles, ρ ratio 1000, 0.5 cells of rise
+  per step); right-hand side the p_rgh source of interFoam for the fluid at rest,
+  A p = −div(φ_g), φ_g = −gh_f snGrad(ρ)_f β_f |S_f|, gh_f = 1 − z_f (`--bubble-source buoyancy`,
+  bubblesDict `source buoyancy;`): fluxes across the interfaces only, zero sum over every bubble.
+- *Time loop*: 24 steps × 3 correctors, every solve from the previous solution (`--warm-start 1`,
+  `bubblyPressureFoam -warmStart`). The first two correctors stop at relTol 0.05 or at tolerance 1e-7
+  of the OpenFOAM normalised residual, the last corrector of every step at tolerance 1e-7 only
+  (relTol 0; `W_GAMGFinal`, `--final-rtol 0 --final-atol 1e-7`): the p_rgh / p_rghFinal controls of
+  the interFoam tutorials. The reuse policy keeps one reference q per corrector (main README, *Setup
+  reuse*): right after a rebuild q differs by a factor 1.2-2.4 between the correctors (highest in
+  the last one), which a single reference would count as aging.
+- *Variants*: `s2l_2L`, the setting to port of section 7 (BiCGStab + RAS/deflated, AMG local solves,
+  `--tau 0.3 --nev 8 --eig-tol 1e-2 --eig-ncv 12`, reuse `auto`); `s2l_1L`, BiCGStab + one-level RAS
+  with the same AMG local solves (no eigensolver, no rebuilds); `W_GAMG`, GAMG with the DIC smoother
+  (`faceAreaPair`, OpenFOAM-10 defaults) for every corrector; `W_GAMG_PCG`, the same for the first two
+  correctors and PCG + 2 GAMG V-cycles for the last one (192³ only).
+- *Grid*: 192³ / 256³ / 320³ on 240 and 432 processes (5 and 9 nodes, one job each), the OpenFOAM
+  cases of section 3 (scotch; METIS for schwarz2lvl).
+- *Checks*: sources `729b64f0bbbf` (commit `0edbd85` plus the files of this campaign; the jobs ran
+  from an extracted copy, so `log.git` reads "not a git checkout"), built on the compute node;
+  OpenFOAM matrices and right-hand sides equal to the generator for both sources (24³: 3.6e-15 /
+  2.5e-15), parallel assembly of the right-hand side equal to the serial one (4 processes, 8.1e-15 of
+  Σ|b|); `test_warmstart`, `test_stopping`, `test_bicgstab` passed. Both codes solve the same
+  sequence: the initial normalised residual of the first corrector of every step agrees to ≤ 3.1e-5
+  (relative) between schwarz2lvl and GAMG. 1440 solves, all converged except one of `s2l_1L`
+  (320³ / 432 processes, last corrector of step 0: 1000 applications, 7.9e-7).
+
+### Cost per time step [s]
+
+| N | processes | cells / process | Schwarz 2-level | RAS 1-level | GAMG_DIC | GAMG, PCG_GAMG last | **GAMG / Schwarz 2-level** | section 3 |
+|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| 192³ | 240 | 29k | 0.605 | 3.27 | 0.581 | 1.23 | **0.96×** (1.01×) | 1.79× |
+| 256³ | 240 | 70k | 1.68 | 11.2 | 1.97 | – | **1.17×** (1.24×) | 2.02× |
+| 320³ | 240 | 137k | 4.30 | 26.2 | 5.08 | – | **1.18×** (1.27×) | 1.99× |
+| 192³ | 432 | 16k | 0.358 | 1.90 | 0.647 | 1.58 | **1.81×** (1.90×) | 2.73× |
+| 256³ | 432 | 39k | 0.911 | 6.85 | 1.51 | – | **1.66×** (1.75×) | 2.59× |
+| 320³ | 432 | 76k | 2.06 | 15.2 | 2.79 | – | **1.35×** (1.46×) | 2.44× |
+
+The three correctors of a step, setup and updates included, whole run / 24 steps; in parentheses
+steps 1-23 only (no initial setup, no solve from 0): what a long run pays per step. GAMG_DIC is the best
+OpenFOAM variant everywhere. *section 3*: GAMG_DIC / two-level Schwarz, cost per solve, b = vol·α,
+every solve from 0, relTol 1e-2, GMRES. RAS 1-level at 320³ / 432: one solve not converged.
+
+### Where the time goes [s per time step]
+
+| N | processes | Schwarz: correctors 1-2 | Schwarz: last corrector | Schwarz: setup + updates | GAMG: correctors 1-2 | GAMG: last corrector | last corrector, GAMG / Schwarz |
+|--:|--:|--:|--:|--:|--:|--:|--:|
+| 192³ | 240 | 0.096 | 0.259 | 0.250 (41%) | 0.066 | 0.508 | 1.96× |
+| 256³ | 240 | 0.247 | 0.742 | 0.691 (41%) | 0.190 | 1.763 | 2.37× |
+| 320³ | 240 | 0.539 | 1.929 | 1.836 (43%) | 0.443 | 4.608 | 2.39× |
+| 192³ | 432 | 0.073 | 0.145 | 0.141 (39%) | 0.044 | 0.599 | 4.14× |
+| 256³ | 432 | 0.162 | 0.381 | 0.368 (40%) | 0.111 | 1.391 | 3.65× |
+| 320³ | 432 | 0.320 | 0.905 | 0.840 (41%) | 0.240 | 2.535 | 2.80× |
+
+*setup + updates*: initial setup, rebuilds and refactorizations (share of the Schwarz cost). The setup
+of GAMG (coarse matrices) is < 1% of its cost and not shown.
+
+### Iterations per solve
+
+| N | processes | Schwarz 2-level: corrector 1 / 2 / last (min – max) | GAMG_DIC: corrector 1 / 2 / last (min – max) | ms per it. Schwarz / GAMG | RAS 1-level: last |
+|--:|--:|--:|--:|--:|--:|
+| 192³ | 240 | 3.0 / 5.4 / 22.5 (12 – 41) | 2.0 / 4.1 / 35.2 (25 – 45) | 11.5 / 13.9 | 419 |
+| 256³ | 240 | 3.0 / 6.2 / 29.8 (15 – 66) | 2.0 / 4.5 / 56.2 (42 – 85) | 25.4 / 31.1 | 579 |
+| 320³ | 240 | 3.0 / 7.1 / 38.4 (18 – 65) | 2.0 / 5.1 / 71.9 (51 – 120) | 50.8 / 63.9 | 672 |
+| 192³ | 432 | 3.2 / 4.7 / 19.3 (10 – 39) | 2.0 / 4.1 / 33.8 (23 – 43) | 7.97 / 16.1 | 454 |
+| 256³ | 432 | 3.2 / 6.2 / 24.0 (12 – 49) | 2.0 / 5.1 / 53.0 (35 – 98) | 16.3 / 25.0 | 637 |
+| 320³ | 432 | 3.2 / 6.9 / 30.5 (13 – 64) | 2.0 / 5.2 / 59.7 (42 – 97) | 30.2 / 41.5 | 700 |
+
+Averages over the 24 steps. Schwarz: applications of the preconditioner (two per BiCGStab step);
+GAMG: V-cycles. The last corrector starts at a normalised residual of ~2-8e-4: 3.3-3.7 decades to 1e-7.
+
+- **The gain is in the last corrector.** There the two-level Schwarz is 2.0-2.4× (240 processes) and
+  2.8-4.1× (432) cheaper than GAMG: 5.4-10.3 applications per decade against 10.2-21.0 V-cycles, each
+  application 0.50-0.83× as expensive as a V-cycle. On the first two correctors (relTol 0.05, 1.3
+  decades) GAMG is 1.2-1.7× cheaper: 2 + 4-5 V-cycles against 3 + 5-7 applications. GAMG spends 88-93%
+  of its time in the last corrector, the two-level Schwarz 41-45%.
+- **Setup and rebuilds take the rest.** Setup and updates are 39-43% of the Schwarz cost (27-35% in
+  sections 3-5): the iterations got cheaper, the setup did not. The eigensolver alone is 16-26% of the
+  cost (rebuilds of 0.66-11.8 s, two per run). Built up phase by phase, the ratio best OpenFOAM /
+  Schwarz is 1.64 / 1.99 / 2.06 (240) and 2.98 / 2.78 / 2.28 (432) on the iterations only, 1.31 /
+  1.68 / 1.80 and 2.34 / 2.24 / 1.94 with the refactorizations, 0.96 / 1.17 / 1.18 and 1.81 / 1.66 /
+  1.35 with setup and rebuilds (192³ / 256³ / 320³).
+- **Aging.** Right after a rebuild the last corrector needs 11-23 applications; in 8-12 steps (4-6 cells
+  of rise) it grows 2.9-4.0×, up to or slightly above the V-cycles of GAMG, and the break-even rule
+  rebuilds there (two rebuilds in every run, at steps 8-11 and 18-23). GAMG shows no trend, its
+  agglomeration does not depend on the bubbles, but varies 1.8-2.8× (min to max) with their
+  configuration.
+- **Scaling.** From 240 to 432 processes the parallel efficiency is 0.94 / 1.02 / 1.16 for Schwarz and
+  0.50 / 0.72 / 1.01 for GAMG (192³ / 256³ / 320³): at 192³ GAMG is slower on 432 processes than on
+  240 (0.581 → 0.647 s per step, V-cycle 13.9 → 16.1 ms), as in section 3. Hence the ratio grows with
+  the processes.
+- **One level is not enough.** The one-level RAS keeps up on the first two correctors (4-5 + 8-11
+  applications) but needs 420-700 applications in the last one (120-210 per decade): 2.9-5.7× the cost
+  of GAMG. With p = 0 on the top face only, the lowest pressure modes span the whole column and a
+  one-level method moves information by one subdomain per iteration: the coarse space is what makes
+  the tight final tolerance affordable.
+- **PCG + GAMG for the last corrector** needs 13 iterations instead of 34 V-cycles, but each costs
+  62-81 ms (two V-cycles with the DICGaussSeidel smoother): 2.1-2.4× the cost per step of GAMG_DIC at
+  192³.
+- **Decision.** By the rule written before the run a port is not justified as it stands: ≥ 1.5× only at
+  432 processes for 192³ and 256³ (16k-39k cells per process); at 240 processes (29k-137k cells)
+  0.96-1.18×, a margin that the conversion LDU → CSR, the decomposition of OpenFOAM and its processor
+  interfaces can absorb. The two-level Schwarz is still faster than GAMG in 5 of 6 configurations; the
+  part of its cost left to reduce is keeping the coarse space up to date (next steps).
+
+![Ratio built up phase by phase](warm_plots/ratio.png)
+
+![Cost per time step by corrector](warm_plots/correctors.png)
+
+![Cost per time step by phase](warm_plots/phases.png)
+
+![Iterations per solve](warm_plots/iterations.png)
+
+![Last corrector along the time loop](warm_plots/last_corrector.png)
+
+![Time per iteration](warm_plots/time_per_iteration.png)
+
+Full tables: [`warm_report/report.md`](warm_report/report.md); numbers of the plots:
+[`warm_plots/phases.csv`](warm_plots/phases.csv). Reproduce them from `test/gamg`:
+
+```bash
+python3 report_warm.py run_warm_np240_23097350 run_warm_np432_23097354 \
+    --ref run_scaling_np240_23040226 --ref run_scaling_np432_23040228     # -> warm_report/
+python3 plot_warm.py run_warm_np240_23097350 run_warm_np432_23097354        # -> warm_plots/
+```
+
+Not measured: the two effects separately (`SOURCE=alpha` and `WARM=0` jobs of `Allrun_warm.sh`), GAMG
+with the GaussSeidel smoother.
 
 ## Interpretation
 
@@ -479,16 +635,31 @@ Tables and plots: `python3 report_nev.py run_nev_np240_23094441 --gamg run_scali
   refactorizations this is ~30% of the Schwarz cost at 1e-2. GAMG pays nothing for the motion (setup
   < 0.5%), because its agglomeration does not depend on the coefficients — the same reason why it
   converges slowly.
+- **Why the gain moves into the last corrector (section 8).** With the p_rgh source (fluxes across
+  the interfaces, zero net source over every bubble) and a warm start, little of the initial error lies
+  in the bubble modes (locally < 0.1% of its energy in the 10 lowest modes, against 99% for b = vol·α
+  from 0). The 1.3 decades of the first two correctors are then removed by GAMG in 2 + 4-5 V-cycles
+  and the coarse space has nothing to add, while each application still pays for it. The last
+  corrector reduces the residual by 3.3-3.7 decades: there the error left is in the bubble modes,
+  GAMG needs 10-21 V-cycles per decade and the two-level Schwarz 5-10 applications. Even there GAMG
+  converges faster than in sections 2-3 (17 / 34 V-cycles per decade to 1e-8 from 0 at 192³ / 256³):
+  b = vol·α overstated the difficulty of the problem for GAMG.
 - **For the port.** The gain is algorithmic (iterations), with iterations costing as much as
   V-cycles, so it should survive a port to OpenFOAM, provided the subdomain structure and the
   coarse space live across time steps (e.g. in a `MeshObject`) and the conversion of the LDU
-  matrix stays cheap.
+  matrix stays cheap. Section 8 qualifies it: in a PIMPLE loop the gain is 0.96-1.81× per time
+  step, concentrated in the last corrector, and the setup and rebuilds of the coarse space (~40% of
+  the Schwarz cost) are the part a port would not reduce.
 
 ## Caveats
 
-- Every solve starts from 0. In a PISO loop OpenFOAM starts from the previous pressure (relTol
-  1e-2 / 0.05, then `pFinal` to an absolute tolerance), which changes the initial error; not
-  measured yet (`bubblyPressureFoam -warmStart` exists, schwarz2lvl starts from 0).
+- Sections 1-7: every solve starts from 0 with b = vol·α. Section 8 measures the warm start with
+  the p_rgh source of the fluid at rest: the source of a real flow also contains div(HbyA), which
+  carries the velocity field and is not confined to the interfaces; each code starts from its own
+  previous solution (the two agree, see the checks of section 8).
+- Section 8: one run per configuration (run-to-run spread of the earlier campaigns ±3-4%); GAMG with
+  the GaussSeidel smoother, the usual p_rgh setting, not run (1.03-1.35× slower than DIC to 1e-8 in
+  section 2).
 - One problem (bubbles, density ratio 1000), OpenFOAM 10 while the target is OpenFOAM 14 (GAMG is
   essentially unchanged), different decompositions (scotch / METIS), no LDU → CSR conversion.
 - The matrix generation of schwarz2lvl runs on rank 0 and is not timed: 37-156 s per run, more than
@@ -511,5 +682,14 @@ Tables and plots: `python3 report_nev.py run_nev_np240_23094441 --gamg run_scali
    4-20% more per solve (coarse correction per application and setup grow with nev, the gain
    vanishes at 320³, same aging); `--nev 8` stays. The setting to port: BiCGStab, `--tau 0.3
    --nev 8 --eig-tol 1e-2 --eig-ncv 12`, AMG local solves, reuse `auto`.
-4. **Warm start** in both codes (real time loop).
+4. ~~Warm start in both codes~~ (section 8): with the p_rgh source and PIMPLE tolerances the
+   two-level Schwarz is 0.96-1.81× cheaper per time step than GAMG; the gain is in the last
+   corrector, setup and rebuilds are ~40% of its cost. By the rule written before the run a port is
+   not justified as it stands.
 5. **Harness**: distributed generation of the matrix values (more than halves the Schwarz test cost).
+6. **A coarse space that follows the bubbles** (section 8): the aging (2.9-4.0× more applications in
+   the last corrector within 8-12 steps) and the rebuilds (eigensolver 16-26% of the cost) are the part
+   of the cost left to reduce. The modes that age are those nearly constant on bubbles that have
+   moved: e.g. the GenEO vectors of the last rebuild plus, at every step, indicator vectors of the gas
+   regions of every subdomain computed from the current coefficients in O(n_i) and assembled in A_00
+   at every refactorization. Not tested: a research step, not a refinement.
