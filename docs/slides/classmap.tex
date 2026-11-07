@@ -1,0 +1,147 @@
+% =====================================================================================
+% Class map of schwarz2lvl, drawn once and re-rendered with a focus set.
+%   \cmfocus{all}                  every class in full colour (overview)
+%   \cmfocus{Subdomain,HaloExchange}  only these classes (and the edges between them) in colour
+%   \cmsection{x1}{y1}{x2}{y2}{w}  the map clipped to [x1,x2]x[y1,y2] (mm), scaled to width w
+%   \cmthumb{x1}{y1}{x2}{y2}{w}    the whole map at width w, with the window [x1,x2]x[y1,y2] marked
+% =====================================================================================
+\definecolor{cmcore}{HTML}{6E6D68}
+\definecolor{cmpart}{HTML}{1BAF7A}
+\definecolor{cmlinalg}{HTML}{6250D6}
+\definecolor{cmprec}{HTML}{2A78D6}
+\definecolor{cmsolv}{HTML}{D98F00}
+\definecolor{cmutils}{HTML}{8A8984}
+
+\makeatletter
+\newcommand\cmfocus[1]{%
+  \@for\cm@t:=#1\do{\expandafter\def\csname cmon@\cm@t\endcsname{}}}
+\newcommand\cmclearfocus{} % focus sets are local to the frame (groups), nothing to clear
+\newif\ifcm@on
+\newif\ifcm@thumb
+\newcommand\cm@test[1]{%
+  \cm@onfalse
+  \ifcsname cmon@all\endcsname\cm@ontrue\fi
+  \ifcsname cmon@#1\endcsname\cm@ontrue\fi}
+\tikzset{
+  cmbox/.style={rounded corners=1.2pt,align=center,inner sep=1.2pt,text width=#1,minimum height=7.6mm,
+                line width=0.5pt,font=\fontsize{5.9}{6.9}\selectfont},
+  cmbox/.default=22.5mm,
+  mod/.code={\def\cm@mod{#1}\pgfkeysalso{draw=cm#1!80!black,fill=cm#1!11}},
+  tag/.code={\cm@test{#1}\ifcm@on\else\pgfkeysalso{draw=black!16,fill=black!2.5,text=black!30}\fi
+              \ifcm@thumb\pgfkeysalso{text opacity=0,line width=0.2pt,rounded corners=0.3pt}\ifcm@on\pgfkeysalso{fill=cm\cm@mod!70,draw=cm\cm@mod!80!black}\else\pgfkeysalso{draw=black!22,fill=black!6}\fi\fi},
+  % edges: e={A}{B} -> coloured only if both ends are in focus
+  e/.code 2 args={\cm@test{#1}\ifcm@on\cm@test{#2}\fi
+                  \ifcm@on\pgfkeysalso{draw=black!72}\else\pgfkeysalso{draw=black!13}\fi
+                  \ifcm@thumb\pgfkeysalso{draw=none}\fi},
+  inh/.style={-{Triangle[open,length=1.9mm,width=2.2mm]},line width=0.5pt},
+  bus/.style={line width=0.5pt},
+  ubus/.style={dash pattern=on 1.9pt off 1.3pt,line width=0.5pt},
+  comp/.style={{Diamond[length=2.3mm,width=1.6mm]}-,line width=0.5pt},
+  use/.style={-{Stealth[length=1.6mm]},dash pattern=on 1.9pt off 1.3pt,line width=0.5pt},
+  flow/.style={-{Latex[length=1.6mm]},line width=0.7pt},
+  elab/.code={\pgfkeysalso{font=\fontsize{5.6}{6}\selectfont,fill=white,inner sep=0.6pt}\ifcm@thumb\pgfkeysalso{opacity=0}\fi},
+  stk/.style={draw,rounded corners=0.8pt,minimum width=23.35mm,minimum height=3.6mm,inner sep=0.5pt,
+              font=\fontsize{5.9}{6.5}\selectfont,line width=0.45pt},
+}
+% node text helpers
+\newcommand\cmname{\fontsize{6.9}{7.6}\selectfont\bfseries}
+\newcommand\cmN[2]{{\cmname #1}\\{#2}}        % class, detail
+\newcommand\cmA[2]{{\cmname\itshape #1}\\{#2}} % abstract class
+\newcommand\cmF[2]{{\fontsize{5.2}{6}\selectfont\guillemotleft function\guillemotright}\\{\cmname #1}\\{#2}}
+
+\newcommand\cm@map{%
+  % ---------------------------------------------------------------- top band: solver + time loop
+  \node[cmbox,mod=solv,tag=runTimeLoop]        (TL)  at (-68,0)   {\cmN{runTimeLoop}{steps $\times$ correctors}};
+  \node[cmbox,mod=prec,tag=ReusePolicy]        (RP)  at (-68,-12) {\cmN{ReusePolicy}{break-even rule}};
+  \node[cmbox=30mm,mod=prec,tag=Preconditioner](PR)  at (0,0)     {\cmA{Preconditioner}{\texttt{apply(r,z) const} $\cdot$ \texttt{update}}};
+  \node[cmbox=26mm,mod=solv,tag=KrylovSolver]  (KS)  at (54.5,0)    {\cmA{KrylovSolver}{\texttt{solve(A, M, b, x)}}};
+  \node[cmbox,mod=solv,tag=Gmres]              (GM)  at (41,-12)  {\cmN{Gmres}{CGS2, right prec.}};
+  \node[cmbox,mod=solv,tag=BiCgStab]           (BC)  at (68,-12)  {\cmN{BiCgStab}{fused reductions}};
+  % ---------------------------------------------------------------- preconditioner
+  \node[cmbox,mod=prec,tag=OneLevelSchwarz]    (OL)  at (-14,-12) {\cmN{OneLevelSchwarz}{RAS / ASM}};
+  \node[cmbox,mod=prec,tag=TwoLevelSchwarz]    (TW)  at (14,-12)  {\cmN{TwoLevelSchwarz}{deflated / additive}};
+  \node[cmbox,mod=linalg,tag=LocalSolver]      (LS)  at (-14,-24) {\cmA{LocalSolver}{(re)factorize $\cdot$ solve}};
+  \foreach \n/\t [count=\k] in {EigenSolver/{EigenSolver\,<S,Real>},UmfpackSolver/UmfpackSolver,
+                                PardisoSolver/{PardisoSolver\,<P,Real>},AmgSolver/{AmgSolver\,<Real,C>},
+                                ChainSolver/{ChainSolver (LL$^\top\!\to$LU)}}
+    \node[stk,mod=linalg,tag=\n] (B\k) at (-14,-30.6-3.6*\k) {\t};
+  \node[cmbox,mod=prec,tag=CoarseSpace]        (CSP) at (14,-24)  {\cmN{CoarseSpace}{$R_0$, $A_{00}=R_0AR_0^\top$}};
+  \node[cmbox,mod=prec,tag=CoarseSolver]       (CSO) at (14,-36)  {\cmA{CoarseSolver}{setup $\cdot$ update $\cdot$ solve}};
+  \foreach \n/\t [count=\k] in {Root/{Root (rank 0)},Mumps/{Mumps},CPardiso/{CPardiso (MKL)}}
+    \node[stk,mod=prec,tag=\n] (C\k) at (14,-42.6-3.6*\k) {\t};
+  \node[cmbox,mod=prec,tag=LocalEigensolver]   (LE)  at (41,-24)  {\cmN{LocalEigensolver}{$Z_i$: kernel + Arnoldi}};
+  \node[cmbox,mod=prec,tag=ProjectedOperator]  (PO)  at (68,-24)  {\cmN{ProjectedOperator}{operator $T$ for Spectra}};
+  \node[cmbox=31mm,mod=prec,tag=BlockSplitting] (BS)  at (45,-37)  {\cmF{buildLocalBlockSplitting}{$\widetilde A_{ii}$ from $A_{ii}$, $s_i$}};
+  % ---------------------------------------------------------------- data layer: partition, core, linalg
+  \node[cmbox,mod=part,tag=MatrixMarketIO]     (MM)  at (-68,-48) {\cmN{MatrixMarketIO}{\texttt{.mtx} in/out}};
+  \node[cmbox,mod=part,tag=GraphPartitioner]   (GP)  at (-41,-48) {\cmN{GraphPartitioner}{METIS on $\mathcal{G}(A{+}A^\top)$}};
+  \node[cmbox,mod=part,tag=DomainDecomposer]   (DD)  at (-68,-64) {\cmN{DomainDecomposer}{rank 0: split, send rows}};
+  \node[cmbox,mod=core,tag=LocalSystem]        (LSY) at (-41,-64) {\cmN{LocalSystem}{owned rows, global cols}};
+  \node[cmbox,mod=part,tag=Subdomain]          (SD)  at (-14,-64) {\cmN{Subdomain}{$\Omega_i$, $A_{ii}$, $s_i$, $D_i$}};
+  \node[cmbox,mod=linalg,tag=HaloExchange]     (HX)  at (14,-64)  {\cmN{HaloExchange}{forward $\cdot$ reverseAdd}};
+  \node[cmbox,mod=linalg,tag=DistributedMatrix](DM)  at (41,-64)  {\cmN{DistributedMatrix}{$y=Ax$ + halo update}};
+  % ---------------------------------------------------------------- edges
+  % (boxes are 7.6 mm high: rows 12 mm apart leave a 4.4 mm gap for the arrows)
+  % -- top band
+  \draw[use,e={runTimeLoop}{KrylovSolver}] (TL.north) -- ++(0,2.5) -| node[elab,pos=0.25]{solve} (KS.north);
+  \draw[use,e={runTimeLoop}{Preconditioner}] (TL.east) -- node[elab,pos=0.5]{update} (PR.west);
+  \draw[use,e={runTimeLoop}{ReusePolicy}] (TL.south) -- node[elab,right=0.5pt]{level} (RP.north);
+  \draw[use,e={KrylovSolver}{Preconditioner}] (KS.west) -- node[elab]{apply} (PR.east);
+  % -- inheritance: the children meet on a bus, one triangle per parent
+  \foreach \n/\t in {GM/Gmres,BC/BiCgStab} \draw[bus,e={\t}{KrylovSolver}] (\n.north) |- (KS.south |- 0,-6.9);
+  \draw[inh,e={Gmres}{KrylovSolver}] (KS.south |- 0,-6.9) -- (KS.south);
+  \foreach \n/\t in {OL/OneLevelSchwarz,TW/TwoLevelSchwarz} \draw[bus,e={\t}{Preconditioner}] (\n.north) |- (PR.south |- 0,-6.9);
+  \draw[inh,e={OneLevelSchwarz}{Preconditioner}] (PR.south |- 0,-6.9) -- (PR.south);
+  \draw[inh,e={EigenSolver}{LocalSolver}] (B1.north) -- (LS.south);
+  \draw[inh,e={Root}{CoarseSolver}] (C1.north) -- (CSO.south);
+  % -- ownership (diamond on the owner)
+  \draw[comp,e={TwoLevelSchwarz}{OneLevelSchwarz}] (TW.west) -- (OL.east);
+  \draw[comp,e={OneLevelSchwarz}{LocalSolver}] (OL.south) -- (LS.north);
+  \draw[comp,e={TwoLevelSchwarz}{CoarseSpace}] (TW.south) -- (CSP.north);
+  \draw[comp,e={CoarseSpace}{CoarseSolver}] (CSP.south) -- (CSO.north);
+  \draw[comp,e={LocalEigensolver}{ProjectedOperator}] (LE.east) -- (PO.west);
+  \draw[comp,e={Subdomain}{HaloExchange}] (SD.east) -- (HX.west);
+  % -- coarse-space pipeline
+  \draw[use,e={TwoLevelSchwarz}{LocalEigensolver}] ($(TW.south east)+(-3,0)$) -- ++(0,-2.1) -| node[elab,pos=0.27]{rebuild} (LE.north);
+  \draw[flow,e={BlockSplitting}{LocalEigensolver}] (BS.north -| LE.south) -- node[elab,left=1pt]{$\widetilde A_{ii}$} (LE.south);
+  \draw[flow,e={LocalEigensolver}{CoarseSpace}] (LE.west) -- (CSP.east);
+  % -- data layer
+  \draw[use,e={DomainDecomposer}{MatrixMarketIO}] (DD.north) -- (MM.south);
+  \draw[use,e={DomainDecomposer}{GraphPartitioner}] ($(DD.north east)+(-2.5,0)$) -- ++(0,3.2) -| (GP.south);
+  \draw[flow,e={DomainDecomposer}{LocalSystem}] (DD.east) -- (LSY.west);
+  \draw[flow,e={LocalSystem}{Subdomain}] (LSY.east) -- (SD.west);
+  % -- one Subdomain per rank: these classes keep a const& to it (and the function reads it).
+  %    Feeders meet on a dashed bus (x = 0, y = -57.5) that ends in a single arrow on Subdomain.
+  \draw[ubus,e={OneLevelSchwarz}{Subdomain}] ($(OL.south east)+(-2,0)$) |- (0,-17.6);
+  \draw[ubus,e={TwoLevelSchwarz}{Subdomain}] ($(TW.south west)+(2,0)$) |- (0,-17.6);
+  \draw[ubus,e={CoarseSpace}{Subdomain}] (CSP.west) -- (CSP.west -| 0,0);
+  \coordinate (bsf) at ($(BS.south)+(4,0)$);
+  \draw[ubus,e={BlockSplitting}{Subdomain}] (bsf) -- (bsf |- 0,-57.5);
+  \draw[ubus,e={DistributedMatrix}{Subdomain}] (DM.north) -- (DM.north |- 0,-57.5);
+  \draw[ubus,e={Subdomain}{Subdomain}] (0,-17.6) -- (0,-57.5);
+  \draw[ubus,e={Subdomain}{Subdomain}] (bsf |- 0,-57.5) -- (0,-57.5);
+  \node[elab] at (14,-57.5) {\texttt{const\,Subdomain\&}};
+  \draw[use,e={Subdomain}{Subdomain}] (0,-57.5) -| ($(SD.north)+(8,0)$);
+  \draw[use,e={KrylovSolver}{DistributedMatrix}] (KS.east) -- (83,0) |- node[elab,pos=0.75]{$y=Ax$} (DM.east);
+}
+\newcommand\cmmap{\cm@map}
+
+% clipped and scaled section of the map
+\newcommand\cmsection[5]{%
+  \pgfmathsetmacro\cm@s{(#5)/(((#3)-(#1))*2.845276)}%
+  \begin{tikzpicture}[x=1mm,y=1mm,scale=\cm@s,every node/.append style={transform shape}]
+    \begin{scope}
+      \clip[rounded corners=2.5mm] (#1,#2) rectangle (#3,#4);
+      \cm@map
+    \end{scope}
+    \draw[black!22,line width=0.5pt,rounded corners=2.5mm] (#1,#2) rectangle (#3,#4);
+  \end{tikzpicture}}
+% whole map, small, with a window marked
+\newcommand\cmthumb[5]{%
+  \pgfmathsetmacro\cm@s{(#5)/(166*2.845276)}%
+  \begin{tikzpicture}[x=1mm,y=1mm,scale=\cm@s,every node/.append style={transform shape}]
+    \cm@thumbtrue
+    \cm@map
+    \draw[accent,line width=0.9pt,rounded corners=1.5mm] (#1,#2) rectangle (#3,#4);
+  \end{tikzpicture}}
+\makeatother

@@ -1,0 +1,28 @@
+\frametitle{6. Coarse space: the two levels together}
+\cmfocus{TwoLevelSchwarz,OneLevelSchwarz,CoarseSpace,Preconditioner}
+  %\mapbadge\Wtwo
+  \begin{columns}[c,onlytextwidth]
+    \column{0.60\textwidth}
+    \small
+    \textbf{Setup} (\code{TwoLevelSchwarz} constructor):
+    \begin{enumerate}
+      \item \code{OneLevelSchwarz}: factorization of $A_{ii}$;
+      \item $\At_{ii}$ $\to$ \code{LocalEigensolver} $\to$ $Z_i$ (no communication);
+      \item failures reduced over all ranks before throwing (no rank left hanging in a collective);
+      \item \code{CoarseSpace}: $V_i$, $A_{00}$, coarse factorization.
+    \end{enumerate}
+
+    \vspace{2mm}
+    \textbf{Application}, transcription of the deflated formula:
+\begin{lstlisting}
+coarse_->apply(r, x0_);   // x0 = R0^T A00^{-1} R0 r
+A_.apply(x0_, w_);        // extra product of "deflated"
+w_ = r - w_;
+one_->apply(w_, z1_);     // M_RAS^{-1} (r - A x0)
+z = x0_ + z1_;
+\end{lstlisting}
+    \column{0.37\textwidth}
+    \centering
+    \mapsec\Wtwo{0.98\linewidth}\\[2mm]
+    {\footnotesize Per application: 2 halo updates (local solve, extra SpMV) + the coarse solve.}
+  \end{columns}
