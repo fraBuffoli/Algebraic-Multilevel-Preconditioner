@@ -258,6 +258,14 @@ int main(int argc, char** argv)
                             solv::makeKrylovSolver(d)->name() == "GMRES(30)" &&
                             solv::makeKrylovSolver(c1)->name() == "BiCGStab";
             test::check(ok, "configuration: --krylov gmres|bicgstab (default gmres), unknown value rejected", comm);
+            // Malformed values are rejected by the parser, before any decomposition.
+            const bool strict = rejected({"--nx", "16x"}) && rejected({"--nx", "99999999999"}) &&
+                                rejected({"--nx", "0"}) && rejected({"--tau", "0.3.1"}) &&
+                                rejected({"--seed", "-1"}) && rejected({"--local-solver", "lu"}) &&
+                                rejected({"--coarse-solver", "petsc"}) && rejected({"--generate", "laplace4d"}) &&
+                                parse({"--nx", "16", "--tau", "3e-1"}).nx == 16;
+            test::check(strict, "configuration: trailing characters, out-of-range numbers and unknown names rejected",
+                        comm);
         }
     } catch (const std::exception& e) {
         std::cerr << "exception: " << e.what() << std::endl;

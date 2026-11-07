@@ -57,3 +57,7 @@ make.inc
 
 # Files written by the tests
 test_subdomain_symmetry.mtx
+
+# Python caches (report and plot scripts)
+__pycache__/
+*.pyc

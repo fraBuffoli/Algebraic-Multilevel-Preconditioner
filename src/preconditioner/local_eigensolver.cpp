@@ -23,6 +23,8 @@
 
 namespace schwarz2lvl::prec {
 
+namespace {
+
 using Complex = std::complex<double>;
 using CVec = Eigen::VectorXcd;
 using CMat = Eigen::MatrixXcd;
@@ -207,6 +209,8 @@ private:
     mutable long count_ = 0;
     mutable double seconds_ = 0.0;
 };
+
+} // namespace
 
 LocalEigensolverResult LocalEigensolver::compute(const core::SpMat& Aii, const core::SpMat& Atilde, const core::Vec& D,
                                                  bool force_dense) const

@@ -15,6 +15,8 @@
 
 namespace schwarz2lvl::prec {
 
+namespace {
+
 using SparseRow = std::vector<std::pair<core::GlobalIndex, core::Scalar>>; ///< (global coarse column, value)
 
 /// @brief Packs rows into (lengths + columns, values) buffers.
@@ -43,6 +45,8 @@ void unpackRows(const std::vector<core::GlobalIndex>& ib, const std::vector<core
         for (std::size_t q = 0; q < len; ++q, ++pc, ++pv) row.emplace_back(ib[pc], vb[pv]);
     }
 }
+
+} // namespace
 
 CoarseSpace::CoarseSpace(const part::Subdomain& sd, const core::Mat& Z, double orth_tol) : sd_(sd)
 {

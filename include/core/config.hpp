@@ -20,7 +20,7 @@ struct SolverConfig{
     // INPUT PARAMETERS
     std::string matrix_file;                ///< Matrix Market file name (read on rank 0).
     std::string rhs = "random";             ///< "random", "ones", "generated" or a Matrix Market array file.
-    std::string generate;                   ///< Built-in generator (laplace2d, laplace3d, convdiff2d, convdiff3d, coupled2d, coupled3d).
+    std::string generate;                   ///< Built-in generator (laplace2d, laplace3d, convdiff2d, convdiff3d, coupled2d, coupled3d, bubbles2d, bubbles3d).
     int nx = 64;                            ///< Generator: cells along x-axis.
     int ny = 0;                             ///< Generator: cells along y-axis (0 = same as nx).
     int nz = 0;                             ///< Generator: cells along z-axis (0 = same as nx).
@@ -118,4 +118,4 @@ struct SolverConfig{
 
 } // namespace schwarz2lvl::core
 
- #endif // SCHWARZ2LVL_CORE_CONFIG_HPP
+#endif // SCHWARZ2LVL_CORE_CONFIG_HPP

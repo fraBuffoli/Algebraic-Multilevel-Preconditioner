@@ -11,6 +11,7 @@
  * With `--steps N > 0` the driver runs a sequence of solves with the same pattern
  * (runTimeLoop(): setup reuse between time steps), otherwise the single solve of the paper.
  */
+#include "coarse_solver.hpp"
 #include "config.hpp"
 #include "distributed_matrix.hpp"
 #include "domain_decomposer.hpp"
@@ -30,8 +31,44 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 using namespace schwarz2lvl;
+
+namespace {
+
+/**
+ * @brief Checks that the backends requested on the command line are compiled into this build.
+ *
+ * Without this check an unavailable backend is reported only when it is first created: after the
+ * decomposition for the local solver, after all the local eigensolves for the coarse solver.
+ * @throws std::invalid_argument naming the backends that are available.
+ */
+void checkBackends(const core::SolverConfig& cfg)
+{
+    auto join = [](const std::vector<std::string>& v) {
+        std::string s;
+        for (const auto& x : v) s += (s.empty() ? "" : "|") + x;
+        return s;
+    };
+    auto has = [](const std::vector<std::string>& v, const std::string& x) {
+        return std::find(v.begin(), v.end(), x) != v.end();
+    };
+    const auto local = linalg::availableLocalSolvers();
+    if (cfg.local_solver != "auto" && !has(local, cfg.local_solver))
+        throw std::invalid_argument("--local-solver " + cfg.local_solver + " is not compiled in (available: auto|" +
+                                    join(local) + ")");
+    const auto approx = linalg::availableLocalApprox();
+    if (!has(approx, cfg.local_approx))
+        throw std::invalid_argument("--local-approx " + cfg.local_approx + " is not compiled in (available: " +
+                                    join(approx) + ")");
+    const auto coarse = prec::availableCoarseSolvers();
+    if (cfg.coarse != "none" && cfg.coarse_solver != "auto" && !has(coarse, cfg.coarse_solver))
+        throw std::invalid_argument("--coarse-solver " + cfg.coarse_solver + " is not compiled in (available: auto|" +
+                                    join(coarse) + ")");
+}
 
 /// @brief Prints min/avg/max of an integer quantity over the ranks.
 void printMinAvgMax(MPI_Comm comm, const std::string& what, long long v)
@@ -55,6 +92,7 @@ int run(int argc, char** argv)
     core::SolverConfig cfg;
     try {
         cfg = core::SolverConfig::fromCommandLine(argc, argv);
+        checkBackends(cfg);
     } catch (const std::invalid_argument& e) {
         if (rank == 0) {
             if (std::string(e.what()) != "help") std::cerr << "error: " << e.what() << "\n\n";
@@ -180,6 +218,8 @@ int run(int argc, char** argv)
     }
     return res.converged ? 0 : 2;
 }
+
+} // namespace
 
 int main(int argc, char** argv)
 {

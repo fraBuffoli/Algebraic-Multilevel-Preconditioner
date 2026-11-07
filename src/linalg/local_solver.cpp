@@ -135,6 +135,9 @@ public:
             // SparseLU::transpose() is a non-const view in Eigen 3.4.
             auto& lu = const_cast<Solver&>(s_);
             solveIn<Real>([&](const auto& r) { return lu.transpose().solve(r).eval(); }, b, x);
+        } else {
+            // Not reachable with makeSingle() (LU is always SparseLU), but never return x unset.
+            throw std::logic_error(name() + ": transposed solve not available for this solver type");
         }
     }
     std::string name() const override

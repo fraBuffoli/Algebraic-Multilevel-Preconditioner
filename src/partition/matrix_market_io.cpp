@@ -19,6 +19,8 @@
 
 namespace schwarz2lvl::part {
 
+namespace {
+
 /// @brief Reads a whole file into a string.
 std::string slurp(const std::string& path)
 {
@@ -75,6 +77,8 @@ Banner parseBanner(const std::string& buf, std::size_t& pos)
     }
     return b;
 }
+
+} // namespace
 
 CsrMatrix MatrixMarketIO::readMatrix(const std::string& path)
 {

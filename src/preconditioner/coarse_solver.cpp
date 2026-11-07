@@ -24,6 +24,8 @@
 
 namespace schwarz2lvl::prec {
 
+namespace {
+
 
 /// @brief Counts/displacements of the coarse blocks (for Gatherv/Scatterv).
 void coarseCounts(const std::vector<core::GlobalIndex>& off, std::vector<int>& cnt, std::vector<int>& dsp)
@@ -778,6 +780,8 @@ private:
     mutable std::vector<core::Scalar> rhs_, sol_;
 };
 #endif
+
+} // namespace
 
 std::vector<std::string> availableCoarseSolvers()
 {

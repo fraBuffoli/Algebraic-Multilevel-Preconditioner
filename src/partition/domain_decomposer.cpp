@@ -22,6 +22,8 @@
 
 namespace schwarz2lvl::part {
 
+namespace {
+
 constexpr int kTagHeader = 101; ///< Tag: sizes of the owned block.
 constexpr int kTagRowPtr = 102; ///< Tag: CSR row pointer.
 constexpr int kTagCol = 103;    ///< Tag: CSR column indices.
@@ -215,6 +217,8 @@ void bcastString(std::string& s, MPI_Comm comm)
     s.resize(static_cast<std::size_t>(len));
     if (len > 0) MPI_Bcast(s.data(), static_cast<int>(len), MPI_CHAR, 0, comm);
 }
+
+} // namespace
 
 core::LocalSystem DomainDecomposer::decompose(const core::SolverConfig& cfg, MPI_Comm comm, DecompositionInfo& info)
 {

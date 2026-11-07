@@ -39,8 +39,8 @@ Subdomain::Subdomain(const core::LocalSystem& sys, const std::string& pou) : sys
 
     buildOverlap();
 
-    //Fetch the ghost rows A(Omega_Gamma_i, :) from their owners.
-    //For every requested unknown the owner sends [row length, columns...] and the values.
+    // Fetch the ghost rows A(Omega_Gamma_i, :) from their owners.
+    // For every requested unknown the owner sends [row length, columns...] and the values.
     const int nn = halo_.numNeighbors();
     std::vector<std::vector<core::GlobalIndex>> scols(static_cast<std::size_t>(nn)), rcols;
     std::vector<std::vector<core::Scalar>> rvals;
@@ -166,8 +166,7 @@ void Subdomain::buildOverlap()
     const int nranks = core::mpiSize(comm);
     const core::GlobalIndex end = begin_ + n_owned_;
 
-    // A_ij : j is a colomn of my rows, I don't need other subdomains.
-    // Remember, always dealing with non-oriented graph G(A+A^T)
+    // A part of G(A + A^T): the off-process columns j of the owned rows (no communication needed).
     std::vector<core::GlobalIndex> cand;  
     std::vector<std::pair<int, core::GlobalIndex>> notify;  
     for (core::LocalIndex l = 0; l < n_owned_; ++l) {
@@ -181,24 +180,25 @@ void Subdomain::buildOverlap()
     std::sort(notify.begin(), notify.end());
     notify.erase(std::unique(notify.begin(), notify.end()), notify.end());
 
-    // A_ji : i is a column owned by row j of another subdomain! 
+    // A^T part: owned unknowns i that appear as a column of a row j owned by another process. Every
+    // process notifies the owners of its off-process columns, so the neighbour relation is symmetric.
     std::vector<int> scount(static_cast<std::size_t>(nranks), 0), rcount(static_cast<std::size_t>(nranks), 0);
-    for (const auto& pr : notify) ++scount[static_cast<std::size_t>(pr.first)]; //scount[q] = number of notifications sent to q
-    MPI_Alltoall(scount.data(), 1, MPI_INT, rcount.data(), 1, MPI_INT, comm); //rcount[q] = number of notifications FROM q
+    for (const auto& pr : notify) ++scount[static_cast<std::size_t>(pr.first)]; //scount[q]: notifications sent to q
+    MPI_Alltoall(scount.data(), 1, MPI_INT, rcount.data(), 1, MPI_INT, comm); //rcount[q]: notifications received from q
     const std::vector<int> sdisp = core::displacements(scount), rdisp = core::displacements(rcount);
     std::vector<core::GlobalIndex> sbuf(notify.size());
     for (std::size_t k = 0; k < notify.size(); ++k) sbuf[k] = notify[k].second;
     std::vector<core::GlobalIndex> rbuf(static_cast<std::size_t>(rdisp.back() + rcount.back()));
     MPI_Alltoallv(sbuf.data(), scount.data(), sdisp.data(), core::mpiType<core::GlobalIndex>(), rbuf.data(), rcount.data(),
-                  rdisp.data(), core::mpiType<core::GlobalIndex>(), comm); //recieve ghosst rows from other subdomains
+                  rdisp.data(), core::mpiType<core::GlobalIndex>(), comm); // remote rows coupled to my unknowns
     cand.insert(cand.end(), rbuf.begin(), rbuf.end());
 
     std::sort(cand.begin(), cand.end());
     cand.erase(std::unique(cand.begin(), cand.end()), cand.end());
     ghosts_ = std::move(cand); //sorted, non duplicated ghosts
 
-    //neighbor discovery: for every ghost, find the owner and the local index of the ghost in the owner subdomain
-    //neighbor is alreasy sorted at the end of the loop
+    // Neighbour discovery: the ghosts are sorted and ownership is contiguous, so the ghosts of one owner
+    // form a contiguous block and the neighbour list comes out sorted.
     std::vector<int> neighbors;
     std::vector<core::LocalIndex> rstart, rcnt;
     for (std::size_t k = 0; k < ghosts_.size(); ++k) {
@@ -241,7 +241,7 @@ void Subdomain::buildMatrices(const std::vector<std::vector<core::GlobalIndex>>&
     tii.reserve(sys_.col.size() * 2);
     town.reserve(sys_.col.size());
 
-    //Owned rows: every column belongs to Omega_i by construction of the overlap.
+    // Owned rows: every column belongs to Omega_i by construction of the overlap.
     for (core::LocalIndex l = 0; l < n_owned_; ++l) {
         for (core::GlobalIndex k = sys_.row_ptr[static_cast<std::size_t>(l)]; k < sys_.row_ptr[static_cast<std::size_t>(l) + 1]; ++k) {
             const core::LocalIndex c = localIndex(sys_.col[static_cast<std::size_t>(k)]);
@@ -251,8 +251,8 @@ void Subdomain::buildMatrices(const std::vector<std::vector<core::GlobalIndex>>&
         }
     }
 
-    //Ghost rows: columns inside Omega_i go to A_ii (block A_Gamma, A_GammaI);
-    //columns in Omega^c_i form A_Gammac and only their absolute row sums are kept.
+    // Ghost rows: columns inside Omega_i go to A_ii (block A_Gamma, A_GammaI);
+    // columns in Omega^c_i form A_Gammac and only their absolute row sums are kept.
     lump_ = core::Vec::Zero(n_ghost);
     for (int k = 0; k < halo_.numNeighbors(); ++k) {
         const auto& cols = rcols[static_cast<std::size_t>(k)];

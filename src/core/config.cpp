@@ -5,13 +5,17 @@
 #include "config.hpp"
 
 #include <functional>
+#include <initializer_list>
 #include <iomanip>
+#include <limits>
 #include <map>
 #include <ostream>
 #include <sstream>
 #include <stdexcept>
 
 namespace schwarz2lvl::core{
+
+namespace {
 
 /// @brief Parses a boolean ("1/0/true/false/yes/no/on/off").
 bool parseBool(const std::string& s)
@@ -21,73 +25,123 @@ bool parseBool(const std::string& s)
     throw std::invalid_argument("invalid boolean value '" + s + "'");
 }
 
+/**
+ * @brief Strict numeric conversion: the whole string must be a number of type T.
+ *
+ * std::stoi("16x") returns 16 and std::stoi("99999999999") throws std::out_of_range: both
+ * are turned into std::invalid_argument, so that a typo is rejected with the usage message.
+ */
+template <typename T, typename Convert> T parseNumber(const std::string& s, Convert convert)
+{
+    std::size_t pos = 0;
+    T v{};
+    try {
+        v = convert(s, &pos);
+    } catch (const std::out_of_range&) {
+        throw std::invalid_argument("out of range");
+    }
+    if (pos != s.size()) throw std::invalid_argument("trailing characters");
+    return v;
+}
+
+int toInt(const std::string& s)
+{
+    return parseNumber<int>(s, [](const std::string& x, std::size_t* p) { return std::stoi(x, p); });
+}
+long long toLongLong(const std::string& s)
+{
+    return parseNumber<long long>(s, [](const std::string& x, std::size_t* p) { return std::stoll(x, p); });
+}
+unsigned toUnsigned(const std::string& s)
+{
+    if (!s.empty() && s[0] == '-') throw std::invalid_argument("negative value");
+    const unsigned long v =
+        parseNumber<unsigned long>(s, [](const std::string& x, std::size_t* p) { return std::stoul(x, p); });
+    if (v > std::numeric_limits<unsigned>::max()) throw std::invalid_argument("out of range");
+    return static_cast<unsigned>(v);
+}
+double toDouble(const std::string& s)
+{
+    return parseNumber<double>(s, [](const std::string& x, std::size_t* p) { return std::stod(x, p); });
+}
+
+/// @brief True if @p v is one of @p allowed.
+bool oneOf(const std::string& v, std::initializer_list<const char*> allowed)
+{
+    for (const char* a : allowed)
+        if (v == a) return true;
+    return false;
+}
+
+} // namespace
+
 SolverConfig SolverConfig::fromCommandLine(int argc, char** argv){
     SolverConfig c;
     using Setter = std::function<void(const std::string&)>;
 
-    //Table key -> setter. Keeping it here makes it easy to extend.
+    // Table key -> setter. Keeping it here makes it easy to extend.
     const std::map<std::string, Setter> table = {
         {"matrix", [&](const std::string& v) { c.matrix_file = v; }},
         {"rhs", [&](const std::string& v) { c.rhs = v; }},
         {"generate", [&](const std::string& v) { c.generate = v; }},
-        {"nx", [&](const std::string& v) { c.nx = std::stoi(v); }},
-        {"ny", [&](const std::string& v) { c.ny = std::stoi(v); }},
-        {"nz", [&](const std::string& v) { c.nz = std::stoi(v); }},
-        {"nu", [&](const std::string& v) { c.nu = std::stod(v); }},
-        {"ncomp", [&](const std::string& v) { c.ncomp = std::stoi(v); }},
-        {"block-size", [&](const std::string& v) { c.block_size = std::stoi(v); }},
-        {"seed", [&](const std::string& v) { c.seed = static_cast<unsigned>(std::stoul(v)); }},
-        {"rho-ratio", [&](const std::string& v) { c.rho_ratio = std::stod(v); }},
-        {"nbubbles", [&](const std::string& v) { c.nbubbles = std::stoi(v); }},
-        {"radius", [&](const std::string& v) { c.radius = std::stod(v); }},
-        {"cfl", [&](const std::string& v) { c.cfl = std::stod(v); }},
+        {"nx", [&](const std::string& v) { c.nx = toInt(v); }},
+        {"ny", [&](const std::string& v) { c.ny = toInt(v); }},
+        {"nz", [&](const std::string& v) { c.nz = toInt(v); }},
+        {"nu", [&](const std::string& v) { c.nu = toDouble(v); }},
+        {"ncomp", [&](const std::string& v) { c.ncomp = toInt(v); }},
+        {"block-size", [&](const std::string& v) { c.block_size = toInt(v); }},
+        {"seed", [&](const std::string& v) { c.seed = toUnsigned(v); }},
+        {"rho-ratio", [&](const std::string& v) { c.rho_ratio = toDouble(v); }},
+        {"nbubbles", [&](const std::string& v) { c.nbubbles = toInt(v); }},
+        {"radius", [&](const std::string& v) { c.radius = toDouble(v); }},
+        {"cfl", [&](const std::string& v) { c.cfl = toDouble(v); }},
         {"bubble-source", [&](const std::string& v) { c.bubble_source = v; }},
-        {"pulse", [&](const std::string& v) { c.pulse = std::stod(v); }},
-        {"pulse-period", [&](const std::string& v) { c.pulse_period = std::stoi(v); }},
-        {"steps", [&](const std::string& v) { c.steps = std::stoi(v); }},
-        {"correctors", [&](const std::string& v) { c.correctors = std::stoi(v); }},
+        {"pulse", [&](const std::string& v) { c.pulse = toDouble(v); }},
+        {"pulse-period", [&](const std::string& v) { c.pulse_period = toInt(v); }},
+        {"steps", [&](const std::string& v) { c.steps = toInt(v); }},
+        {"correctors", [&](const std::string& v) { c.correctors = toInt(v); }},
         {"reuse", [&](const std::string& v) { c.reuse = v; }},
-        {"rebuild-growth", [&](const std::string& v) { c.rebuild_growth = std::stod(v); }},
-        {"rebuild-every", [&](const std::string& v) { c.rebuild_every = std::stoi(v); }},
+        {"rebuild-growth", [&](const std::string& v) { c.rebuild_growth = toDouble(v); }},
+        {"rebuild-every", [&](const std::string& v) { c.rebuild_every = toInt(v); }},
         {"steps-csv", [&](const std::string& v) { c.steps_csv = v; }},
         {"warm-start", [&](const std::string& v) { c.warm_start = parseBool(v); }},
-        {"final-rtol", [&](const std::string& v) { c.final_rtol = std::stod(v); }},
-        {"final-atol", [&](const std::string& v) { c.final_atol = std::stod(v); }},
+        {"final-rtol", [&](const std::string& v) { c.final_rtol = toDouble(v); }},
+        {"final-atol", [&](const std::string& v) { c.final_atol = toDouble(v); }},
         {"metis-objective", [&](const std::string& v) { c.metis_objective = v; }},
         {"metis-vertex-weights", [&](const std::string& v) { c.metis_vertex_weights = parseBool(v); }},
         {"pou", [&](const std::string& v) { c.pou = v; }},
         {"one-level", [&](const std::string& v) { c.one_level = v; }},
         {"coarse", [&](const std::string& v) { c.coarse = v; }},
-        {"tau", [&](const std::string& v) { c.tau = std::stod(v); }},
-        {"nev", [&](const std::string& v) { c.nev = std::stoi(v); }},
-        {"nev-start", [&](const std::string& v) { c.nev_start = std::stoi(v); }},
-        {"eig-tol", [&](const std::string& v) { c.eig_tol = std::stod(v); }},
-        {"eig-maxit", [&](const std::string& v) { c.eig_maxit = std::stoi(v); }},
-        {"eig-ncv", [&](const std::string& v) { c.eig_ncv = std::stoi(v); }},
-        {"shift-rel", [&](const std::string& v) { c.shift_rel = std::stod(v); }},
-        {"kernel-tol", [&](const std::string& v) { c.kernel_tol = std::stod(v); }},
-        {"kernel-probe", [&](const std::string& v) { c.kernel_probe = std::stoi(v); }},
-        {"dense-threshold", [&](const std::string& v) { c.dense_threshold = std::stoi(v); }},
-        {"orth-tol", [&](const std::string& v) { c.orth_tol = std::stod(v); }},
+        {"tau", [&](const std::string& v) { c.tau = toDouble(v); }},
+        {"nev", [&](const std::string& v) { c.nev = toInt(v); }},
+        {"nev-start", [&](const std::string& v) { c.nev_start = toInt(v); }},
+        {"eig-tol", [&](const std::string& v) { c.eig_tol = toDouble(v); }},
+        {"eig-maxit", [&](const std::string& v) { c.eig_maxit = toInt(v); }},
+        {"eig-ncv", [&](const std::string& v) { c.eig_ncv = toInt(v); }},
+        {"shift-rel", [&](const std::string& v) { c.shift_rel = toDouble(v); }},
+        {"kernel-tol", [&](const std::string& v) { c.kernel_tol = toDouble(v); }},
+        {"kernel-probe", [&](const std::string& v) { c.kernel_probe = toInt(v); }},
+        {"dense-threshold", [&](const std::string& v) { c.dense_threshold = toInt(v); }},
+        {"orth-tol", [&](const std::string& v) { c.orth_tol = toDouble(v); }},
         {"local-solver", [&](const std::string& v) { c.local_solver = v; }},
         {"local-factorization", [&](const std::string& v) { c.local_factorization = v; }},
         {"local-precision", [&](const std::string& v) { c.local_precision = v; }},
         {"local-approx", [&](const std::string& v) { c.local_approx = v; }},
         {"amg-coarsening", [&](const std::string& v) { c.amg_coarsening = v; }},
-        {"amg-sweeps", [&](const std::string& v) { c.amg_sweeps = std::stoi(v); }},
-        {"amg-coarse-enough", [&](const std::string& v) { c.amg_coarse_enough = std::stoi(v); }},
+        {"amg-sweeps", [&](const std::string& v) { c.amg_sweeps = toInt(v); }},
+        {"amg-coarse-enough", [&](const std::string& v) { c.amg_coarse_enough = toInt(v); }},
         {"amg-reuse", [&](const std::string& v) { c.amg_reuse = parseBool(v); }},
         {"coarse-solver", [&](const std::string& v) { c.coarse_solver = v; }},
         {"coarse-factorization", [&](const std::string& v) { c.coarse_factorization = v; }},
-        {"coarse-procs", [&](const std::string& v) { c.coarse_procs = std::stoi(v); }},
-        {"coarse-root-below", [&](const std::string& v) { c.coarse_root_below = std::stoll(v); }},
+        {"coarse-procs", [&](const std::string& v) { c.coarse_procs = toInt(v); }},
+        {"coarse-root-below", [&](const std::string& v) { c.coarse_root_below = toLongLong(v); }},
         {"krylov", [&](const std::string& v) { c.krylov = v; }},
-        {"restart", [&](const std::string& v) { c.restart = std::stoi(v); }},
-        {"rtol", [&](const std::string& v) { c.rtol = std::stod(v); }},
-        {"atol", [&](const std::string& v) { c.atol = std::stod(v); }},
+        {"restart", [&](const std::string& v) { c.restart = toInt(v); }},
+        {"rtol", [&](const std::string& v) { c.rtol = toDouble(v); }},
+        {"atol", [&](const std::string& v) { c.atol = toDouble(v); }},
         {"stop-norm", [&](const std::string& v) { c.stop_norm = v; }},
-        {"maxit", [&](const std::string& v) { c.maxit = std::stoi(v); }},
-        {"verbose", [&](const std::string& v) { c.verbose = std::stoi(v); }},
+        {"maxit", [&](const std::string& v) { c.maxit = toInt(v); }},
+        {"verbose", [&](const std::string& v) { c.verbose = toInt(v); }},
         {"csv", [&](const std::string& v) { c.csv = v; }},
         {"history", [&](const std::string& v) { c.history = v; }},
         {"write-solution", [&](const std::string& v) { c.write_solution = v; }},
@@ -125,6 +179,29 @@ void SolverConfig::validate() const
 {
     if (matrix_file.empty() && generate.empty())
         throw std::invalid_argument("either --matrix or --generate must be given");
+    // Everything that can be checked without MPI is checked here, before rank 0 reads or generates
+    // the matrix: a typo must not cost a decomposition (or an eigensolve) before being reported.
+    if (!generate.empty() && !oneOf(generate, {"laplace2d", "laplace3d", "convdiff2d", "convdiff3d", "coupled2d",
+                                               "coupled3d", "bubbles2d", "bubbles3d"}))
+        throw std::invalid_argument("--generate must be laplace2d|laplace3d|convdiff2d|convdiff3d|coupled2d|coupled3d|"
+                                    "bubbles2d|bubbles3d");
+    if (nx < 1 || ny < 1 || nz < 1) throw std::invalid_argument("--nx, --ny, --nz must be >= 1");
+    if (ncomp < 1) throw std::invalid_argument("--ncomp must be >= 1");
+    if (block_size < 0) throw std::invalid_argument("--block-size must be >= 0");
+    if (!oneOf(local_solver, {"auto", "sparselu", "umfpack", "pardiso"}))
+        throw std::invalid_argument("--local-solver must be auto|sparselu|umfpack|pardiso");
+    if (!oneOf(coarse_solver, {"auto", "mumps", "cpardiso", "root"}))
+        throw std::invalid_argument("--coarse-solver must be auto|mumps|cpardiso|root");
+    if (coarse_procs < 0) throw std::invalid_argument("--coarse-procs must be >= 0");
+    if (!(eig_tol > 0.0)) throw std::invalid_argument("--eig-tol must be > 0");
+    if (eig_maxit < 1) throw std::invalid_argument("--eig-maxit must be >= 1");
+    if (eig_ncv < 0) throw std::invalid_argument("--eig-ncv must be >= 0");
+    if (!(shift_rel > 0.0)) throw std::invalid_argument("--shift-rel must be > 0");
+    if (!(kernel_tol > 0.0)) throw std::invalid_argument("--kernel-tol must be > 0");
+    if (kernel_probe < 1) throw std::invalid_argument("--kernel-probe must be >= 1");
+    if (dense_threshold < 0) throw std::invalid_argument("--dense-threshold must be >= 0");
+    if (orth_tol < 0.0) throw std::invalid_argument("--orth-tol must be >= 0");
+    if (maxit < 1) throw std::invalid_argument("--maxit must be >= 1");
     if (pou != "boolean" && pou != "multiplicity") throw std::invalid_argument("--pou must be boolean|multiplicity");
     if (one_level != "ras" && one_level != "asm") throw std::invalid_argument("--one-level must be ras|asm");
     if (coarse != "deflated" && coarse != "additive" && coarse != "none")

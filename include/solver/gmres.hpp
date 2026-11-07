@@ -24,8 +24,8 @@ using GmresResult = KrylovResult;
  *
  * Orthogonalization: classical Gram-Schmidt applied twice (CGS2): as stable
  * as modified Gram-Schmidt in practice, but the j inner products of a pass
- * are done with a single MPI_Allreduce (2 reductions per iteration instead
- * of j+1), which matters at large process counts. Givens rotations update the
+ * are done with a single MPI_Allreduce (3 reductions per iteration, two passes and the norm,
+ * instead of j+2 with modified Gram-Schmidt), which matters at large process counts. Givens rotations update the
  * least-squares residual. M^{-1} is applied once per iteration plus once per
  * restart cycle (x += M^{-1} V y), so only the Krylov basis V is stored.
  * Convergence is accepted only if the true residual ||b - A x||, recomputed at the end of

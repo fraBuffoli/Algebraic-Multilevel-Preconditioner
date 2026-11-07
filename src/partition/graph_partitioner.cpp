@@ -74,7 +74,7 @@ std::vector<int> GraphPartitioner::partition(const CsrMatrix& A, int nparts, con
                 A.row_ptr[static_cast<std::size_t>(i) + 1] - A.row_ptr[static_cast<std::size_t>(i)]);
     }
 
-    //METIS partitioning
+    // METIS partitioning
     idx_t options[METIS_NOPTIONS];
     METIS_SetDefaultOptions(options);
     options[METIS_OPTION_NUMBERING] = 0;

@@ -36,10 +36,10 @@ using SpMat = Eigen::SparseMatrix<Scalar, Eigen::ColMajor, LocalIndex>;
 using SpMatRow = Eigen::SparseMatrix<Scalar, Eigen::RowMajor, LocalIndex>;
 
 /// @brief Dense column vector.
-using Vec = Eigen::VectorXd;
+using Vec = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
 
 /// @brief Dense column-major matrix.
-using Mat = Eigen::MatrixXd;
+using Mat = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
 
 /// @brief Triplet with local indices (input of Eigen::SparseMatrix::setFromTriplets).
 using Triplet = Eigen::Triplet<Scalar, LocalIndex>;
@@ -48,9 +48,8 @@ using Triplet = Eigen::Triplet<Scalar, LocalIndex>;
  * @brief Coefficient of a globally indexed sparse matrix.
  *
  * Used to hand distributed contributions of the coarse matrix to the coarse
- * solver: duplicated (row, col) pairs are *summed*.
- * 
- * Better than: using GlobalTriplet = Eigen::Triplet<Scalar, LocalIndex>;
+ * solver: duplicated (row, col) pairs are *summed*. Eigen::Triplet is not used here because
+ * its index type is the 32-bit LocalIndex of the local matrices.
  */
 struct GlobalTriplet {
     GlobalIndex row; ///< Global row index (0-based).

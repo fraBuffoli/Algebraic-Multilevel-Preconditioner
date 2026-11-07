@@ -101,8 +101,8 @@ endif
 $(info schwarz2lvl: CXX=$(CXX)  USE_MUMPS=$(USE_MUMPS) USE_UMFPACK=$(USE_UMFPACK) USE_PARDISO=$(USE_PARDISO) USE_CPARDISO=$(USE_CPARDISO) USE_AMGCL=$(USE_AMGCL)  EIGEN_INC=$(EIGEN_INC))
 endif
 
-BUILD := build
-BIN   := bin
+BUILD ?= build
+BIN   ?= bin
 LIB_SRC  := $(filter-out src/main.cpp src/matgen.cpp,$(wildcard $(addprefix src/,$(addsuffix /*.cpp,$(MODULES)))))
 LIB_OBJ  := $(patsubst src/%.cpp,$(BUILD)/%.o,$(LIB_SRC))
 TEST_SRC := $(wildcard test/*.cpp)
